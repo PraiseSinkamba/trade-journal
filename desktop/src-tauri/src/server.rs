@@ -35,12 +35,14 @@ pub async fn start_server(
         .resource_dir()
         .map_err(|e| format!("Could not resolve resource directory: {}", e))?;
 
-    let sidecar_path = resource_dir.join("node-x86_64-pc-windows-msvc.exe");
+    let sidecar_path = resource_dir.join("binaries").join("node.exe-x86_64-pc-windows-msvc.exe");
 
     let journal_data_dir = data_dir.to_string_lossy().to_string();
 
+    let server_js_path = resource_dir.join("apps/web/server.js");
+
     let mut child = Command::new(&sidecar_path)
-        .arg("apps/web/server.js")
+        .arg(&server_js_path)
         .env("PORT", "0")
         .env("JOURNAL_DATA_DIR", &journal_data_dir)
         .env("NODE_ENV", "production")
