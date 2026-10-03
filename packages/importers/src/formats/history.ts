@@ -88,6 +88,7 @@ export const parseHistory = (
   const fallbackSymbol = symbolFrom(content, options);
   let needsSymbol = false;
   let skippedRows = history.stats.skippedRows;
+  const skippedReasons: SkippedReason[] = [];
   const occurrences = new Map<string, number>();
   const nextId = (key: string) => {
     const n = occurrences.get(key) ?? 0;
@@ -112,6 +113,15 @@ export const parseHistory = (
         !Number.isFinite(fill.price)
       ) {
         skippedRows++;
+        if (!symbol) {
+          skippedReasons.push({ row: fill.row, reason: "missing symbol" });
+        } else if (fill.time === null || !Number.isFinite(fill.time)) {
+          skippedReasons.push({ row: fill.row, reason: "unparseable timestamp" });
+        } else if (!(fill.quantity > 0) || !Number.isFinite(fill.quantity)) {
+          skippedReasons.push({ row: fill.row, reason: "non-positive quantity" });
+        } else {
+          skippedReasons.push({ row: fill.row, reason: "non-positive price" });
+        }
         continue;
       }
       const executedAt = new Date(fill.time).toISOString();
@@ -130,6 +140,7 @@ export const parseHistory = (
           (fill.effect === "in/out" && (!opposite || Math.abs(signed) <= Math.abs(position)))
         ) {
           skippedRows++;
+          skippedReasons.push({ row: fill.row, reason: "no matching position in this file" });
           warnings.push(
             `Line ${fill.row}: the deal has no matching position in this file; skipped.`,
           );
@@ -201,6 +212,22 @@ export const parseHistory = (
         !Number.isFinite(trade.quantity)
       ) {
         skippedRows += trade.sourceRows.length;
+        let reason = "missing or invalid trade data";
+        if (!symbol) reason = "missing symbol";
+        else if (!trade.direction) reason = "missing trade direction";
+        else if (trade.entryTime === null || !Number.isFinite(trade.entryTime))
+          reason = "missing or invalid entry time";
+        else if (trade.exitTime === null || !Number.isFinite(trade.exitTime) || trade.exitTime < trade.entryTime)
+          reason = "missing or invalid exit time";
+        else if (trade.entryPrice === null || !Number.isFinite(trade.entryPrice))
+          reason = "missing entry price";
+        else if (trade.exitPrice === null || !Number.isFinite(trade.exitPrice))
+          reason = "missing exit price";
+        else if (trade.quantity === null || !(trade.quantity > 0) || !Number.isFinite(trade.quantity))
+          reason = "missing or non-positive quantity";
+        for (const row of trade.sourceRows) {
+          skippedReasons.push({ row, reason });
+        }
         continue;
       }
       const openedAt = new Date(trade.entryTime).toISOString();
@@ -256,6 +283,11 @@ export const parseHistory = (
     }
     if (history.openTrades.length) {
       skippedRows += history.openTrades.reduce((sum, trade) => sum + trade.sourceRows.length, 0);
+      for (const trade of history.openTrades) {
+        for (const row of trade.sourceRows) {
+          skippedReasons.push({ row, reason: "incomplete position (no matching exit)" });
+        }
+      }
       warnings.push(
         `${history.openTrades.length} incomplete position(s) skipped; this history export requires completed entry/exit pairs.`,
       );
@@ -272,7 +304,7 @@ export const parseHistory = (
     format,
     executions: errors.length ? [] : executions,
     skippedRows,
-    skippedReasons: history.stats.skippedReasons,
+    skippedReasons: [...history.stats.skippedReasons, ...skippedReasons],
     warnings: [...new Set(warnings)].slice(0, 50),
     ...(errors.length ? { errors: [...new Set(errors)].slice(0, 20) } : {}),
     ...(needsSymbol ? { needsSymbol: true } : {}),
