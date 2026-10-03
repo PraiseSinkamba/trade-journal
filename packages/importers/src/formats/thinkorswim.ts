@@ -19,6 +19,7 @@ export const thinkorswim: ImportFormat = {
         format: "thinkorswim",
         executions: [],
         skippedRows: 0,
+        skippedReasons: [],
         warnings: ["No 'Account Trade History' section found."],
       };
     }
@@ -49,7 +50,7 @@ export const thinkorswim: ImportFormat = {
     }
 
     const records = toRecords(parseCsv(section.join("\n")));
-    const { executions, skippedRows } = rowsToFills(
+    const { executions, skippedRows, skippedReasons } = rowsToFills(
       records,
       {
         symbol: ["symbol"],
@@ -66,6 +67,6 @@ export const thinkorswim: ImportFormat = {
             "ThinkorSwim statements report commissions in a separate section; fees were not attached to fills.",
           ]
         : [];
-    return { format: "thinkorswim", executions, skippedRows, warnings };
+    return { format: "thinkorswim", executions, skippedRows, skippedReasons, warnings };
   },
 };

@@ -28,7 +28,11 @@ export const parseWithMapping = (
 ): ParsedImport => {
   const records = toRecords(parseCsv(content));
   const alias = (name: string | undefined) => (name ? [headerKey(name)] : []);
+<<<<<<< HEAD
   const parsed = rowsToFills(
+=======
+  const { executions, skippedRows, skippedReasons } = rowsToFills(
+>>>>>>> 2538e6b (feat(importers): propagate skip reasons through rowsToFills consumers)
     records,
     {
       symbol: alias(mapping.symbol),
@@ -46,7 +50,11 @@ export const parseWithMapping = (
     options,
     { positionActions: true },
   );
+<<<<<<< HEAD
   return { format: "generic", ...parsed };
+=======
+  return { format: "generic", executions, skippedRows, skippedReasons, warnings: [] };
+>>>>>>> 2538e6b (feat(importers): propagate skip reasons through rowsToFills consumers)
 };
 
 /** Header names of a CSV, for building the mapping UI. */

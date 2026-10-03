@@ -2,6 +2,7 @@ import { hasHeaders, parseCsv, pick, toRecords } from "../csv";
 import type { ImportFormat, ImportedExecution } from "../types";
 import { rowsToFills, type FillsColumnMap } from "./fills";
 import { parseMoney } from "../numbers";
+import type { SkippedReason } from "../types";
 
 const columns: FillsColumnMap = {
   symbol: ["instrument"],
@@ -31,6 +32,7 @@ export const ninjatrader: ImportFormat = {
     const futures = new Set<string>();
     const errors = new Set<string>();
     let skippedRows = 0;
+    const skippedReasons: SkippedReason[] = [];
     let withoutId = false;
     let withoutAccount = false;
     for (const row of toRecords(parseCsv(content))) {
@@ -52,6 +54,7 @@ export const ninjatrader: ImportFormat = {
         normalizeSymbol: (symbol) => symbol.split(" ")[0]!.trim().toUpperCase(),
       });
       skippedRows += parsed.skippedRows;
+      skippedReasons.push(...parsed.skippedReasons);
       const fill = parsed.executions[0];
       if (!fill) continue;
       const instrument = row.instrument!.trim().replace(/\s+/g, " ").toUpperCase();
@@ -143,6 +146,6 @@ export const ninjatrader: ImportFormat = {
       warnings.push(
         `Futures P&L requires the correct contract multiplier in Settings for each imported symbol: ${[...futures].join(", ")}.`,
       );
-    return { format: "ninjatrader", executions, skippedRows, warnings, errors: [...errors] };
+    return { format: "ninjatrader", executions, skippedRows, skippedReasons, warnings, errors: [...errors] };
   },
 };

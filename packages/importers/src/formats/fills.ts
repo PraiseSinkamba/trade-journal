@@ -58,6 +58,7 @@ export const rowsToFills = (
   spec: Pick<FillsFormatSpec, "rowFilter" | "normalizeSymbol"> & { positionActions?: boolean } = {},
 ): Pick<ParsedImport, "executions" | "skippedRows" | "warnings" | "errors"> => {
   const executions: ImportedExecution[] = [];
+  const skippedReasons: SkippedReason[] = [];
   let skippedRows = 0;
   const errors: string[] = [];
   const activeRows = records.filter((row) => !spec.rowFilter || spec.rowFilter(row));
@@ -74,9 +75,11 @@ export const rowsToFills = (
   });
   const sourceAccounts = new Set<string>();
 
-  for (const row of records) {
+  for (let i = 0; i < records.length; i++) {
+    const row = records[i]!;
     if (spec.rowFilter && !spec.rowFilter(row)) {
       skippedRows++;
+      skippedReasons.push({ row: i + 2, reason: "row did not match the format filter" });
       continue;
     }
     const position = action(row);
@@ -105,7 +108,7 @@ export const rowsToFills = (
       );
     }
 
-    if (
+if (
       !symbol ||
       !side ||
       !executedAt ||
@@ -114,6 +117,16 @@ export const rowsToFills = (
       !Number.isFinite(price)
     ) {
       skippedRows++;
+      const reason = !symbol
+        ? "missing symbol"
+        : !side
+          ? "unrecognised side value"
+          : !executedAt
+            ? "unparseable timestamp"
+            : quantity <= 0
+              ? "non-positive quantity"
+              : "non-positive price";
+      skippedReasons.push({ row: i + 2, reason });
       if (position)
         errors.push(
           `${symbol || "Position row"}: an Open/Close fill needs a symbol, positive quantity, price and valid timestamp.`,
