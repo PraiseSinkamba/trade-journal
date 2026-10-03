@@ -6,6 +6,7 @@ import {
   type ImportFormat,
   type ImportedTrade,
   type ParsedImport,
+  type SkippedReason,
 } from "../types";
 
 /**
@@ -29,12 +30,14 @@ export const tradezella: ImportFormat = {
   parse: (content, options): ParsedImport => {
     const records = toRecords(parseCsv(content));
     const executions: ParsedImport["executions"] = [];
+    const skippedReasons: SkippedReason[] = [];
     let skippedRows = 0;
     const warnings = [
       "TradeZella exports are trade-level; entry/exit executions were reconstructed at the reported average prices. Net P&L is preserved exactly.",
     ];
 
-    for (const row of records) {
+    for (let i = 0; i < records.length; i++) {
+      const row = records[i]!;
       const symbol = pick(row, ["symbol", "instrument"])?.trim().toUpperCase();
       const sideText = (pick(row, ["side", "direction", "type"]) ?? "").toLowerCase();
       const direction = /short|sell/.test(sideText) ? "short" : "long";
@@ -55,8 +58,8 @@ export const tradezella: ImportFormat = {
       );
       const netPnl = parseMoney(pick(row, ["netpnl", "netpl", "netprofit"]));
       const commissions =
-        Math.abs(parseMoney(pick(row, ["commissions", "commission"])) || 0) +
-        Math.abs(parseMoney(pick(row, ["fees", "fee", "totalfees"])) || 0);
+        Math.abs(parseMoney(pick(row, ["commissions", "commission"]) ?? "") || 0) +
+        Math.abs(parseMoney(pick(row, ["fees", "fee", "totalfees"]) ?? "") || 0);
 
       if (
         !symbol ||
@@ -68,6 +71,18 @@ export const tradezella: ImportFormat = {
         !Number.isFinite(exitPrice)
       ) {
         skippedRows++;
+        const reason = !symbol
+          ? "missing symbol"
+          : !openedAt
+            ? "unparseable open timestamp"
+            : !closedAt
+              ? "unparseable close timestamp"
+              : quantity <= 0
+                ? "non-positive quantity"
+                : !Number.isFinite(entryPrice)
+                  ? "missing entry price"
+                  : "missing exit price";
+        skippedReasons.push({ row: i + 2, reason });
         continue;
       }
 
@@ -99,6 +114,6 @@ export const tradezella: ImportFormat = {
       executions.push(...tradeToExecutions(trade));
     }
 
-    return { format: "tradezella", executions, skippedRows, warnings };
+    return { format: "tradezella", executions, skippedRows, skippedReasons, warnings };
   },
 };

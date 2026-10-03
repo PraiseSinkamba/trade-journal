@@ -5,6 +5,7 @@ import {
   type ImportFormat,
   type ImportedTrade,
   type ParsedImport,
+  type SkippedReason,
 } from "../types";
 
 const stripTags = (html: string): string =>
@@ -32,6 +33,7 @@ export const metatrader: ImportFormat = {
   parse: (content, options): ParsedImport => {
     const rows = [...content.matchAll(/<tr[^>]*>([\s\S]*?)<\/tr>/gi)].map((m) => rowCells(m[1]!));
     const executions: ParsedImport["executions"] = [];
+    const skippedReasons: SkippedReason[] = [];
     let skippedRows = 0;
 
     for (const cells of rows) {
@@ -62,12 +64,14 @@ export const metatrader: ImportFormat = {
         !Number.isFinite(entryPrice)
       ) {
         skippedRows++;
+        skippedReasons.push({ row: null, reason: "missing symbol, quantity, entry price, or open/close timestamps" });
         continue;
       }
       const closedAt = parseTimestamp(cells[closeIndex], options.timeZone)!;
       const exitPrice = parseMoney(cells[closeIndex + 1]);
       if (!Number.isFinite(exitPrice)) {
         skippedRows++;
+        skippedReasons.push({ row: null, reason: "missing exit price" });
         continue;
       }
       const commission = Math.abs(parseMoney(cells[closeIndex + 2]) || 0);
@@ -91,6 +95,7 @@ export const metatrader: ImportFormat = {
       format: "metatrader",
       executions,
       skippedRows,
+      skippedReasons,
       warnings:
         executions.length > 0
           ? [

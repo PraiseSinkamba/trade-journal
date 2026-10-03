@@ -2,7 +2,7 @@ import { headerKey, parseCsv } from "../csv";
 import { parseTimestamp } from "../dates";
 import { parseMoney, parseQuantity } from "../numbers";
 import type { AssetClass } from "@luxalgo/journal-core";
-import type { ImportFormat, ImportedExecution, ParsedImport } from "../types";
+import type { ImportFormat, ImportedExecution, ParsedImport, SkippedReason } from "../types";
 
 const ASSET_MAP: Record<string, AssetClass> = {
   stocks: "equity",
@@ -32,6 +32,7 @@ export const ibkr: ImportFormat = {
         format: "ibkr",
         executions: [],
         skippedRows: 0,
+        skippedReasons: [],
         warnings: ["No Trades section found."],
       };
     }
@@ -39,6 +40,7 @@ export const ibkr: ImportFormat = {
     const col = (name: string) => keys.indexOf(name);
 
     const executions: ImportedExecution[] = [];
+    const skippedReasons: SkippedReason[] = [];
     let skippedRows = 0;
 
     for (const row of rows) {
@@ -47,6 +49,7 @@ export const ibkr: ImportFormat = {
       const discriminator = row[col("datadiscriminator")] ?? "";
       if (!/^order$/i.test(discriminator)) {
         skippedRows++;
+        skippedReasons.push({ row: null, reason: "row was not an Order fill (skipped discriminator)" });
         continue;
       }
       const symbol = (row[col("symbol")] ?? "").trim().toUpperCase();
@@ -67,6 +70,7 @@ export const ibkr: ImportFormat = {
         !Number.isFinite(price)
       ) {
         skippedRows++;
+        skippedReasons.push({ row: null, reason: "missing symbol, side, quantity, price or timestamp" });
         continue;
       }
       executions.push({
@@ -81,6 +85,6 @@ export const ibkr: ImportFormat = {
       });
     }
 
-    return { format: "ibkr", executions, skippedRows, warnings: [] };
+    return { format: "ibkr", executions, skippedRows, skippedReasons, warnings: [] };
   },
 };
