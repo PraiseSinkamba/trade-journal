@@ -565,158 +565,232 @@ function FileImport() {
           )}
 
           {!showManualMapper && preview && !preview.needsMapping && preview.totals && (
-            <div className="space-y-2 rounded-md border p-3">
-              <div className="flex flex-wrap items-center gap-2 text-sm">
-                <Badge variant="secondary">{preview.detected}</Badge>
-                {preview.detected !== "ninjatrader" && !preview.aiPreviewToken && (
-                  <button
-                    className="text-xs text-muted-foreground underline hover:text-foreground"
-                    onClick={() => {
-                      setShowManualMapper(true);
-                      setMappingApplied(false);
-                      setError(null);
-                    }}
-                  >
-                    Wrong format? Map columns manually
-                  </button>
-                )}
-                <span>{preview.totals.executions} executions</span>
-                <span className="text-muted-foreground">· {preview.totals.symbols} symbols</span>
-                {preview.totals.from && (
-                  <span className="text-muted-foreground">
-                    · {dayKeyOf(preview.totals.from, displayTimeZone)} →{" "}
-                    {preview.totals.to && dayKeyOf(preview.totals.to, displayTimeZone)}
-                  </span>
-                )}
-                {preview.totals.skippedRows > 0 && (
-                  <details className="text-muted-foreground">
-                    <summary className="cursor-pointer">
-                      · {preview.totals.skippedRows} rows skipped —{" "}
-                      {preview.totals.skippedReasons.length} detailed
-                    </summary>
-                    <ul className="ml-4 mt-1 list-disc">
-                      {preview.totals.skippedReasons.slice(0, 5).map((reason, idx) => (
-                        <li key={idx}>
-                          row {reason.row ?? "?"} — {reason.reason}
-                        </li>
+            (() => {
+              const zero = preview.totals.executions === 0;
+              const canRemap =
+                preview.detected !== "ninjatrader" && !preview.aiPreviewToken;
+              // Group skip reasons by message so 24 "missing entry price" rows
+              // become one line with a count. row indices within a group are dropped
+              // when the group has more than one row — they don't help the user.
+              const reasonCounts = new Map<string, number>();
+              for (const r of preview.totals.skippedReasons) {
+                reasonCounts.set(r.reason, (reasonCounts.get(r.reason) ?? 0) + 1);
+              }
+              const uniqueReasons = [...reasonCounts.entries()].sort((a, b) => b[1] - a[1]);
+              if (zero) {
+                return (
+                  <div className="space-y-3 rounded-md border p-3" data-testid="zero-exec-preview">
+                    <div className="space-y-1">
+                      <p className="text-sm font-medium">
+                        {preview.detected
+                          ? `${preview.detected} didn't match this file.`
+                          : "Nothing could be imported."}
+                      </p>
+                      <p className="text-xs text-muted-foreground">
+                        The parser identified {preview.totals.skippedRows} row
+                        {preview.totals.skippedRows === 1 ? "" : "s"} but couldn't turn
+                        {preview.totals.skippedRows === 1 ? " it" : " any"} into trades.
+                        {canRemap ? " Map your columns below and try again." : null}
+                      </p>
+                    </div>
+                    {uniqueReasons.length > 0 && (
+                      <ul className="space-y-1 text-xs text-muted-foreground">
+                        {uniqueReasons.map(([reason, count]) => (
+                          <li key={reason}>
+                            <span className="text-foreground">{count}</span> × {reason}
+                          </li>
+                        ))}
+                        {preview.totals.skippedReasonsTruncated && (
+                          <li className="text-muted-foreground">
+                            showing the first {preview.totals.skippedReasons.length} of{" "}
+                            {preview.totals.skippedRows} dropped rows
+                          </li>
+                        )}
+                      </ul>
+                    )}
+                    {preview.warnings?.map((warning, index) => (
+                      <p key={index} className="text-xs text-muted-foreground">
+                        ⚠ {warning}
+                      </p>
+                    ))}
+                    {!preview.needsSymbol &&
+                      preview.errors?.map((message, index) => (
+                        <p key={index} role="alert" className="text-xs text-loss">
+                          {message}
+                        </p>
                       ))}
-                      {preview.totals.skippedReasons.length > 5 && (
-                        <li>and {preview.totals.skippedReasons.length - 5} more</li>
+                    {canRemap && preview.headers ? (
+                      <Button
+                        onClick={() => {
+                          setShowManualMapper(true);
+                          setMappingApplied(false);
+                          setError(null);
+                        }}
+                      >
+                        Map columns manually
+                      </Button>
+                    ) : null}
+                  </div>
+                );
+              }
+              return (
+                <div className="space-y-3 rounded-md border p-3">
+                  <div className="space-y-1">
+                    <div className="flex flex-wrap items-center gap-2 text-sm">
+                      <Badge variant="secondary">{preview.detected}</Badge>
+                      <span>
+                        {preview.totals.executions} execution
+                        {preview.totals.executions === 1 ? "" : "s"}
+                      </span>
+                      {preview.totals.symbols > 0 && (
+                        <span className="text-muted-foreground">
+                          · {preview.totals.symbols} symbol
+                          {preview.totals.symbols === 1 ? "" : "s"}
+                        </span>
                       )}
-                      {preview.totals.skippedReasonsTruncated && (
-                        <li>showing the first 50 of {preview.totals.skippedRows} skip reasons</li>
+                      {preview.totals.from && (
+                        <span className="text-muted-foreground">
+                          · {dayKeyOf(preview.totals.from, displayTimeZone)} →{" "}
+                          {preview.totals.to && dayKeyOf(preview.totals.to, displayTimeZone)}
+                        </span>
                       )}
-                    </ul>
-                  </details>
-                )}
-              </div>
-              <p className="text-xs text-muted-foreground">
-                Statement timezone: {preview.timeZone}. Preview times: {displayTimeZone}.
-              </p>
-              {!!preview.executions?.length && (
-                <div className="space-y-1 border-t pt-2 text-xs">
-                  <div
-                    className={
-                      preview.aiPreviewToken ? "max-h-80 space-y-2 overflow-auto" : "space-y-1"
+                    </div>
+                    {canRemap && preview.headers ? (
+                      <button
+                        className="text-xs text-muted-foreground underline hover:text-foreground"
+                        onClick={() => {
+                          setShowManualMapper(true);
+                          setMappingApplied(false);
+                          setError(null);
+                        }}
+                      >
+                        Wrong format? Map columns manually
+                      </button>
+                    ) : null}
+                  </div>
+                  {preview.totals.skippedRows > 0 && uniqueReasons.length > 0 && (
+                    <details className="text-xs text-muted-foreground">
+                      <summary className="cursor-pointer">
+                        {preview.totals.skippedRows} row
+                        {preview.totals.skippedRows === 1 ? "" : "s"} dropped
+                      </summary>
+                      <ul className="ml-4 mt-1 list-disc space-y-0.5">
+                        {uniqueReasons.map(([reason, count]) => (
+                          <li key={reason}>
+                            <span className="text-foreground">{count}</span> × {reason}
+                          </li>
+                        ))}
+                        {preview.totals.skippedReasonsTruncated && (
+                          <li>
+                            showing the first {preview.totals.skippedReasons.length} of{" "}
+                            {preview.totals.skippedRows} dropped rows
+                          </li>
+                        )}
+                      </ul>
+                    </details>
+                  )}
+                  {!!preview.executions?.length && (
+                    <div className="space-y-1 border-t pt-2 text-xs">
+                      <div
+                        className={
+                          preview.aiPreviewToken
+                            ? "max-h-80 space-y-2 overflow-auto"
+                            : "space-y-1"
+                        }
+                      >
+                        {(preview.aiPreviewToken
+                          ? preview.executions
+                          : preview.executions.slice(0, 5)
+                        ).map((execution, index) => (
+                          <div key={index}>
+                            <div className="flex flex-wrap gap-x-3">
+                              <span>
+                                {execution.symbol} · {execution.side.toUpperCase()}
+                              </span>
+                              <span className="text-muted-foreground">
+                                {formatTimestamp(execution.executedAt, displayTimeZone)}
+                              </span>
+                              {preview.aiPreviewToken && (
+                                <span>
+                                  {execution.quantity} @ {execution.price} · Fees{" "}
+                                  {execution.fee}
+                                </span>
+                              )}
+                            </div>
+                            {preview.aiPreviewToken && preview.sources?.[index] && (
+                              <p className="mt-0.5 text-muted-foreground">
+                                Source: {preview.sources[index]}
+                              </p>
+                            )}
+                          </div>
+                        ))}
+                      </div>
+                      {!preview.aiPreviewToken && preview.totals.executions > 5 && (
+                        <p className="text-muted-foreground">
+                          Showing the first 5 executions.
+                        </p>
+                      )}
+                    </div>
+                  )}
+                  {preview.warnings?.map((warning, index) => (
+                    <p key={index} className="text-xs text-muted-foreground">
+                      ⚠ {warning}
+                    </p>
+                  ))}
+                  {!preview.needsSymbol &&
+                    preview.errors?.map((message, index) => (
+                      <p key={index} role="alert" className="text-xs text-loss">
+                        {message}
+                      </p>
+                    ))}
+                  <fieldset disabled={busy}>
+                    <AccountPicker
+                      value={accountId}
+                      onChange={(id) => {
+                        setAccountId(id);
+                        setReviewOptions({});
+                        setPreview((current) =>
+                          current ? { ...current, reconciliation: undefined } : null,
+                        );
+                      }}
+                      kind="import"
+                    />
+                  </fieldset>
+                  {preview.detected === "ninjatrader" && accountId && (
+                    <ImportReconciliation
+                      review={preview.reconciliation}
+                      options={reviewOptions}
+                      onChange={changeReview}
+                      onReview={previewFile}
+                      busy={busy}
+                    />
+                  )}
+                  <Button
+                    onClick={commit}
+                    disabled={
+                      !accountId ||
+                      busy ||
+                      !!preview.errors?.length ||
+                      (Boolean(preview.aiPreviewToken) && !aiReviewed) ||
+                      (preview.detected === "ninjatrader" && !preview.reconciliation?.token)
                     }
                   >
-                    {(preview.aiPreviewToken
-                      ? preview.executions
-                      : preview.executions.slice(0, 5)
-                    ).map((execution, index) => (
-                      <div key={index}>
-                        <div className="flex flex-wrap gap-x-3">
-                          <span>
-                            {execution.symbol} ·{" "}
-                            {execution.importMetadata?.position
-                              ? `${execution.importMetadata.position.effect} ${execution.importMetadata.position.direction}`.toUpperCase()
-                              : execution.side.toUpperCase()}
-                          </span>
-                          <span className="text-muted-foreground">
-                            {formatTimestamp(execution.executedAt, displayTimeZone)}
-                          </span>
-                          {preview.aiPreviewToken && (
-                            <span>
-                              {execution.quantity} @ {execution.price} · Fees {execution.fee}
-                            </span>
-                          )}
-                        </div>
-                        {preview.aiPreviewToken && preview.sources?.[index] && (
-                          <p className="mt-0.5 text-muted-foreground">
-                            Source: {preview.sources[index]}
-                          </p>
-                        )}
-                      </div>
-                    ))}
-                  </div>
-                  {!preview.aiPreviewToken && preview.totals.executions > 5 && (
-                    <p className="text-muted-foreground">Showing the first 5 executions.</p>
+                    {busy ? "Importing…" : "Import"}
+                  </Button>
+                  {preview.aiPreviewToken && (
+                    <label className="flex items-start gap-2 text-xs text-muted-foreground">
+                      <Checkbox
+                        checked={aiReviewed}
+                        disabled={busy}
+                        onCheckedChange={(checked) => setAiReviewed(checked === true)}
+                      />
+                      I compared all extracted executions with my statement, including the
+                      account, quantities, prices, fees and timestamps. Import this preview.
+                    </label>
                   )}
                 </div>
-              )}
-              <p className="text-xs text-muted-foreground">
-                {preview.detected === "ninjatrader"
-                  ? "Recovering an older NinjaTrader import or correcting its timezone? Import the complete history into a new journal account, then compare totals. Keep the original account and its reviews until you have verified the recovery."
-                  : "Correcting a previous import? Remove the affected trades before importing again with a different timezone to avoid duplicates. Back up your data first."}
-              </p>
-              {preview.warnings?.map((warning, index) => (
-                <p key={index} className="text-xs text-muted-foreground">
-                  ⚠ {warning}
-                </p>
-              ))}
-              {!preview.needsSymbol &&
-                preview.errors?.map((message, index) => (
-                  <p key={index} role="alert" className="text-xs text-loss">
-                    {message}
-                  </p>
-                ))}
-              <fieldset disabled={busy}>
-                <AccountPicker
-                  value={accountId}
-                  onChange={(id) => {
-                    setAccountId(id);
-                    setReviewOptions({});
-                    setPreview((current) =>
-                      current ? { ...current, reconciliation: undefined } : null,
-                    );
-                  }}
-                  kind="import"
-                />
-              </fieldset>
-              {preview.detected === "ninjatrader" && accountId && (
-                <ImportReconciliation
-                  review={preview.reconciliation}
-                  options={reviewOptions}
-                  onChange={changeReview}
-                  onReview={previewFile}
-                  busy={busy}
-                />
-              )}
-              <Button
-                onClick={commit}
-                disabled={
-                  !accountId ||
-                  busy ||
-                  !!preview.errors?.length ||
-                  !preview.totals.executions ||
-                  (Boolean(preview.aiPreviewToken) && !aiReviewed) ||
-                  (preview.detected === "ninjatrader" && !preview.reconciliation?.token)
-                }
-              >
-                {busy ? "Importing…" : "Import"}
-              </Button>
-              {preview.aiPreviewToken && (
-                <label className="flex items-start gap-2 text-xs text-muted-foreground">
-                  <Checkbox
-                    checked={aiReviewed}
-                    disabled={busy}
-                    onCheckedChange={(checked) => setAiReviewed(checked === true)}
-                  />
-                  I compared all extracted executions with my statement, including the account,
-                  quantities, prices, fees and timestamps. Import this preview.
-                </label>
-              )}
-            </div>
+              );
+            })()
           )}
         </CardContent>
       </Card>

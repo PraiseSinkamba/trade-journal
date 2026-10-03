@@ -93,6 +93,7 @@ export const POST = handler(async (request: Request) => {
     return ok({
       detected: parsed.format,
       timeZone,
+      headers: readHeaders(body.content),
       needsMapping: false,
       executions: body.ai ? parsed.executions : parsed.executions.slice(0, 50),
       ...(body.ai
