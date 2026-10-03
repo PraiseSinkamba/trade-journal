@@ -49,7 +49,7 @@ export const ibkr: ImportFormat = {
       const discriminator = row[col("datadiscriminator")] ?? "";
       if (!/^order$/i.test(discriminator)) {
         skippedRows++;
-        skippedReasons.push({ row: null, reason: "row was not an Order fill (skipped discriminator)" });
+        skippedReasons.push({ row: null, reason: "row was not a filled order" });
         continue;
       }
       const symbol = (row[col("symbol")] ?? "").trim().toUpperCase();

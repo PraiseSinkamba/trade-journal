@@ -96,6 +96,10 @@ export function decideShape(mapping: ColumnMapping, records: readonly CsvRecord[
 /** Rows whose status column marks them as never-filled are dropped up front. */
 const NON_FILLED_STATUS = /^(cancel(l)?ed|rejected|expired|working|pending|inactive)$/i;
 
+/**
+ * Drop rows whose status column marks them as never-filled.
+ * Per-row skip reasons are pushed inside the loop so skippedReasons.length === skipped.
+ */
 function filterByStatus(
   table: CsvTable,
   issues: ImportIssue[],
@@ -111,6 +115,10 @@ function filterByStatus(
     const status = (record.cells[statusIndex] ?? "").trim();
     if (NON_FILLED_STATUS.test(status)) {
       skipped++;
+      skippedReasons.push({
+        row: null,
+        reason: "row with a non-filled status was ignored",
+      });
       continue;
     }
     records.push(record);
@@ -123,7 +131,6 @@ function filterByStatus(
         `${skipped} row(s) with a non-filled status (cancelled/rejected/working/...) were ignored.`,
       ),
     );
-    skippedReasons.push({ row: null, reason: issues[issues.length - 1]!.message });
   }
   return { records, skipped, skippedReasons };
 }
