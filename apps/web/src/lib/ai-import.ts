@@ -11,3 +11,13 @@ export interface AiImportOptions {
   model: string;
   apiKey?: string;
 }
+
+/** Statement passed to the AI parser. */
+export interface AiStatement {
+  content: string;
+  fileName?: string;
+  encoding?: "text" | "pdf";
+  timeZone: string;
+  /** Detected CSV header names, passed as context to the AI. */
+  headers?: string[];
+}

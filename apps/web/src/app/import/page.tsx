@@ -33,7 +33,7 @@ import {
   AI_IMPORT_MAX_TEXT,
   type AiImportOptions as AiOptions,
 } from "@/lib/ai-import";
-import type { SkippedReason } from "@luxalgo/journal-importers";
+import { readHeaders, type SkippedReason } from "@luxalgo/journal-importers";
 import { Checkbox } from "@/components/ui/checkbox";
 
 interface BrokerInfo {
@@ -260,6 +260,7 @@ function FileImport() {
           timeZone,
           encoding,
           ...(aiEnabled ? { ai: aiOptions } : {}),
+          ...(aiEnabled && encoding !== "pdf" ? { headers: readHeaders(content) } : {}),
         }),
       );
     } catch (cause) {

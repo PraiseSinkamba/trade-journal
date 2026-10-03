@@ -31,6 +31,7 @@ interface ImportBody {
   review?: ImportReviewOptions;
   ai?: AiImportOptions;
   encoding?: "text" | "pdf";
+  headers?: string[];
   aiPreviewToken?: string;
   aiReviewed?: boolean;
 }
@@ -62,6 +63,7 @@ export const POST = handler(async (request: Request) => {
     fileName: body.fileName,
     encoding: body.encoding,
     timeZone,
+    ...(body.headers !== undefined ? { headers: body.headers } : {}),
   };
   if (body.ai && body.mode === "commit")
     requireValue(
