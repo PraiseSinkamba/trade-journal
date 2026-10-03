@@ -584,8 +584,8 @@ function FileImport() {
                           row {reason.row ?? "?"} — {reason.reason}
                         </li>
                       ))}
-                      {preview.totals.skippedRows > 5 && (
-                        <li>and {preview.totals.skippedRows - 5} more</li>
+                      {preview.totals.skippedReasons.length > 5 && (
+                        <li>and {preview.totals.skippedReasons.length - 5} more</li>
                       )}
                       {preview.totals.skippedReasonsTruncated && (
                         <li>showing the first 50 of {preview.totals.skippedRows} skip reasons</li>
