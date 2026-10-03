@@ -103,6 +103,8 @@ export const POST = handler(async (request: Request) => {
         executions: parsed.executions.length,
         symbols: symbols.length,
         skippedRows: parsed.skippedRows,
+        skippedReasons: (parsed.skippedReasons ?? []).slice(0, 50),
+        skippedReasonsTruncated: (parsed.skippedReasons?.length ?? 0) > 50,
         from: parsed.executions.reduce<string | null>(
           (min, e) => (min === null || e.executedAt < min ? e.executedAt : min),
           null,

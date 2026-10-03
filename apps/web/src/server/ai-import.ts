@@ -164,7 +164,7 @@ export function validateAiExtraction(
     sources.push(row.source);
     return execution;
   });
-  return { format: "AI-assisted", executions, sources, skippedRows: 0, warnings: data.warnings };
+  return { format: "AI-assisted", executions, sources, skippedRows: 0, skippedReasons: [], warnings: data.warnings };
 }
 
 export async function parseStatementWithAi(

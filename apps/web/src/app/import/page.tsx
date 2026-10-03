@@ -33,6 +33,7 @@ import {
   AI_IMPORT_MAX_TEXT,
   type AiImportOptions as AiOptions,
 } from "@/lib/ai-import";
+import type { SkippedReason } from "@luxalgo/journal-importers";
 import { Checkbox } from "@/components/ui/checkbox";
 
 interface BrokerInfo {
@@ -46,6 +47,8 @@ interface PreviewTotals {
   executions: number;
   symbols: number;
   skippedRows: number;
+  skippedReasons: SkippedReason[];
+  skippedReasonsTruncated: boolean;
   from: string | null;
   to: string | null;
 }
@@ -570,9 +573,25 @@ function FileImport() {
                   </span>
                 )}
                 {preview.totals.skippedRows > 0 && (
-                  <span className="text-muted-foreground">
-                    · {preview.totals.skippedRows} rows skipped
-                  </span>
+                  <details className="text-muted-foreground">
+                    <summary className="cursor-pointer">
+                      · {preview.totals.skippedRows} rows skipped —{" "}
+                      {preview.totals.skippedReasons.length} detailed
+                    </summary>
+                    <ul className="ml-4 mt-1 list-disc">
+                      {preview.totals.skippedReasons.slice(0, 5).map((reason, idx) => (
+                        <li key={idx}>
+                          row {reason.row ?? "?"} — {reason.reason}
+                        </li>
+                      ))}
+                      {preview.totals.skippedRows > 5 && (
+                        <li>and {preview.totals.skippedRows - 5} more</li>
+                      )}
+                      {preview.totals.skippedReasonsTruncated && (
+                        <li>showing the first 50 of {preview.totals.skippedRows} skip reasons</li>
+                      )}
+                    </ul>
+                  </details>
                 )}
               </div>
               <p className="text-xs text-muted-foreground">
