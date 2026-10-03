@@ -35,7 +35,9 @@ export const ninjatrader: ImportFormat = {
     const skippedReasons: SkippedReason[] = [];
     let withoutId = false;
     let withoutAccount = false;
-    for (const row of toRecords(parseCsv(content))) {
+    const records = toRecords(parseCsv(content));
+    for (let i = 0; i < records.length; i++) {
+      const row = records[i]!;
       const commission = pick(row, ["commission"]);
       if (
         commission !== undefined &&
@@ -47,6 +49,7 @@ export const ninjatrader: ImportFormat = {
           "An execution has an invalid commission. Correct the value or leave an unavailable commission blank; it will not be treated as zero.",
         );
         skippedRows++;
+        skippedReasons.push({ row: i + 2, reason: "invalid commission value" });
         continue;
       }
       const parsed = rowsToFills([row], columns, options, {
