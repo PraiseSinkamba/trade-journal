@@ -42,11 +42,20 @@ export interface ImportedTrade {
   assetClass?: AssetClass;
 }
 
+export interface SkippedReason {
+  /** 1-based row number in the parsed file, or null when the row index is unknown. */
+  row: number | null;
+  /** Human-readable, parser-internals-free explanation. */
+  reason: string;
+}
+
 export interface ParsedImport {
   format: string;
   executions: ImportedExecution[];
   /** Rows the parser saw but could not turn into executions. */
   skippedRows: number;
+  /** Per-row reasons the parser dropped a row. Length equals skippedRows. */
+  skippedReasons: SkippedReason[];
   warnings: string[];
   /** Missing source facts or malformed/truncated input block a commit. */
   errors?: string[];
