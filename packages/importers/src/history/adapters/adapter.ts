@@ -13,6 +13,7 @@
 import type { Execution } from "../reconstruct";
 import type { CsvRecord } from "../csv";
 import type { ColumnMapping, DetectionConfidence, ImportIssue, ImportedTrade } from "../model";
+import type { SkippedReason } from "../../types";
 import type { SlashDateOrder } from "../timestamps";
 
 /** Parsed tabular input handed to adapters: header row + data records. */
@@ -45,6 +46,8 @@ export interface AdapterParseResult {
   /** Resolved mapping for the UI's review step; null when not column-mapped. */
   mapping: ColumnMapping | null;
   skippedRows: number;
+  /** Per-row reasons the parser dropped a row. Length equals skippedRows. */
+  skippedReasons: SkippedReason[];
   /**
    * False when the source can legitimately contain identical rows (raw
    * executions); the orchestrator then skips duplicate-trade removal.

@@ -26,6 +26,7 @@ import { normalizeHeader, parseDirectionValue } from "../aliases";
 import { parseNumericCell, sanitizeRetainedText } from "../csv";
 import { issue, sortTrades, type ColumnMapping, type ImportIssue } from "../model";
 import { pairEvents, type TradeEvent } from "../reconstruct";
+import type { SkippedReason } from "../../types";
 import type {
   AdapterContext,
   AdapterMatch,
@@ -103,6 +104,7 @@ export const tradingViewAdapter: SourceAdapter = {
     const issues: ImportIssue[] = [];
     const columns = findColumns(table.header)!;
     const events: TradeEvent[] = [];
+    const skippedReasons: SkippedReason[] = [];
     let skippedRows = 0;
 
     for (const record of table.records) {
@@ -119,6 +121,7 @@ export const tradingViewAdapter: SourceAdapter = {
             { row: record.line, column: table.header[columns.type]! },
           ),
         );
+        skippedReasons.push({ row: record.line, reason: issues[issues.length - 1]!.message });
         continue;
       }
       const kind = match[1]!.toLowerCase() === "entry" ? "entry" : "exit";
@@ -139,6 +142,7 @@ export const tradingViewAdapter: SourceAdapter = {
             { row: record.line, column: table.header[columns.time]! },
           ),
         );
+        skippedReasons.push({ row: record.line, reason: issues[issues.length - 1]!.message });
         continue;
       }
       if (kind === "entry" && !Number.isFinite(time)) {
@@ -151,6 +155,7 @@ export const tradingViewAdapter: SourceAdapter = {
             { row: record.line, column: table.header[columns.time]! },
           ),
         );
+        skippedReasons.push({ row: record.line, reason: issues[issues.length - 1]!.message });
         continue;
       }
 
@@ -202,6 +207,7 @@ export const tradingViewAdapter: SourceAdapter = {
       issues,
       mapping,
       skippedRows,
+      skippedReasons,
       dedupeSafe: true,
     };
   },

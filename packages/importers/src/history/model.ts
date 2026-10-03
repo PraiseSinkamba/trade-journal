@@ -3,6 +3,7 @@
  * Journal adaptation keeps history parsing separate from existing fill importers. */
 
 import type { Execution } from "./reconstruct";
+import type { SkippedReason } from "../types";
 /*
   Canonical trade model of the import pipeline. Every source format - pasted
   R-series, TradingView strategy exports, MetaTrader statements, generic
@@ -154,6 +155,8 @@ export interface ImportStats {
   rows: number;
   parsedTrades: number;
   skippedRows: number;
+  /** Per-row reasons the parser dropped a row. Length equals skippedRows. */
+  skippedReasons: SkippedReason[];
   duplicatesRemoved: number;
 }
 

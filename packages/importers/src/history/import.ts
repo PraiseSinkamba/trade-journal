@@ -75,7 +75,7 @@ function emptyResult(format: DetectedFormat, issues: ImportIssue[]): ImportResul
     trades: [],
     openTrades: [],
     issues,
-    stats: { rows: 0, parsedTrades: 0, skippedRows: 0, duplicatesRemoved: 0 },
+    stats: { rows: 0, parsedTrades: 0, skippedRows: 0, skippedReasons: [], duplicatesRemoved: 0 },
   };
 }
 
@@ -453,7 +453,7 @@ export function importTradeHistory(rawText: string, options: ImportOptions = {})
           issues,
         ),
         header,
-        stats: { rows: records.length, parsedTrades: 0, skippedRows: 0, duplicatesRemoved: 0 },
+        stats: { rows: records.length, parsedTrades: 0, skippedRows: 0, skippedReasons: [], duplicatesRemoved: 0 },
       };
     }
     adapter = match.adapter;
@@ -536,6 +536,7 @@ export function importTradeHistory(rawText: string, options: ImportOptions = {})
       rows: records.length,
       parsedTrades: trades.length,
       skippedRows: parsed.skippedRows,
+      skippedReasons: parsed.skippedReasons,
       duplicatesRemoved,
     },
   };

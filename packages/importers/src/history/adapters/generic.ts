@@ -31,6 +31,7 @@ import {
 } from "../model";
 import { pairEvents, type Execution, type TradeEvent } from "../reconstruct";
 import { detectSlashDateOrder, parseImportTimestamp, type SlashDateOrder } from "../timestamps";
+import type { SkippedReason } from "../../types";
 import type {
   AdapterContext,
   AdapterMatch,
@@ -98,12 +99,13 @@ const NON_FILLED_STATUS = /^(cancel(l)?ed|rejected|expired|working|pending|inact
 function filterByStatus(
   table: CsvTable,
   issues: ImportIssue[],
-): { records: CsvRecord[]; skipped: number } {
+): { records: CsvRecord[]; skipped: number; skippedReasons: SkippedReason[] } {
   const statusIndex = table.header.findIndex((h) =>
     ["status", "state", "orderstatus"].includes(normalizeHeader(h)),
   );
-  if (statusIndex === -1) return { records: [...table.records], skipped: 0 };
+  if (statusIndex === -1) return { records: [...table.records], skipped: 0, skippedReasons: [] };
   const records: CsvRecord[] = [];
+  const skippedReasons: SkippedReason[] = [];
   let skipped = 0;
   for (const record of table.records) {
     const status = (record.cells[statusIndex] ?? "").trim();
@@ -121,8 +123,9 @@ function filterByStatus(
         `${skipped} row(s) with a non-filled status (cancelled/rejected/working/...) were ignored.`,
       ),
     );
+    skippedReasons.push({ row: null, reason: issues[issues.length - 1]!.message });
   }
-  return { records, skipped };
+  return { records, skipped, skippedReasons };
 }
 
 /**
@@ -171,10 +174,12 @@ function parseTradePerRow(
   closed: ImportedTrade[];
   open: ImportedTrade[];
   skippedRows: number;
+  skippedReasons: SkippedReason[];
   executions?: Execution[];
 } {
   const closed: ImportedTrade[] = [];
   const open: ImportedTrade[] = [];
+  const skippedReasons: SkippedReason[] = [];
   let skippedRows = 0;
   let pricePnlNoted = false;
 
@@ -254,6 +259,7 @@ function parseTradePerRow(
           { row: record.line },
         ),
       );
+      skippedReasons.push({ row: record.line, reason: issues[issues.length - 1]!.message });
       continue;
     }
 
@@ -278,7 +284,7 @@ function parseTradePerRow(
     };
     (trade.status === "open" ? open : closed).push(trade);
   }
-  return { closed, open, skippedRows };
+  return { closed, open, skippedRows, skippedReasons };
 }
 
 function parseEventRows(
@@ -291,9 +297,11 @@ function parseEventRows(
   closed: ImportedTrade[];
   open: ImportedTrade[];
   skippedRows: number;
+  skippedReasons: SkippedReason[];
   executions?: Execution[];
 } {
   const events: TradeEvent[] = [];
+  const skippedReasons: SkippedReason[] = [];
   let skippedRows = 0;
   for (const record of records) {
     if (record.cells.every((c) => c.trim() === "")) continue;
@@ -310,6 +318,7 @@ function parseEventRows(
           { row: record.line },
         ),
       );
+      skippedReasons.push({ row: record.line, reason: issues[issues.length - 1]!.message });
       continue;
     }
     // Direction: a dedicated column first, else the event text ("Entry short").
@@ -335,7 +344,7 @@ function parseEventRows(
     });
   }
   const { closed, open } = pairEvents(events, issues);
-  return { closed, open, skippedRows };
+  return { closed, open, skippedRows, skippedReasons };
 }
 
 function parseExecutions(
@@ -348,9 +357,11 @@ function parseExecutions(
   closed: ImportedTrade[];
   open: ImportedTrade[];
   skippedRows: number;
+  skippedReasons: SkippedReason[];
   executions?: Execution[];
 } {
   const fills: Execution[] = [];
+  const skippedReasons: SkippedReason[] = [];
   let skippedRows = 0;
   for (const record of records) {
     if (record.cells.every((c) => c.trim() === "")) continue;
@@ -377,6 +388,7 @@ function parseExecutions(
           { row: record.line },
         ),
       );
+      skippedReasons.push({ row: record.line, reason: issues[issues.length - 1]!.message });
       continue;
     }
     const symbolClean = sanitizeRetainedText(text(record, mapping, "symbol"));
@@ -391,7 +403,7 @@ function parseExecutions(
       fees: nOrNull(Math.abs(num(record, mapping, "fees"))),
     });
   }
-  return { closed: [], open: [], executions: fills, skippedRows };
+  return { closed: [], open: [], executions: fills, skippedRows, skippedReasons };
 }
 
 export const genericCsvAdapter: SourceAdapter = {
@@ -428,6 +440,7 @@ export const genericCsvAdapter: SourceAdapter = {
     const filtered = filterByStatus(table, issues);
     let records = filtered.records;
     const statusSkipped = filtered.skipped;
+    const statusSkippedReasons = filtered.skippedReasons;
 
     // TradeZella/Tradervue-style split "Date" + "Time" columns: merge them
     // into the time cell so one timestamp parser handles both layouts.
@@ -457,6 +470,11 @@ export const genericCsvAdapter: SourceAdapter = {
           ? parseExecutions(records, mapping, dateOrder, ctx.timeZone, issues)
           : parseTradePerRow(records, mapping, dateOrder, ctx.timeZone, issues);
 
+    const skippedReasons: SkippedReason[] = [
+      ...statusSkippedReasons,
+      ...parsed.skippedReasons,
+    ];
+
     return {
       closed: sortTrades(parsed.closed),
       open: parsed.open,
@@ -464,6 +482,7 @@ export const genericCsvAdapter: SourceAdapter = {
       mapping,
       executions: parsed.executions,
       skippedRows: parsed.skippedRows + statusSkipped,
+      skippedReasons,
       dedupeSafe: shape !== "executions",
     };
   },

@@ -26,6 +26,7 @@ import { parseImportTimestamp } from "../timestamps";
 import { mapHeaders, normalizeHeader, parseDirectionValue } from "../aliases";
 import { parseNumericCell, sanitizeRetainedText } from "../csv";
 import { issue, sortTrades, type ImportIssue, type ImportedTrade } from "../model";
+import type { SkippedReason } from "../../types";
 import type {
   AdapterContext,
   AdapterMatch,
@@ -74,6 +75,7 @@ export const metaTraderAdapter: SourceAdapter = {
 
     const closed: ImportedTrade[] = [];
     const open: ImportedTrade[] = [];
+    const skippedReasons: SkippedReason[] = [];
     let skippedRows = 0;
 
     // The Type column is found by name: its values mix buy/sell with balance
@@ -97,6 +99,7 @@ export const metaTraderAdapter: SourceAdapter = {
             },
           ),
         );
+        skippedReasons.push({ row: record.line, reason: issues[issues.length - 1]!.message });
         continue;
       }
       if (PENDING_TYPES.test(typeRaw)) {
@@ -109,6 +112,7 @@ export const metaTraderAdapter: SourceAdapter = {
             { row: record.line },
           ),
         );
+        skippedReasons.push({ row: record.line, reason: issues[issues.length - 1]!.message });
         continue;
       }
       // Every real MT5 report ends with a totals row whose Type is empty; it is
@@ -124,6 +128,7 @@ export const metaTraderAdapter: SourceAdapter = {
             { row: record.line },
           ),
         );
+        skippedReasons.push({ row: record.line, reason: issues[issues.length - 1]!.message });
         continue;
       }
 
@@ -154,6 +159,7 @@ export const metaTraderAdapter: SourceAdapter = {
             },
           ),
         );
+        skippedReasons.push({ row: record.line, reason: issues[issues.length - 1]!.message });
         continue;
       }
 
@@ -189,6 +195,6 @@ export const metaTraderAdapter: SourceAdapter = {
       (stillOpen ? open : closed).push(trade);
     }
 
-    return { closed: sortTrades(closed), open, issues, mapping, skippedRows, dedupeSafe: true };
+    return { closed: sortTrades(closed), open, issues, mapping, skippedRows, skippedReasons, dedupeSafe: true };
   },
 };

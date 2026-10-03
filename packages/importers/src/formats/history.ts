@@ -1,7 +1,7 @@
 import { importTradeHistory } from "../history/import";
 import { normalizeHeader } from "../history/aliases";
 import type { ImportResult } from "../history/model";
-import type { ImportFormat, ImportOptions, ImportedExecution, ParsedImport } from "../types";
+import type { ImportFormat, ImportOptions, ImportedExecution, ParsedImport, SkippedReason } from "../types";
 
 /** Options for the history path; `adapterId` is the only way to use the generic alias mapper. */
 export interface HistoryParseOptions extends ImportOptions {
@@ -272,6 +272,7 @@ export const parseHistory = (
     format,
     executions: errors.length ? [] : executions,
     skippedRows,
+    skippedReasons: history.stats.skippedReasons,
     warnings: [...new Set(warnings)].slice(0, 50),
     ...(errors.length ? { errors: [...new Set(errors)].slice(0, 20) } : {}),
     ...(needsSymbol ? { needsSymbol: true } : {}),
@@ -287,6 +288,7 @@ export const historyFormat: ImportFormat = {
       format: "trade-history",
       executions: [],
       skippedRows: 0,
+      skippedReasons: [],
       warnings: [],
       errors: ["History columns could not be recognized."],
     },

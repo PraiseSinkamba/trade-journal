@@ -31,6 +31,7 @@ import { normalizeHeader, parseDirectionValue } from "../aliases";
 import { parseNumericCell, sanitizeRetainedText } from "../csv";
 import { issue, type ColumnMapping, type ImportIssue } from "../model";
 import { type Execution } from "../reconstruct";
+import type { SkippedReason } from "../../types";
 import type {
   AdapterContext,
   AdapterMatch,
@@ -121,6 +122,7 @@ export const mt5DealsAdapter: SourceAdapter = {
     const issues: ImportIssue[] = [];
     const columns = findColumns(table.header)!;
     const executions: Execution[] = [];
+    const skippedReasons: SkippedReason[] = [];
     let skippedRows = 0;
     for (const record of table.records) {
       const cells = record.cells;
@@ -128,6 +130,7 @@ export const mt5DealsAdapter: SourceAdapter = {
       const effect = (cells[columns.direction] ?? "").trim().toLowerCase();
       if (NON_TRADE_TYPES.test(type)) {
         skippedRows++;
+        skippedReasons.push({ row: record.line, reason: `"${type}" is a non-trade row (balance/deposit/withdrawal); ignored.` });
         continue;
       }
       const direction = parseDirectionValue(type);
@@ -152,6 +155,7 @@ export const mt5DealsAdapter: SourceAdapter = {
             { row: record.line },
           ),
         );
+        skippedReasons.push({ row: record.line, reason: issues[issues.length - 1]!.message });
         continue;
       }
       const adjustments = [columns.commission, columns.fee, columns.swap].reduce<number>(
@@ -184,6 +188,6 @@ export const mt5DealsAdapter: SourceAdapter = {
     };
     // The journal already handles partial exits and reversals. Keep each deal
     // intact instead of collapsing it into simulator-only round trips.
-    return { closed: [], open: [], executions, issues, mapping, skippedRows, dedupeSafe: false };
+    return { closed: [], open: [], executions, issues, mapping, skippedRows, skippedReasons, dedupeSafe: false };
   },
 };
