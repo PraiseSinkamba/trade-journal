@@ -148,6 +148,7 @@ function FileImport() {
   const [fileName, setFileName] = useState("");
   const [symbol, setSymbol] = useState("");
   const [mappingApplied, setMappingApplied] = useState(false);
+  const [showManualMapper, setShowManualMapper] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [preview, setPreview] = useState<PreviewResponse | null>(null);
   const [mapping, setMapping] = useState<Record<string, string>>({});
@@ -179,6 +180,7 @@ function FileImport() {
     setPreview(null);
     setAiReviewed(false);
     setError(null);
+    setShowManualMapper(false);
   };
 
   const onFile = async (file: File) => {
@@ -192,6 +194,7 @@ function FileImport() {
     setSymbol("");
     setMapping({});
     setMappingApplied(false);
+    setShowManualMapper(false);
     setError(null);
     setBusy(true);
     try {
@@ -467,7 +470,7 @@ function FileImport() {
               </Button>
             </div>
           )}
-          {preview?.needsMapping && preview.headers && (
+          {preview && (showManualMapper || preview.needsMapping) && preview.headers && (
             <div className="space-y-2 rounded-md border p-3">
               <p className="text-sm">
                 Format not recognized — map your columns (nothing is guessed silently):
@@ -560,10 +563,22 @@ function FileImport() {
             </div>
           )}
 
-          {preview && !preview.needsMapping && preview.totals && (
+          {!showManualMapper && preview && !preview.needsMapping && preview.totals && (
             <div className="space-y-2 rounded-md border p-3">
               <div className="flex flex-wrap items-center gap-2 text-sm">
                 <Badge variant="secondary">{preview.detected}</Badge>
+                {preview.detected !== "ninjatrader" && !preview.aiPreviewToken && (
+                  <button
+                    className="text-xs text-muted-foreground underline hover:text-foreground"
+                    onClick={() => {
+                      setShowManualMapper(true);
+                      setMappingApplied(false);
+                      setError(null);
+                    }}
+                  >
+                    Wrong format? Map columns manually
+                  </button>
+                )}
                 <span>{preview.totals.executions} executions</span>
                 <span className="text-muted-foreground">· {preview.totals.symbols} symbols</span>
                 {preview.totals.from && (
