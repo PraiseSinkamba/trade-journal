@@ -484,6 +484,72 @@ function FileImport() {
                 reasonCounts.set(r.reason, (reasonCounts.get(r.reason) ?? 0) + 1);
               }
               const uniqueReasons = [...reasonCounts.entries()].sort((a, b) => b[1] - a[1]);
+              // While the user is editing the manual mapper, the preview collapses
+              // to a one-line summary. The full preview card (with execution list,
+              // account picker, Import button) reappears only when they finish —
+              // either by clicking 'Use detected format' to abandon the override,
+              // or by clicking 'Preview with mapping' with a valid mapping.
+              if (showManualMapper) {
+                if (zero) {
+                  return (
+                    <div
+                      className="flex flex-wrap items-center justify-between gap-2 rounded-md border p-3 text-sm"
+                      data-testid="collapsed-zero-preview"
+                    >
+                      <span className="text-muted-foreground">
+                        {preview.detected} — {preview.totals.skippedRows} row
+                        {preview.totals.skippedRows === 1 ? "" : "s"} dropped
+                      </span>
+                      <button
+                        className="text-xs text-muted-foreground underline hover:text-foreground"
+                        onClick={() => {
+                          setShowManualMapper(false);
+                          setMapping({});
+                          setMappingApplied(false);
+                        }}
+                      >
+                        Back to diagnostic
+                      </button>
+                    </div>
+                  );
+                }
+                return (
+                  <div
+                    className="flex flex-wrap items-center justify-between gap-2 rounded-md border p-3 text-sm"
+                    data-testid="collapsed-preview"
+                  >
+                    <div className="flex flex-wrap items-center gap-2">
+                      <Badge variant="secondary">{preview.detected}</Badge>
+                      <span>
+                        {preview.totals.executions} execution
+                        {preview.totals.executions === 1 ? "" : "s"}
+                      </span>
+                      {preview.totals.symbols > 0 && (
+                        <span className="text-muted-foreground">
+                          · {preview.totals.symbols} symbol
+                          {preview.totals.symbols === 1 ? "" : "s"}
+                        </span>
+                      )}
+                      {preview.totals.from && (
+                        <span className="text-muted-foreground">
+                          · {dayKeyOf(preview.totals.from, displayTimeZone)} →{" "}
+                          {preview.totals.to && dayKeyOf(preview.totals.to, displayTimeZone)}
+                        </span>
+                      )}
+                    </div>
+                    <button
+                      className="text-xs text-muted-foreground underline hover:text-foreground"
+                      onClick={() => {
+                        setShowManualMapper(false);
+                        setMapping({});
+                        setMappingApplied(false);
+                      }}
+                    >
+                      Use detected format
+                    </button>
+                  </div>
+                );
+              }
               if (zero) {
                 return (
                   <div className="space-y-3 rounded-md border p-3" data-testid="zero-exec-preview">
@@ -542,36 +608,34 @@ function FileImport() {
               }
               return (
                 <div className="space-y-3 rounded-md border p-3">
-                  <div className="space-y-1">
-                    <div className="flex flex-wrap items-center gap-2 text-sm">
-                      <Badge variant="secondary">{preview.detected}</Badge>
-                      <span>
-                        {preview.totals.executions} execution
-                        {preview.totals.executions === 1 ? "" : "s"}
+                  <div className="flex flex-wrap items-center gap-2 text-sm">
+                    <Badge variant="secondary">{preview.detected}</Badge>
+                    <span>
+                      {preview.totals.executions} execution
+                      {preview.totals.executions === 1 ? "" : "s"}
+                    </span>
+                    {preview.totals.symbols > 0 && (
+                      <span className="text-muted-foreground">
+                        · {preview.totals.symbols} symbol
+                        {preview.totals.symbols === 1 ? "" : "s"}
                       </span>
-                      {preview.totals.symbols > 0 && (
-                        <span className="text-muted-foreground">
-                          · {preview.totals.symbols} symbol
-                          {preview.totals.symbols === 1 ? "" : "s"}
-                        </span>
-                      )}
-                      {preview.totals.from && (
-                        <span className="text-muted-foreground">
-                          · {dayKeyOf(preview.totals.from, displayTimeZone)} →{" "}
-                          {preview.totals.to && dayKeyOf(preview.totals.to, displayTimeZone)}
-                        </span>
-                      )}
-                    </div>
+                    )}
+                    {preview.totals.from && (
+                      <span className="text-muted-foreground">
+                        · {dayKeyOf(preview.totals.from, displayTimeZone)} →{" "}
+                        {preview.totals.to && dayKeyOf(preview.totals.to, displayTimeZone)}
+                      </span>
+                    )}
                     {canRemap && preview.headers ? (
                       <button
-                        className="text-xs text-muted-foreground underline hover:text-foreground"
+                        className="ml-auto text-xs text-muted-foreground underline hover:text-foreground"
                         onClick={() => {
                           setShowManualMapper(true);
                           setMappingApplied(false);
                           setError(null);
                         }}
                       >
-                        Wrong format? Map columns manually
+                        Map columns manually
                       </button>
                     ) : null}
                   </div>
