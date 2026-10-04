@@ -484,12 +484,13 @@ function FileImport() {
                 reasonCounts.set(r.reason, (reasonCounts.get(r.reason) ?? 0) + 1);
               }
               const uniqueReasons = [...reasonCounts.entries()].sort((a, b) => b[1] - a[1]);
-              // While the user is editing the manual mapper, the preview collapses
-              // to a one-line summary. The full preview card (with execution list,
-              // account picker, Import button) reappears only when they finish —
-              // either by clicking 'Use detected format' to abandon the override,
-              // or by clicking 'Preview with mapping' with a valid mapping.
-              if (showManualMapper) {
+              // While the user is editing the manual mapper, before they have
+              // applied a mapping, the preview collapses to a one-line summary.
+              // The moment they click 'Preview with mapping', the full card
+              // reappears — they need to see what their mapping produced.
+              // If the result is 0 executions, the full diagnostic tells them
+              // why; if it's a success, they see the executions and can commit.
+              if (showManualMapper && !mappingApplied) {
                 if (zero) {
                   return (
                     <div
@@ -627,16 +628,29 @@ function FileImport() {
                       </span>
                     )}
                     {canRemap && preview.headers ? (
-                      <button
-                        className="ml-auto text-xs text-muted-foreground underline hover:text-foreground"
-                        onClick={() => {
-                          setShowManualMapper(true);
-                          setMappingApplied(false);
-                          setError(null);
-                        }}
-                      >
-                        Map columns manually
-                      </button>
+                      showManualMapper ? (
+                        <button
+                          className="ml-auto text-xs text-muted-foreground underline hover:text-foreground"
+                          onClick={() => {
+                            setShowManualMapper(false);
+                            setMapping({});
+                            setMappingApplied(false);
+                          }}
+                        >
+                          Use detected format
+                        </button>
+                      ) : (
+                        <button
+                          className="ml-auto text-xs text-muted-foreground underline hover:text-foreground"
+                          onClick={() => {
+                            setShowManualMapper(true);
+                            setMappingApplied(false);
+                            setError(null);
+                          }}
+                        >
+                          Map columns manually
+                        </button>
+                      )
                     ) : null}
                   </div>
                   {preview.totals.skippedRows > 0 && uniqueReasons.length > 0 && (
