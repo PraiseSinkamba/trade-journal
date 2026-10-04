@@ -471,100 +471,7 @@ function FileImport() {
               </Button>
             </div>
           )}
-          {preview && (showManualMapper || preview.needsMapping) && preview.headers && (
-            <div className="space-y-2 rounded-md border p-3">
-              <p className="text-sm">
-                Format not recognized — map your columns (nothing is guessed silently):
-              </p>
-              <div className="grid grid-cols-2 gap-2 md:grid-cols-3">
-                {mappingFields.map((field) => (
-                  <div key={field}>
-                    <Label className="mb-1 block text-xs capitalize text-muted-foreground">
-                      {field}
-                      {field === "fee" ? " (optional)" : ""}
-                    </Label>
-                    <Select
-                      value={mapping[field] ?? "none"}
-                      onValueChange={(value) =>
-                        setMapping((m) => ({ ...m, [field]: value === "none" ? "" : value }))
-                      }
-                    >
-                      <SelectTrigger className="h-8 text-xs">
-                        <SelectValue placeholder="column" />
-                      </SelectTrigger>
-                      <SelectContent>
-                        <SelectItem value="none">—</SelectItem>
-                        {preview.headers!.map((header) => (
-                          <SelectItem key={header} value={header}>
-                            {header}
-                          </SelectItem>
-                        ))}
-                      </SelectContent>
-                    </Select>
-                  </div>
-                ))}
-              </div>
-              <details className="space-y-2 text-xs">
-                <summary className="cursor-pointer text-muted-foreground">
-                  Position identity and ordering (optional)
-                </summary>
-                <p className="text-muted-foreground">
-                  For Open/Close Long/Short rows, map source position IDs, execution IDs or sequence
-                  numbers when available. Columns named Position ID, Execution ID, Fill ID and
-                  Sequence are recognized automatically. An order ID is not an execution ID.
-                </p>
-                <div className="grid grid-cols-2 gap-2 md:grid-cols-3">
-                  {(["positionId", "executionId", "sequence"] as const).map((field) => (
-                    <div key={field}>
-                      <Label className="mb-1 block text-xs capitalize text-muted-foreground">
-                        {
-                          {
-                            positionId: "Position ID",
-                            executionId: "Execution ID",
-                            sequence: "Sequence",
-                          }[field]
-                        }
-                      </Label>
-                      <Select
-                        value={mapping[field] || "none"}
-                        onValueChange={(value) =>
-                          setMapping((m) => ({ ...m, [field]: value === "none" ? "" : value }))
-                        }
-                      >
-                        <SelectTrigger className="h-8 text-xs">
-                          <SelectValue placeholder="column" />
-                        </SelectTrigger>
-                        <SelectContent>
-                          <SelectItem value="none">—</SelectItem>
-                          {preview.headers!.map((header) => (
-                            <SelectItem key={header} value={header}>
-                              {header}
-                            </SelectItem>
-                          ))}
-                        </SelectContent>
-                      </Select>
-                    </div>
-                  ))}
-                </div>
-              </details>
-              <Button
-                size="sm"
-                onClick={previewWithMapping}
-                disabled={
-                  busy ||
-                  !mapping.symbol ||
-                  !mapping.side ||
-                  !mapping.quantity ||
-                  !mapping.price ||
-                  !mapping.timestamp
-                }
-              >
-                Preview with mapping
-              </Button>
-            </div>
-          )}
-
-          {!showManualMapper && preview && !preview.needsMapping && preview.totals && (
+          {preview && !preview.needsMapping && preview.totals && (
             (() => {
               const zero = preview.totals.executions === 0;
               const canRemap =
@@ -791,6 +698,120 @@ function FileImport() {
                 </div>
               );
             })()
+          )}
+          {showManualMapper && preview?.headers && !preview.needsMapping && (
+            <div className="space-y-2 rounded-md border p-3">
+              <div className="flex items-center justify-between gap-2">
+                <p className="text-sm">Map your columns (nothing is guessed silently):</p>
+                <button
+                  className="text-xs text-muted-foreground underline hover:text-foreground"
+                  onClick={() => {
+                    setShowManualMapper(false);
+                    setMapping({});
+                    setMappingApplied(false);
+                  }}
+                >
+                  Back to detected format
+                </button>
+              </div>
+              <div className="grid grid-cols-2 gap-2 md:grid-cols-3">
+                {mappingFields.map((field) => (
+                  <div key={field}>
+                    <Label className="mb-1 block text-xs capitalize text-muted-foreground">
+                      {field}
+                      {field === "fee" ? " (optional)" : ""}
+                    </Label>
+                    <Select
+                      value={mapping[field] ?? "none"}
+                      onValueChange={(value) =>
+                        setMapping((m) => ({ ...m, [field]: value === "none" ? "" : value }))
+                      }
+                    >
+                      <SelectTrigger className="h-8 text-xs">
+                        <SelectValue placeholder="column" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="none">—</SelectItem>
+                        {preview.headers!.map((header) => (
+                          <SelectItem key={header} value={header}>
+                            {header}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  </div>
+                ))}
+              </div>
+              <Button
+                size="sm"
+                onClick={previewWithMapping}
+                disabled={
+                  busy ||
+                  !mapping.symbol ||
+                  !mapping.side ||
+                  !mapping.quantity ||
+                  !mapping.price ||
+                  !mapping.timestamp
+                }
+              >
+                Preview with mapping
+              </Button>
+              {preview.totals && preview.totals.executions === 0 && (
+                <p className="text-xs text-loss">
+                  Nothing came through with this mapping. Try AI parsing instead — it
+                  handles files that don&apos;t have an obvious side column.
+                </p>
+              )}
+            </div>
+          )}
+          {preview?.needsMapping && preview.headers && (
+            <div className="space-y-2 rounded-md border p-3">
+              <p className="text-sm">
+                Format not recognised — map your columns (nothing is guessed silently):
+              </p>
+              <div className="grid grid-cols-2 gap-2 md:grid-cols-3">
+                {mappingFields.map((field) => (
+                  <div key={field}>
+                    <Label className="mb-1 block text-xs capitalize text-muted-foreground">
+                      {field}
+                      {field === "fee" ? " (optional)" : ""}
+                    </Label>
+                    <Select
+                      value={mapping[field] ?? "none"}
+                      onValueChange={(value) =>
+                        setMapping((m) => ({ ...m, [field]: value === "none" ? "" : value }))
+                      }
+                    >
+                      <SelectTrigger className="h-8 text-xs">
+                        <SelectValue placeholder="column" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="none">—</SelectItem>
+                        {preview.headers!.map((header) => (
+                          <SelectItem key={header} value={header}>
+                            {header}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  </div>
+                ))}
+              </div>
+              <Button
+                size="sm"
+                onClick={previewWithMapping}
+                disabled={
+                  busy ||
+                  !mapping.symbol ||
+                  !mapping.side ||
+                  !mapping.quantity ||
+                  !mapping.price ||
+                  !mapping.timestamp
+                }
+              >
+                Preview with mapping
+              </Button>
+            </div>
           )}
         </CardContent>
       </Card>
