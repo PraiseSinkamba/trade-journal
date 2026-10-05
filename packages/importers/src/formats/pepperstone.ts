@@ -66,9 +66,9 @@ export const pepperstone: ImportFormat = {
   label: "Pepperstone (cTrader order history export)",
   detect: (headers) =>
     hasHeaders(headers, [
-      ["position_id"],
-      ["deal_kind"],
-      ["execution_price"],
+      ["positionid"],
+      ["dealkind"],
+      ["executionprice"],
       ["broker"],
     ]),
   parse: (content, options: ImportOptions): ParsedImport => {

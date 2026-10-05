@@ -1,6 +1,7 @@
 import { parseCsv } from "./csv";
 import { ibkr } from "./formats/ibkr";
 import { metatrader } from "./formats/metatrader";
+import { pepperstone } from "./formats/pepperstone";
 import {
   dastrader,
   ibkrFlex,
@@ -25,6 +26,7 @@ const LEGACY_FORMATS: ImportFormat[] = [
   ibkr,
   ibkrFlex,
   thinkorswim,
+  pepperstone,
   tradezella,
   tradervue,
   topstepx,
