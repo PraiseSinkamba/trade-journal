@@ -1,4 +1,4 @@
-import { hasHeaders, parseCsv, toRecords, type Row } from "../csv";
+import { hasHeaders, headerKey, parseCsv, pick, toRecords, type Row } from "../csv";
 import { parseTimestamp } from "../dates";
 import { parseMoney, parseQuantity } from "../numbers";
 import { parseSide } from "./fills";
@@ -56,10 +56,8 @@ const classifySymbol = (raw: string): AssetClass => {
   return "other";
 };
 
-const requireString = (row: Row, key: string): string => {
-  const value = row[key];
-  return typeof value === "string" ? value : "";
-};
+/** Header keys use csv.ts' headerKey normalization: lowercased, no punctuation. */
+const str = (row: Row, header: string): string => pick(row, [headerKey(header)]) ?? "";
 
 export const pepperstone: ImportFormat = {
   id: "pepperstone",
@@ -81,17 +79,17 @@ export const pepperstone: ImportFormat = {
     for (let i = 0; i < records.length; i++) {
       const row = records[i]!;
       const rowNumber = i + 2; // header is row 1
-      const positionId = requireString(row, "position_id");
-      const orderId = requireString(row, "order_id");
-      const symbol = requireString(row, "symbol").trim().toUpperCase();
-      const side = parseSide(requireString(row, "side"));
-      const quantity = parseQuantity(requireString(row, "quantity"));
-      const price = parseMoney(requireString(row, "price"));
-      const executedAt = parseTimestamp(requireString(row, "data"), options.timeZone);
-      const swapRaw = parseMoney(requireString(row, "swap"));
-      const commissionRaw = parseMoney(requireString(row, "commission"));
-      const grossProfitRaw = parseMoney(requireString(row, "gross_profit"));
-      const dealKind = requireString(row, "deal_kind");
+      const positionId = str(row, "position_id");
+      const orderId = str(row, "order_id");
+      const symbol = str(row, "symbol").trim().toUpperCase();
+      const side = parseSide(str(row, "side"));
+      const quantity = parseQuantity(str(row, "quantity"));
+      const price = parseMoney(str(row, "price"));
+      const executedAt = parseTimestamp(str(row, "data"), options.timeZone);
+      const swapRaw = parseMoney(str(row, "swap"));
+      const commissionRaw = parseMoney(str(row, "commission"));
+      const grossProfitRaw = parseMoney(str(row, "gross_profit"));
+      const dealKind = str(row, "deal_kind");
 
       if (
         !symbol ||
