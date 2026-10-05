@@ -89,8 +89,10 @@ const toNaive = (value: string): NaiveParts | null => {
   }
 
   // ISO-ish: 2026-01-05 14:30:00 / 2026.01.05 14:30 / 2026-01-05T14:30:00
+  // Accept 1-9 digit fractional seconds (ms, μs, ns) and either . or , as
+  // the decimal separator for European exports ("2026-01-05 14:30:00,123").
   let match = text.match(
-    /^(\d{4})[-/.](\d{1,2})[-/.](\d{1,2})(?:[T ,]+(\d{1,2}):(\d{2})(?::(\d{2})(?:\.(\d{1,3}))?)?)?$/,
+    /^(\d{4})[-/.](\d{1,2})[-/.](\d{1,2})(?:[T ,]+(\d{1,2}):(\d{2})(?::(\d{2})(?:[.,]([,\d]{1,9}))?)?)?$/,
   );
   if (match) {
     return {
@@ -100,13 +102,13 @@ const toNaive = (value: string): NaiveParts | null => {
       hour: Number(match[4] ?? 0),
       minute: Number(match[5] ?? 0),
       second: Number(match[6] ?? 0),
-      millisecond: Number((match[7] ?? "").padEnd(3, "0")),
+      millisecond: Number((match[7] ?? "").replace(/[.,]/g, "").padEnd(3, "0").slice(0, 3)),
     };
   }
 
   // US: 01/05/2026 2:30:00 PM  (also 1/5/26)
   match = text.match(
-    /^(\d{1,2})[-/](\d{1,2})[-/](\d{2}|\d{4})(?:[, ]+(\d{1,2}):(\d{2})(?::(\d{2})(?:\.(\d{1,3}))?)?\s*(AM|PM|am|pm)?)?$/,
+    /^(\d{1,2})[-/](\d{1,2})[-/](\d{2}|\d{4})(?:[, ]+(\d{1,2}):(\d{2})(?::(\d{2})(?:[.,]([,\d]{1,9}))?)?\s*(AM|PM|am|pm)?)?$/,
   );
   if (match) {
     let hour = Number(match[4] ?? 0);
@@ -122,13 +124,13 @@ const toNaive = (value: string): NaiveParts | null => {
       hour,
       minute: Number(match[5] ?? 0),
       second: Number(match[6] ?? 0),
-      millisecond: Number((match[7] ?? "").padEnd(3, "0")),
+      millisecond: Number((match[7] ?? "").replace(/[.,]/g, "").padEnd(3, "0").slice(0, 3)),
     };
   }
 
   // "Jan 5, 2026 14:30"
   match = text.match(
-    /^([A-Za-z]{3,})\.?\s+(\d{1,2}),?\s+(\d{4})(?:[, ]+(\d{1,2}):(\d{2})(?::(\d{2})(?:\.(\d{1,3}))?)?\s*(AM|PM|am|pm)?)?$/,
+    /^([A-Za-z]{3,})\.?\s+(\d{1,2}),?\s+(\d{4})(?:[, ]+(\d{1,2}):(\d{2})(?::(\d{2})(?:[.,]([,\d]{1,9}))?)?\s*(AM|PM|am|pm)?)?$/,
   );
   if (match) {
     const month = MONTHS[match[1]!.slice(0, 3).toLowerCase()];
@@ -145,7 +147,7 @@ const toNaive = (value: string): NaiveParts | null => {
       hour,
       minute: Number(match[5] ?? 0),
       second: Number(match[6] ?? 0),
-      millisecond: Number((match[7] ?? "").padEnd(3, "0")),
+      millisecond: Number((match[7] ?? "").replace(/[.,]/g, "").padEnd(3, "0").slice(0, 3)),
     };
   }
 

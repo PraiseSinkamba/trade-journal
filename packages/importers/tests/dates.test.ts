@@ -32,7 +32,16 @@ it.each([
   "2026-01-05 09:30:60",
   "2026-13-05",
   "1/5/2026 13:30 PM",
-  "2026-01-05 09:30:00.1234",
 ])("rejects invalid or unsupported precision rather than changing timestamp %s", (input) => {
   expect(parseTimestamp(input)).toBeNull();
+});
+it.each([
+  ["2026-01-05 09:30:00.1234", "2026-01-05T09:30:00.123Z"],
+  ["2026-01-05T09:30:00.123456Z", "2026-01-05T09:30:00.123Z"],
+  ["2026-01-05T09:30:00.123456", "2026-01-05T09:30:00.123Z"],
+  ["2026-01-05 09:30:00,123", "2026-01-05T09:30:00.123Z"],
+  ["2026-01-05 09:30:00,123456", "2026-01-05T09:30:00.123Z"],
+  ["2021-10-20T03:50:40.242Z", "2021-10-20T03:50:40.242Z"],
+])("truncates sub-millisecond precision to milliseconds %s", (input, expected) => {
+  expect(parseTimestamp(input)).toBe(expected);
 });
