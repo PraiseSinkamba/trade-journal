@@ -12,12 +12,28 @@ import type {
 import type { AssetClass } from "@luxalgo/journal-core";
 
 /**
- * Pepperstone cTrader "Order History" export. One row per deal/fill with
- * explicit swap + commission columns and a `position_id` linking the deals
- * of a single position. `data` is the deal fill timestamp; the `trade_id`
- * column is empty in every observed file (cTrader quirk) and is ignored.
- * The `execution_price`, `close_price`, and `price` columns all carry the
- * same value per row; `price` is read for simplicity.
+ * Pepperstone cTrader "Order History" export. Each row is the closing deal
+ * of a closed position (cTrader's "Deals" tab); the opening fill is not
+ * present in the export. The row carries the position's `open_time` and
+ * `close_time` plus the broker's `gross_profit`, `net_profit`, `swap`, and
+ * `commission`. Two-row positions (close_partial + close_final, or
+ * stop_out + manual_after_stop) appear as multiple closing deals under the
+ * same `position_id`.
+ *
+ * To round-trip a position with the existing engine, this format emits
+ * two executions per row: a synthetic opening fill at `open_time` with the
+ * opposite side, and the real close at `data` (the row's "fill time").
+ * Both share `importMetadata.group = position_id` so the engine pairs them
+ * into one cycle. The close carries `reportedGrossPnl = net_profit` so the
+ * cycle's net P&L matches the broker exactly (`netPnl = grossPnl - fees`,
+ * with `fees = 0` because the broker's P&L is already net of swap and
+ * commission). Multi-row positions become a single cycle with multiple
+ * exits and per-exit P&L.
+ *
+ * The synthetic entry's `price` is a placeholder; any analytics that
+ * depend on `trade.avgEntry` (Edge Score, R-multiples) will read this
+ * synthetic value when only the cTrader export is the source. Import a
+ * fills export for true entry prices.
  */
 export const SYMBOL_CLASSES: Record<string, AssetClass> = {
   // forex majors / crosses
@@ -82,19 +98,19 @@ export const pepperstone: ImportFormat = {
       const positionId = str(row, "position_id");
       const orderId = str(row, "order_id");
       const symbol = str(row, "symbol").trim().toUpperCase();
-      const side = parseSide(str(row, "side"));
+      const closeSide = parseSide(str(row, "side"));
       const quantity = parseQuantity(str(row, "quantity"));
       const price = parseMoney(str(row, "price"));
-      const executedAt = parseTimestamp(str(row, "data"), options.timeZone);
-      const swapRaw = parseMoney(str(row, "swap"));
-      const commissionRaw = parseMoney(str(row, "commission"));
-      const grossProfitRaw = parseMoney(str(row, "gross_profit"));
+      const closeAt = parseTimestamp(str(row, "data"), options.timeZone);
+      const openAt = parseTimestamp(str(row, "open_time"), options.timeZone);
+      const netProfitRaw = parseMoney(str(row, "net_profit"));
       const dealKind = str(row, "deal_kind");
 
       if (
         !symbol ||
-        !side ||
-        !executedAt ||
+        !closeSide ||
+        !openAt ||
+        !closeAt ||
         !Number.isFinite(quantity) ||
         quantity <= 0 ||
         !Number.isFinite(price)
@@ -102,9 +118,9 @@ export const pepperstone: ImportFormat = {
         skippedRows++;
         const reason = !symbol
           ? "missing symbol"
-          : !side
+          : !closeSide
             ? "unrecognised side value"
-            : !executedAt
+            : !openAt || !closeAt
               ? "unparseable timestamp"
               : quantity <= 0
                 ? "non-positive quantity"
@@ -113,29 +129,52 @@ export const pepperstone: ImportFormat = {
         continue;
       }
 
-      const fee =
-        (Number.isFinite(swapRaw) ? Math.abs(swapRaw) : 0) +
-        (Number.isFinite(commissionRaw) ? Math.abs(commissionRaw) : 0);
-      const reportedGrossPnl = Number.isFinite(grossProfitRaw) ? grossProfitRaw : undefined;
+      const reportedGrossPnl = Number.isFinite(netProfitRaw) ? netProfitRaw : undefined;
+      const entrySide: "buy" | "sell" = closeSide === "buy" ? "sell" : "buy";
+      const assetClass = classifySymbol(symbol);
+      const order = i * 2;
 
       if (dealKind && !KNOWN_DEAL_KINDS.has(dealKind)) {
         unknownDealKinds.add(dealKind);
       }
 
+      // Synthetic opening fill at the position's open_time with the
+      // opposite side. The price is a placeholder; the engine uses
+      // reportedGrossPnl on the close to compute realized P&L.
       executions.push({
         symbol,
-        side,
+        side: entrySide,
         quantity,
         price,
-        fee,
-        executedAt,
-        assetClass: classifySymbol(symbol),
+        fee: 0,
+        executedAt: openAt,
+        assetClass,
         importMetadata: {
-          id: orderId || `${positionId}-${executedAt}`,
+          id: `${positionId}-open`,
           group: positionId,
-          order: i,
+          order,
+          preserveFee: false,
+        },
+      });
+
+      // Real closing fill at the row's `data` time. reportedGrossPnl
+      // carries the broker's net_profit so the engine's cycle net P&L
+      // matches the broker exactly (netPnl = grossPnl - cycle.fees,
+      // and cycle.fees is 0 because the broker P&L is net of swap/commission).
+      executions.push({
+        symbol,
+        side: closeSide,
+        quantity,
+        price,
+        fee: 0,
+        executedAt: closeAt,
+        assetClass,
+        importMetadata: {
+          id: orderId || `${positionId}-${closeAt}`,
+          group: positionId,
+          order: order + 1,
           ...(reportedGrossPnl !== undefined ? { reportedGrossPnl } : {}),
-          preserveFee: true,
+          preserveFee: false,
         },
       });
     }
