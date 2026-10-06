@@ -10,6 +10,8 @@ import {
   aiModelSetting,
   getAiProvider,
   getAiSettings,
+  getCurrentAccountId,
+  setCurrentAccountId,
   setAiKey,
   setSetting,
 } from "@/server/settings";
@@ -24,6 +26,7 @@ export const GET = handler(() =>
     multipliers: getMultipliers(),
     currencyConversion: getCurrencyConversion(),
     ...getAiSettings(),
+    currentAccountId: getCurrentAccountId(),
   }),
 );
 
@@ -37,6 +40,8 @@ interface SettingsBody {
   aiProvider?: AiProvider;
   aiModel?: string;
   currencyConversion?: CurrencyConversion;
+  /** Persisted single-account default. Absent = unchanged. `null` clears it. */
+  currentAccountId?: string | null;
 }
 
 export const PATCH = handler(async (request: Request) => {
@@ -120,6 +125,9 @@ export const PATCH = handler(async (request: Request) => {
       for (const account of db.select({ id: accounts.id }).from(accounts).all())
         rebuildAccount(account.id);
     });
+  db.transaction(() => {
+    if (body.currentAccountId !== undefined) setCurrentAccountId(body.currentAccountId);
+  });
   db.transaction(() => {
     for (const id of AI_PROVIDERS) {
       const key = body[`${id}Key`];
