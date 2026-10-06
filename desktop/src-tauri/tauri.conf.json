@@ -42,11 +42,10 @@
       "icons/icon.ico"
     ],
     "externalBin": [
-      "./binaries/node.exe"
+      "./binaries/node"
     ],
     "resources": {
-      "../../apps/web/.next/static": "apps/web/.next/static",
-      "../../apps/web/public": "apps/web/public"
+      "../../apps/web/.next/tauri-dist/apps/web": "apps/web"
     },
     "windows": {
       "certificateThumbprint": null,
@@ -56,8 +55,7 @@
   },
   "plugins": {
     "shell": {
-      "open": true,
-      "scope": []
+      "open": true
     }
   }
 }

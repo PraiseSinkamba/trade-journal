@@ -6,8 +6,13 @@
   "scripts": {
     "tauri": "tauri",
     "dev": "tauri dev",
-    "build": "tauri build",
-    "icons": "cd src-tauri && cargo run --manifest-path scripts/gen_icons/Cargo.toml"
+    "build": "pnpm build:web && pnpm build:app",
+    "build:app": "tauri build",
+    "build:web": "pnpm --filter web build",
+    "build:debug": "tauri build --debug",
+    "icons": "cd src-tauri && cargo run --manifest-path scripts/gen_icons/Cargo.toml",
+    "clean": "cd src-tauri && cargo clean && echo cleaned",
+    "typecheck": "cd src-tauri && cargo check"
   },
   "devDependencies": {
     "@tauri-apps/cli": "^2"

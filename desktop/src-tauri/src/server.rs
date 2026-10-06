@@ -1,10 +1,9 @@
 use regex::Regex;
 use serde::{Deserialize, Serialize};
-use std::process::Stdio;
 use std::sync::Arc;
 use tauri::{AppHandle, Emitter, Manager};
-use tokio::io::{AsyncBufReadExt, BufReader};
-use tokio::process::{Child, Command};
+use tauri_plugin_shell::process::{CommandChild, CommandEvent};
+use tauri_plugin_shell::ShellExt;
 use tokio::sync::Mutex;
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -15,7 +14,7 @@ pub struct ServerStatus {
 }
 
 pub(crate) struct ServerState {
-    pub(crate) child: Option<Child>,
+    pub(crate) child: Option<CommandChild>,
     pub(crate) port: Option<u16>,
 }
 
@@ -35,71 +34,73 @@ pub async fn start_server(
         .resource_dir()
         .map_err(|e| format!("Could not resolve resource directory: {}", e))?;
 
-    let sidecar_path = resource_dir.join("binaries").join("node.exe-x86_64-pc-windows-msvc.exe");
+    eprintln!("[start_server] resource_dir = {:?}", resource_dir);
+    eprintln!("[start_server] data_dir = {:?}", data_dir);
 
     let journal_data_dir = data_dir.to_string_lossy().to_string();
 
     let server_js_path = resource_dir.join("apps/web/server.js");
+    eprintln!("[start_server] server_js_path = {:?}", server_js_path);
 
-    let mut child = Command::new(&sidecar_path)
-        .arg(&server_js_path)
+    // Strip Windows extended-length path prefix (\\?\) — Node 24's realpathSync chokes on it,
+    // resolving only down to the drive root ("E:") and then failing EISDIR.
+    let server_js_str = server_js_path.to_string_lossy().to_string();
+    let server_js_str = server_js_str
+        .strip_prefix(r"\\?\")
+        .unwrap_or(&server_js_str)
+        .to_string();
+    eprintln!("[start_server] server_js_arg = {}", server_js_str);
+
+    // Use Tauri's sidecar API — handles platform/triple suffix + bundled path lookup.
+    let (mut rx, child) = app
+        .shell()
+        .sidecar("node")
+        .map_err(|e| format!("Failed to build sidecar command: {}", e))?
+        .args([server_js_str])
         .env("PORT", "0")
-        .env("JOURNAL_DATA_DIR", &journal_data_dir)
+        .env("JOURNAL_DATA_DIR", journal_data_dir.clone())
         .env("NODE_ENV", "production")
-        .stdout(Stdio::piped())
-        .stderr(Stdio::piped())
         .spawn()
         .map_err(|e| format!("Failed to spawn sidecar: {}", e))?;
 
-    let stdout = child.stdout.take().ok_or("Failed to capture stdout")?;
-    let stderr = child.stderr.take();
-
+    // Re-read stdout/stderr via CommandEvent stream.
     let app_handle = app.clone();
     let state_clone = state.clone();
 
-    // Spawn port discovery task
-    tokio::spawn(async move {
-        let reader = BufReader::new(stdout);
-        let port_regex = Regex::new(r"Local:.*http://127\.0\.0\.1:(\d+)").unwrap();
-        let localhost_regex = Regex::new(r"localhost:(\d+)").unwrap();
-
-        let mut lines = reader.lines();
-        while let Ok(Some(line)) = lines.next_line().await {
-            if let Some(caps) = port_regex.captures(&line) {
-                if let Some(port_str) = caps.get(1) {
-                    let port: u16 = port_str.as_str().parse().unwrap();
-                    {
-                        let mut s = state_clone.lock().await;
-                        s.port = Some(port);
+    // Spawn port discovery + stderr logging task, reading from the CommandEvent channel.
+    tauri::async_runtime::spawn(async move {
+        let port_regex = Regex::new(r"127\.0\.0\.1:(\d+)").unwrap();
+        while let Some(event) = rx.recv().await {
+            match event {
+                CommandEvent::Stdout(bytes) => {
+                    let line = String::from_utf8_lossy(&bytes);
+                    if let Some(caps) = port_regex.captures(&line) {
+                        if let Some(port_str) = caps.get(1) {
+                            if let Ok(port) = port_str.as_str().parse::<u16>() {
+                                let mut s = state_clone.lock().await;
+                                s.port = Some(port);
+                                drop(s);
+                                let url = format!("http://127.0.0.1:{}", port);
+                                let _ = app_handle.emit("server-ready", serde_json::json!({ "url": url }));
+                            }
+                        }
                     }
-                    let url = format!("http://127.0.0.1:{}", port);
-                    let _ = app_handle.emit("server-ready", serde_json::json!({ "url": &url }));
+                }
+                CommandEvent::Stderr(bytes) => {
+                    let line = String::from_utf8_lossy(&bytes);
+                    eprintln!("[node] {}", line);
+                }
+                CommandEvent::Error(err) => {
+                    let _ = app_handle.emit("server-error", err);
+                }
+                CommandEvent::Terminated(_) => {
+                    let _ = app_handle.emit("server-error", "node process terminated");
                     break;
                 }
-            } else if let Some(caps) = localhost_regex.captures(&line) {
-                if let Some(port_str) = caps.get(1) {
-                    let port: u16 = port_str.as_str().parse().unwrap();
-                    {
-                        let mut s = state_clone.lock().await;
-                        s.port = Some(port);
-                    }
-                    let url = format!("http://127.0.0.1:{}", port);
-                    let _ = app_handle.emit("server-ready", serde_json::json!({ "url": &url }));
-                    break;
-                }
+                _ => {}
             }
         }
     });
-
-    // Log stderr in background
-    if let Some(stderr_pipe) = stderr {
-        tokio::spawn(async move {
-            let mut lines = BufReader::new(stderr_pipe).lines();
-            while let Ok(Some(line)) = lines.next_line().await {
-                eprintln!("[node] {}", line);
-            }
-        });
-    }
 
     {
         let mut s = state.lock().await;
@@ -110,42 +111,29 @@ pub async fn start_server(
 }
 
 pub async fn get_status(state: &SharedServerState) -> ServerStatus {
-    let mut s = state.lock().await;
-    if let Some(ref mut child) = s.child {
-        if let Ok(Some(_)) = child.try_wait() {
-            return ServerStatus {
-                state: "stopped".to_string(),
-                url: None,
-                pid: None,
-            };
-        }
-        let pid = child.id();
-        ServerStatus {
-            state: s.port.map(|_| "ready".to_string()).unwrap_or_else(|| "starting".to_string()),
-            url: s.port.map(|p| format!("http://127.0.0.1:{}", p)),
-            pid,
-        }
-    } else {
-        ServerStatus {
-            state: "stopped".to_string(),
-            url: None,
-            pid: None,
-        }
+    let s = state.lock().await;
+    let pid = s.child.as_ref().map(|c| c.pid());
+    ServerStatus {
+        state: s.port.map(|_| "ready".to_string()).unwrap_or_else(|| {
+            if s.child.is_some() { "starting".to_string() } else { "stopped".to_string() }
+        }),
+        url: s.port.map(|p| format!("http://127.0.0.1:{}", p)),
+        pid,
     }
 }
 
 pub async fn restart_server(state: &SharedServerState) {
     let mut s = state.lock().await;
-    if let Some(mut child) = s.child.take() {
-        let _ = child.kill().await;
+    if let Some(child) = s.child.take() {
+        let _ = child.kill();
     }
     s.port = None;
 }
 
 pub async fn stop_server(state: &SharedServerState) {
     let mut s = state.lock().await;
-    if let Some(mut child) = s.child.take() {
-        let _ = child.kill().await;
+    if let Some(child) = s.child.take() {
+        let _ = child.kill();
     }
     s.port = None;
 }

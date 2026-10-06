@@ -57,9 +57,29 @@ cd desktop && pnpm tauri build
 
 ### Build requirements
 
-- ~500MB disk space for the release build and installers
+- ~2GB disk space on the volume holding `CARGO_TARGET_DIR` and `TAURI_BUNDLER_CACHE` (default: `E:\build-cache\`)
 - WiX (downloaded automatically by Tauri for MSI bundling)
 - NSIS (downloaded automatically for the NSIS installer)
+
+### Build storage on E:
+
+All Rust and Tauri build storage is redirected off `C:` to `E:` via persistent user-scope environment variables. Set them once and every future session uses them:
+
+| Variable | Value | What it redirects |
+|---|---|---|
+| `CARGO_HOME` | `E:\build-cache\cargo` | Cargo registry, git checkouts, build cache |
+| `CARGO_TARGET_DIR` | `E:\build-cache\target` | All `cargo build` artifacts (Tauri Rust compilation) |
+| `TAURI_BUNDLER_CACHE` | `E:\build-cache\tauri` | WiX + NSIS toolchain downloads |
+
+To (re)set:
+
+```powershell
+[Environment]::SetEnvironmentVariable('CARGO_HOME', 'E:\build-cache\cargo', 'User')
+[Environment]::SetEnvironmentVariable('CARGO_TARGET_DIR', 'E:\build-cache\target', 'User')
+[Environment]::SetEnvironmentVariable('TAURI_BUNDLER_CACHE', 'E:\build-cache\tauri', 'User')
+```
+
+Open a fresh terminal after setting.
 
 ### Build steps
 
@@ -167,6 +187,16 @@ PATH="$(pwd)/desktop/src-tauri/binaries:$PATH" node --max-old-space-size=2048 ./
 - **No code signing**: The installers are not signed. Windows SmartScreen may show a warning.
 - **Large installer size**: The bundled Node 22 runtime (~77 MB) makes the installer ~60 MB. This is expected for a self-contained app.
 - **MSI requires GUI session**: The MSI install process requires an interactive desktop session (cannot be silently installed in all environments due to Windows Installer requirements).
+
+## MCP bridge (planned, not yet wired)
+
+`.omp/mcp.json` documents the planned `mcp-server-tauri` setup: webview screenshots, DOM queries, IPC command capture, window state, all over a WebSocket on `127.0.0.1:9223`.
+
+**Status:** not wired. Two stacked upstream bugs:
+1. **`webview2-com` version conflict** — `tauri-plugin-mcp-bridge 0.13` and the hushlor fork both pin `webview2-com = 0.38`. Tauri 2.12+ pulls `webview2-com = 0.39`. The two versions produce incompatible Rust types (e.g. `COREWEBVIEW2_CAPTURE_PREVIEW_IMAGE_FORMAT`).
+2. **Tauri menu plugin macro bug** — every Tauri 2.x version from 2.9.0 through 2.12.1 has a `do_menu_item!` macro referencing `error::Error::UnexpectedMenuKind` that was never added to the enum. Verified by attempting builds at 2.9.0, 2.9.2, 2.9.5, 2.11.0–2.11.6, 2.12.0 — all fail with the same error. Fix will land in a future Tauri patch.
+
+Workarounds documented in `.omp/mcp.json`. For runtime inspection today, use the browser MCP (`mcp__browsermcp_*`) against `pnpm --filter web dev` at `http://127.0.0.1:3000` — no Tauri wrapper, no version pins.
 
 ## Migration from existing `apps/web/data/` users
 

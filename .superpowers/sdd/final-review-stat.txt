@@ -1,0 +1,25 @@
+ apps/web/src/app/api/import/route.ts               |   4 +
+ apps/web/src/app/import/page.tsx                   |  45 +-
+ apps/web/src/lib/ai-import.ts                      |  10 +
+ apps/web/src/server/ai-import.ts                   |  17 +-
+ apps/web/tests/import/import-page-preview.test.tsx | 109 ++++
+ .../plans/2026-10-03-csv-import-enhancements.md    | 656 +++++++++++++++++++++
+ .../2026-10-03-csv-import-enhancements-design.md   | 272 +++++++++
+ packages/importers/src/formats/fills.ts            |  34 +-
+ packages/importers/src/formats/generic.ts          |   4 +-
+ packages/importers/src/formats/history.ts          |  36 +-
+ packages/importers/src/formats/ibkr.ts             |   8 +-
+ packages/importers/src/formats/metatrader.ts       |   5 +
+ packages/importers/src/formats/ninjatrader.ts      |  10 +-
+ packages/importers/src/formats/thinkorswim.ts      |   5 +-
+ packages/importers/src/formats/tradezella.ts       |  23 +-
+ packages/importers/src/history/adapters/adapter.ts |   3 +
+ packages/importers/src/history/adapters/generic.ts |  31 +-
+ .../importers/src/history/adapters/metatrader.ts   |   8 +-
+ .../importers/src/history/adapters/mt5deals.ts     |   6 +-
+ .../importers/src/history/adapters/tradingview.ts  |   6 +
+ packages/importers/src/history/import.ts           |   5 +-
+ packages/importers/src/history/model.ts            |   3 +
+ packages/importers/src/types.ts                    |   9 +
+ packages/importers/tests/skipped-reasons.test.ts   |  53 ++
+ 24 files changed, 1315 insertions(+), 47 deletions(-)

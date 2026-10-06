@@ -1,0 +1,51 @@
+{
+  "name": "trade-journal-tauri-mcp",
+  "description": "Tauri MCP bridge for inspecting the desktop app's webview, IPC, and window state. Connects to the running trade-journal-desktop.exe via WebSocket on port 9223.",
+  "server": {
+    "command": "npx",
+    "args": ["-y", "mcp-server-tauri"],
+    "env": {
+      "MCP_BRIDGE_HOST": "127.0.0.1"
+    }
+  },
+  "requirements": {
+    "app_state": "Running debug build of trade-journal-desktop",
+    "build": "pnpm --filter desktop build:debug",
+    "launch": "Run the resulting target/debug/trade-journal-desktop.exe; the MCP bridge plugin opens port 9223."
+  },
+  "status": "NOT YET WIRED — two stacked upstream bugs",
+  "blocked_by": "Two blockers, BOTH must be resolved: (1) webview2-com version conflict — tauri-plugin-mcp-bridge 0.13 + tauri-plugin-hushlor-mcp-bridge 0.14 pin webview2-com = 0.38; Tauri 2.12+ pulls webview2-com = 0.39. The two versions produce incompatible Rust types and Cargo's [patch.crates-io] rejects two patches pointing at the same source. (2) Tauri 2.9.0+ menu plugin macro bug — every Tauri 2.x version from 2.9.0 through 2.12.1 has a `do_menu_item!` macro referencing `error::Error::UnexpectedMenuKind` that was never added to the enum. The tauri lib therefore fails to build regardless of features (the menu module compiles unconditionally). Verified by attempting builds at 2.9.0, 2.9.2, 2.9.5, 2.11.0, 2.11.2, 2.11.3, 2.11.4, 2.11.5, 2.11.6, 2.12.0 — all fail with the same error. Fix will land in a future Tauri patch (likely 2.12.2+ or 2.13.0).",
+  "workarounds": [
+    "Wait for Tauri to ship a 2.12.2 (or 2.13.0) with the UnexpectedMenuKind fix AND bump webview2-com to 0.39 in tauri-plugin-mcp-bridge. Until then, no Tauri 2.x version works with the MCP plugin.",
+    "Fork tauri-plugin-mcp-bridge, change `webview2-com = \"0.38\"` to `\"0.39\"`, and maintain our own fork until upstream syncs.",
+    "Build a minimal Tauri command that opens a WebSocket on 9223 ourselves — drops the plugin, gives up screenshots.",
+    "Run pnpm --filter web dev and use the browser MCP (mcp__browsermcp_*) against http://127.0.0.1:3000 — works today, no Tauri wrapper involved."
+  ],
+  "tools": [
+    "driver_session",
+    "manage_window",
+    "webview_find_element",
+    "read_logs",
+    "webview_interact",
+    "webview_screenshot",
+    "webview_keyboard",
+    "webview_wait_for",
+    "webview_get_styles",
+    "webview_execute_js",
+    "webview_dom_snapshot",
+    "webview_select_element",
+    "webview_get_pointed_element",
+    "get_setup_instructions",
+    "ipc_execute_command",
+    "ipc_monitor",
+    "ipc_get_captured",
+    "ipc_emit_event",
+    "ipc_get_backend_state"
+  ],
+  "notes": [
+    "All Rust-side wiring has been reverted — no plugin is currently registered.",
+    ".omp/mcp.json is kept as a forward spec for when the version conflict is resolved upstream.",
+    "Until then, use the browser MCP (mcp__browsermcp_*) for screenshotting the running web app via pnpm dev, which has no Tauri wrapper.",
+    "Browser MCP can hit http://127.0.0.1:3000 directly once pnpm --filter web dev is running."
+  ]
+}

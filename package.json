@@ -20,7 +20,10 @@
     "test:watch": "vitest",
     "typecheck": "pnpm -r --parallel typecheck",
     "format": "prettier --write .",
-    "format:check": "prettier --check ."
+    "format:check": "prettier --check .",
+    "desktop:build:debug": "pnpm --filter desktop build:debug",
+    "desktop:build": "pnpm --filter desktop build:app",
+    "mcp:tauri": "npx -y mcp-server-tauri"
   },
   "devDependencies": {
     "jsdom": "^26.1.0",

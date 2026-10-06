@@ -58,8 +58,8 @@ export const tradezella: ImportFormat = {
       );
       const netPnl = parseMoney(pick(row, ["netpnl", "netpl", "netprofit"]));
       const commissions =
-        Math.abs(parseMoney(pick(row, ["commissions", "commission"]) ?? "") || 0) +
-        Math.abs(parseMoney(pick(row, ["fees", "fee", "totalfees"]) ?? "") || 0);
+        Math.abs(parseMoney(pick(row, ["commissions", "commission"])) || 0) +
+        Math.abs(parseMoney(pick(row, ["fees", "fee", "totalfees"])) || 0);
 
       if (
         !symbol ||

@@ -5,7 +5,7 @@
   "type": "module",
   "scripts": {
     "dev": "next dev --turbopack",
-    "build": "next build",
+    "build": "next build && node scripts/copy-static-build.js",
     "start": "next start",
     "typecheck": "next typegen && tsc --noEmit"
   },

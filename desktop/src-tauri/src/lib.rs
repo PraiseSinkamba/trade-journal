@@ -6,7 +6,7 @@ use std::sync::Arc;
 use tauri::{
     menu::{Menu, MenuItem},
     tray::{MouseButton, MouseButtonState, TrayIconBuilder, TrayIconEvent},
-    AppHandle, Manager,
+    AppHandle, Emitter, Listener, Manager,
 };
 use tokio::sync::Mutex;
 
@@ -142,6 +142,20 @@ pub fn run() {
             tauri::async_runtime::spawn(async move {
                 if let Err(e) = start_server(&app_handle, &dir_clone).await {
                     eprintln!("Server start failed: {}", e);
+                    let _ = app_handle.emit("server-error", e);
+                }
+            });
+
+            // When the sidecar reports ready, navigate the main window to its URL.
+            let nav_handle = app.handle().clone();
+            app.listen("server-ready", move |event| {
+                if let Some(window) = nav_handle.get_webview_window("main") {
+                    // event.payload() returns a JSON string — parse it.
+                    if let Ok(value) = serde_json::from_str::<serde_json::Value>(event.payload()) {
+                        if let Some(url) = value.get("url").and_then(|v| v.as_str()) {
+                            let _ = window.eval(&format!("window.location.href = '{}'", url));
+                        }
+                    }
                 }
             });
 

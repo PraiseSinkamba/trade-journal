@@ -1,0 +1,13 @@
+6d1be6b feat(web): tighten AI import prompt and pass file headers as context
+a62cf2f feat(web): add refute-and-remap affordance to import preview
+4119314 fix(import): count 'more' from skippedReasons.length not skippedRows
+89eb90f feat(web): surface per-row skip reasons in import preview
+6ff6920 test(importers): cover per-row skip reasons
+1b9f6e0 fix(importers): track skippedReasons at all four parseHistory skip sites
+471e9fb feat(importers): propagate skip reasons through history adapters and parseHistory
+8497a92 feat(importers): emit per-row reasons from legacy format parsers
+f0c08a6 fix(ninjatrader): push skippedReason for invalid-commission rows
+2538e6b feat(importers): propagate skip reasons through rowsToFills consumers
+5a1f0c7 feat(importers): surface per-row skip reasons on ParsedImport
+491cfd1 docs: implementation plan for CSV import enhancements
+df87f16 docs: spec CSV import enhancements — skip-reasons, refute-and-remap, AI prompt tightening
