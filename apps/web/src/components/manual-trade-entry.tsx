@@ -76,7 +76,13 @@ export function ManualTradeEntry({ onSaved }: { onSaved: () => void }) {
 
   return (
     <fieldset disabled={busy} className="min-w-0 space-y-3">
-      <AccountPicker value={accountId} onChange={setAccountId} kind="manual" defaultId={defaultId} onAutoFill={setDefault} />
+      <AccountPicker
+        value={accountId}
+        onChange={setAccountId}
+        kind="manual"
+        defaultId={defaultId}
+        onAutoFill={setDefault}
+      />
       <div>
         <Label htmlFor={`${fieldId}-symbol`} className="mb-1 block text-xs text-muted-foreground">
           Symbol

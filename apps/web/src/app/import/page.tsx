@@ -474,11 +474,12 @@ function FileImport() {
               </Button>
             </div>
           )}
-          {preview && !preview.needsMapping && preview.totals && (
+          {preview &&
+            !preview.needsMapping &&
+            preview.totals &&
             (() => {
               const zero = preview.totals.executions === 0;
-              const canRemap =
-                preview.detected !== "ninjatrader" && !preview.aiPreviewToken;
+              const canRemap = preview.detected !== "ninjatrader" && !preview.aiPreviewToken;
               // Group skip reasons by message so 24 "missing entry price" rows
               // become one line with a count. row indices within a group are dropped
               // when the group has more than one row — they don't help the user.
@@ -681,9 +682,7 @@ function FileImport() {
                     <div className="space-y-1 border-t pt-2 text-xs">
                       <div
                         className={
-                          preview.aiPreviewToken
-                            ? "max-h-80 space-y-2 overflow-auto"
-                            : "space-y-1"
+                          preview.aiPreviewToken ? "max-h-80 space-y-2 overflow-auto" : "space-y-1"
                         }
                       >
                         {(preview.aiPreviewToken
@@ -700,8 +699,7 @@ function FileImport() {
                               </span>
                               {preview.aiPreviewToken && (
                                 <span>
-                                  {execution.quantity} @ {execution.price} · Fees{" "}
-                                  {execution.fee}
+                                  {execution.quantity} @ {execution.price} · Fees {execution.fee}
                                 </span>
                               )}
                             </div>
@@ -714,9 +712,7 @@ function FileImport() {
                         ))}
                       </div>
                       {!preview.aiPreviewToken && preview.totals.executions > 5 && (
-                        <p className="text-muted-foreground">
-                          Showing the first 5 executions.
-                        </p>
+                        <p className="text-muted-foreground">Showing the first 5 executions.</p>
                       )}
                     </div>
                   )}
@@ -775,14 +771,13 @@ function FileImport() {
                         disabled={busy}
                         onCheckedChange={(checked) => setAiReviewed(checked === true)}
                       />
-                      I compared all extracted executions with my statement, including the
-                      account, quantities, prices, fees and timestamps. Import this preview.
+                      I compared all extracted executions with my statement, including the account,
+                      quantities, prices, fees and timestamps. Import this preview.
                     </label>
                   )}
                 </div>
               );
-            })()
-          )}
+            })()}
           {showManualMapper && preview?.headers && !preview.needsMapping && (
             <div className="space-y-2 rounded-md border p-3">
               <div className="flex items-center justify-between gap-2">
@@ -842,8 +837,8 @@ function FileImport() {
               </Button>
               {preview.totals && preview.totals.executions === 0 && (
                 <p className="text-xs text-loss">
-                  Nothing came through with this mapping. Try AI parsing instead — it
-                  handles files that don&apos;t have an obvious side column.
+                  Nothing came through with this mapping. Try AI parsing instead — it handles files
+                  that don&apos;t have an obvious side column.
                 </p>
               )}
             </div>
