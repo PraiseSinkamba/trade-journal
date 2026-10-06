@@ -114,3 +114,12 @@ export const getAiSettings = (): AiSettingsPayload => {
     aiConnections,
   };
 };
+
+/** Persisted single-account default; survives reloads and devices. */
+export const getCurrentAccountId = (): string | null => getSetting("currentAccountId");
+
+/** Write the persisted default. `null` clears it. */
+export const setCurrentAccountId = (id: string | null): void => {
+  if (id === null) deleteSetting("currentAccountId");
+  else setSetting("currentAccountId", id);
+};
