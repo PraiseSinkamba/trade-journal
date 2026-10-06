@@ -1,10 +1,11 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { FlaskConical, Settings2, WalletCards } from "lucide-react";
 import { Select, SelectContent, SelectItem, SelectTrigger } from "./ui/select";
 import { postJson, useApi } from "@/lib/use-api";
+import { useAccountDefault } from "@/lib/use-account-default";
 
 interface AccountOption {
   id: string;
@@ -21,9 +22,29 @@ export function AccountSelector() {
   const { data, error, refresh } = useApi<{ accounts: AccountOption[] }>("/api/accounts?summary=1");
   const [loadingDemo, setLoadingDemo] = useState(false);
   const [demoError, setDemoError] = useState("");
+  const { defaultId, setDefault } = useAccountDefault();
+  const autoFilled = useRef(false);
   const selected = params.get("accounts")?.split(",").filter(Boolean) ?? [];
   const accounts = data?.accounts.filter((a) => !a.archivedAt || selected.includes(a.id)) ?? [];
   const demo = accounts.find((a) => a.broker === "demo");
+
+  // Auto-fill ?accounts= from persisted default when no param is present
+  useEffect(() => {
+    if (autoFilled.current) return;
+    if (!data) return;
+    autoFilled.current = true;
+    if (params.has("accounts")) return;
+    if (defaultId) {
+      selectAccount(defaultId);
+      return;
+    }
+    const nonArchived = accounts.filter((a) => !a.archivedAt);
+    if (nonArchived.length === 1) {
+      const single = nonArchived[0]!.id;
+      setDefault(single);
+      selectAccount(single);
+    }
+  }, [data, defaultId]); // eslint-disable-line react-hooks/exhaustive-deps
   const value = selected.length > 1 ? "multiple" : (selected[0] ?? "all");
   const label =
     selected.length > 1
@@ -32,6 +53,7 @@ export function AccountSelector() {
         (selected.length ? "Selected account" : "All accounts"));
 
   function selectAccount(id: string) {
+    setDefault(id === "all" ? null : id);
     const next = new URLSearchParams(params.toString());
     if (id === "all") next.delete("accounts");
     else next.set("accounts", id);
@@ -48,6 +70,7 @@ export function AccountSelector() {
     setLoadingDemo(true);
     try {
       const result = await postJson<{ accountId: string }>("/api/demo", {});
+      setDefault(result.accountId);
       refresh();
       selectAccount(result.accountId);
     } catch (cause) {
