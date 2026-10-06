@@ -25,3 +25,6 @@ data/
 .DS_Store
 *.log
 coverage/
+
+# Scratch files at the repo root (test.ico, etc.)
+/*.ico

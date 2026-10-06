@@ -1,0 +1,5 @@
+# Rust build artifacts for the icon-generation helper tool.
+target/
+
+# gen_icons writes its outputs to ../icons/ (covered by ../.gitignore),
+# never to this directory.

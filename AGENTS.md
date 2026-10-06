@@ -110,7 +110,7 @@ pnpm build
 
 **Test the webapp without the Tauri shell:** `pnpm --filter web dev`, then open `http://127.0.0.1:3000` in a regular browser.
 
-**Sidecar Node runtime**: Tauri spawns `desktop/src-tauri/binaries/node-x86_64-pc-windows-msvc.exe` (Node 22.11.0 LTS) to run the standalone Next.js server inside the app. The dev URL points to the same port — make sure no other process holds `:3000` before launching `tauri dev`.
+**Sidecar Node runtime**: Tauri spawns `desktop/src-tauri/binaries/node-x86_64-pc-windows-msvc.exe` (Node 24.11.0, downloaded by `pnpm --filter desktop setup:sidecar`) to run the standalone Next.js server inside the app. The dev URL points to the same port — make sure no other process holds `:3000` before launching `tauri dev`.
 
 Docker:
 

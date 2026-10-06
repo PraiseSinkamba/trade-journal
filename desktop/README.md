@@ -1,6 +1,6 @@
 # Trade Journal Desktop
 
-A self-contained Windows desktop application for the Trade Journal trading journal application. The app bundles a Node.js 22 runtime and the Next.js standalone server, presenting the journal UI in a native Tauri webview window.
+A self-contained Windows desktop application for the Trade Journal trading journal application. The app bundles a Node.js 24 runtime and the Next.js standalone server, presenting the journal UI in a native Tauri webview window.
 
 ## Quickstart
 
@@ -20,20 +20,28 @@ On first launch, data is stored under `%APPDATA%\TradeJournal\data\journal.db`.
 
 ### Prerequisites
 
-- Node.js 22 (bundled as sidecar — the system Node can be any version)
 - pnpm 9+
 - Rust 1.91+ and Cargo
-- Next.js (for `pnpm --filter web build`)
+- The Node.js 24 sidecar binary is **not** checked in. Run `pnpm setup:sidecar` once after cloning to download `node-v24.11.0-win-x64.zip` from nodejs.org, extract `node.exe`, rename it to the Tauri-required triple-suffixed file, and verify its SHA-256. Re-runs are a no-op when the file is already present and hash-matches.
+
+### First-time setup
+
+```bash
+# from the repo root
+pnpm --filter desktop setup:sidecar   # downloads binaries/node-x86_64-pc-windows-msvc.exe
+pnpm --filter desktop setup:icons     # optional, icons are already committed
+```
 
 ### Dev workflow
 
 ```bash
-# Build the Next.js standalone (requires Node 22 — use bundled binary)
-cp desktop/src-tauri/binaries/node-x86_64-pc-windows-msvc.exe /tmp/node.exe
-PATH="/tmp:$PATH" node --max-old-space-size=2048 ./node_modules/next/dist/bin/next build
+# Build the Next.js standalone (requires Node 24 — use the sidecar you just downloaded)
+pnpm --filter web build
+# OR run the dev server straight from the Next.js workspace
+pnpm --filter web dev
 
 # Run Tauri in dev mode (spawns Next.js from resource dir)
-pnpm tauri dev
+pnpm --filter desktop tauri dev
 ```
 
 ### Rebuilding after source changes
@@ -42,7 +50,7 @@ If you modify `apps/web/src/`, rebuild the Next.js standalone first, then run:
 
 ```bash
 pnpm --filter web build
-cd desktop && pnpm tauri build
+pnpm --filter desktop tauri build
 ```
 
 ## Build
@@ -84,11 +92,14 @@ Open a fresh terminal after setting.
 ### Build steps
 
 ```bash
-# 1. Build Next.js standalone (Node 22 required — see above)
+# 1. Make sure the sidecar binary is present (no-op if already downloaded)
+pnpm --filter desktop setup:sidecar
+
+# 2. Build Next.js standalone
 pnpm --filter web build
 
-# 2. Build Tauri app (produces both MSI and NSIS)
-cd desktop && pnpm tauri build
+# 3. Build Tauri app (produces both MSI and NSIS)
+pnpm --filter desktop tauri build
 ```
 
 ## Project layout
@@ -99,10 +110,13 @@ desktop/
     src/
       main.rs          # Tauri entry point
       server.rs        # Next.js sidecar spawn + port discovery
-    binaries/
-      node.exe         # Node 22 runtime (x86_64-pc-windows-msvc)
+    binaries/          # .gitkeep only; node.exe is downloaded by `pnpm setup:sidecar`
+    scripts/
+      gen_icons/       # `cargo run` regenerates icons/* into ../icons/
+      setup-sidecar-node.{ps1,sh}  # Idempotent Node sidecar installer
     tauri.conf.json    # App config, bundle targets, resources
-  Cargo.toml
+  scripts/
+    run-sidecar-setup.js   # Cross-platform dispatcher for setup-sidecar-node.*
   package.json
 
 apps/web/
@@ -164,7 +178,7 @@ Check the tray icon — the server may have failed to start. Right-click → Ope
 
 ### Sidecar not found
 
-The Node 22 binary must be at `binaries/node.exe-x86_64-pc-windows-msvc.exe` inside the installed app's resource directory. If upgrading, ensure the binary is included in the bundle.
+The Node 24 binary must be at `binaries/node-x86_64-pc-windows-msvc.exe` inside the installed app's resource directory. If upgrading, do `pnpm setup:sidecar` from the `desktop/` workspace to (re)install it.
 
 ### Build fails — better-sqlite3 ABI mismatch
 
@@ -173,9 +187,9 @@ The Node 22 binary must be at `binaries/node.exe-x86_64-pc-windows-msvc.exe` ins
 cd apps/web/node_modules/better-sqlite3 && npx node-gyp rebuild
 ```
 
-### Build fails — Node 24 crash during `next build`
+### Build fails — `next build` crashes
 
-Node 24 (v24.20.0 on this system) crashes the Next.js build worker during static page generation with `Assertion failed: (env) != nullptr`. Workaround: use the bundled Node 22 binary to run `next build`:
+A pinned Node v24.20.0 once crashed the Next.js build worker during static page generation with `Assertion failed: (env) != nullptr`. The bundled sidecar (v24.11.0) sidesteps this. If your system Node crashes on the same call, run `next build` against the sidecar:
 ```bash
 PATH="$(pwd)/desktop/src-tauri/binaries:$PATH" node --max-old-space-size=2048 ./node_modules/next/dist/bin/next build
 ```
@@ -185,7 +199,7 @@ PATH="$(pwd)/desktop/src-tauri/binaries:$PATH" node --max-old-space-size=2048 ./
 - **Windows-only**: No macOS or Linux builds are configured. The `bundle.targets` in `tauri.conf.json` is `["msi", "nsis"]`.
 - **No auto-update**: There is no Tauri updater configured. Upgrades require reinstalling the installer.
 - **No code signing**: The installers are not signed. Windows SmartScreen may show a warning.
-- **Large installer size**: The bundled Node 22 runtime (~77 MB) makes the installer ~60 MB. This is expected for a self-contained app.
+- **Large installer size**: The bundled Node 24 runtime (~86 MB) makes the installer ~60 MB. This is expected for a self-contained app.
 - **MSI requires GUI session**: The MSI install process requires an interactive desktop session (cannot be silently installed in all environments due to Windows Installer requirements).
 
 ## MCP bridge (planned, not yet wired)
