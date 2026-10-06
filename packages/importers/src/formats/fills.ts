@@ -1,7 +1,7 @@
 import { hasHeaders, parseCsv, pick, toRecords, type Row } from "../csv";
 import { parseTimestamp, parseDateAndTime } from "../dates";
 import { parseMoney, parseQuantity } from "../numbers";
-import type { ImportFormat, ImportOptions, ImportedExecution, ParsedImport } from "../types";
+import type { ImportFormat, ImportOptions, ImportedExecution, ParsedImport, SkippedReason } from "../types";
 import { parsePositionAction, positionGroup } from "../position-fills";
 
 export interface FillsColumnMap {
@@ -56,7 +56,7 @@ export const rowsToFills = (
   columns: FillsColumnMap,
   options: ImportOptions,
   spec: Pick<FillsFormatSpec, "rowFilter" | "normalizeSymbol"> & { positionActions?: boolean } = {},
-): Pick<ParsedImport, "executions" | "skippedRows" | "warnings" | "errors"> => {
+): Pick<ParsedImport, "executions" | "skippedRows" | "skippedReasons" | "warnings" | "errors"> => {
   const executions: ImportedExecution[] = [];
   const skippedReasons: SkippedReason[] = [];
   let skippedRows = 0;
@@ -108,7 +108,7 @@ export const rowsToFills = (
       );
     }
 
-if (
+    if (
       !symbol ||
       !side ||
       !executedAt ||
@@ -194,6 +194,7 @@ if (
   return {
     executions,
     skippedRows,
+    skippedReasons,
     warnings: positionSymbols.size
       ? [
           "Open/Close position labels keep long and short positions separate. Closes are checked against the selected account when saving. For futures, configure the multiplier for each imported symbol in Settings.",
