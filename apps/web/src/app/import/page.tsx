@@ -20,6 +20,7 @@ import {
 } from "@/components/ui/select";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { postJson, useApi } from "@/lib/use-api";
+import { useAccountDefault } from "@/lib/use-account-default";
 import { decodeImportFile } from "@/lib/decode-import";
 import { formatTimestamp, isTimeZone } from "@/lib/timezone";
 import { dayKeyOf } from "@luxalgo/journal-core";
@@ -129,7 +130,8 @@ function ImportView() {
 
 function FileImport() {
   const router = useRouter();
-  const [accountId, setAccountId] = useState("");
+  const { defaultId, setDefault } = useAccountDefault();
+  const [accountId, setAccountId] = useState(defaultId ?? "");
   const [reviewOptions, setReviewOptions] = useState<ImportReviewOptions>({});
   const changeReview = (options: ImportReviewOptions) => {
     setReviewOptions(options);
@@ -327,6 +329,7 @@ function FileImport() {
       alert(
         `Imported ${result.inserted} executions (${result.duplicates} duplicates skipped, ${result.corrected ?? 0} fee corrections).${skippedNote}`,
       );
+      setDefault(accountId);
       router.push(`/?accounts=${encodeURIComponent(accountId)}`);
     } catch (cause) {
       setError(cause instanceof Error ? cause.message : "Import failed");
@@ -733,12 +736,15 @@ function FileImport() {
                       value={accountId}
                       onChange={(id) => {
                         setAccountId(id);
+                        setDefault(id);
                         setReviewOptions({});
                         setPreview((current) =>
                           current ? { ...current, reconciliation: undefined } : null,
                         );
                       }}
                       kind="import"
+                      defaultId={defaultId}
+                      onAutoFill={setDefault}
                     />
                   </fieldset>
                   {preview.detected === "ninjatrader" && accountId && (
@@ -899,6 +905,7 @@ function FileImport() {
 
 function BrokerConnect() {
   const router = useRouter();
+  const { setDefault } = useAccountDefault();
   const { data } = useApi<{ brokers: BrokerInfo[] }>("/api/brokers");
   const { data: settingsData, error: settingsError } = useApi<{ importTimeZone: string }>(
     "/api/settings",
@@ -929,6 +936,7 @@ function BrokerConnect() {
           `${created.sync.skipped} broker record(s) were skipped: ${created.sync.skippedReasons.join(" ")}`,
         );
       }
+      setDefault(created.id);
       router.push(`/?accounts=${encodeURIComponent(created.id)}`);
     } catch (cause) {
       setError(cause instanceof Error ? cause.message : "Connection failed");
