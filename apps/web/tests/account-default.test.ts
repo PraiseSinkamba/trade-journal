@@ -117,9 +117,7 @@ describe("currentAccountId cleanup on account changes", () => {
     seedAccount("acct-keep", "Keep");
     seedAccount("acct-other", "Other");
     setCurrentAccountId("acct-keep");
-    const res = await debug(
-      await DELETE(deleteRequest("acct-other"), params("acct-other")),
-    );
+    const res = await debug(await DELETE(deleteRequest("acct-other"), params("acct-other")));
     expect(res.status).toBe(200);
     expect(getCurrentAccountId()).toBe("acct-keep");
   });
@@ -127,9 +125,7 @@ describe("currentAccountId cleanup on account changes", () => {
   it("clears the persisted default when the matching account is archived", async () => {
     seedAccount("acct-arc", "Archive me");
     setCurrentAccountId("acct-arc");
-    const res = await debug(
-      await accountAction(archiveRequest("acct-arc"), params("acct-arc")),
-    );
+    const res = await debug(await accountAction(archiveRequest("acct-arc"), params("acct-arc")));
     expect(res.status).toBe(200);
     expect(getCurrentAccountId()).toBeNull();
   });
