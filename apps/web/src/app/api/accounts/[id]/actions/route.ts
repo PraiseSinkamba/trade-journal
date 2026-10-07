@@ -5,6 +5,7 @@ import { nowIso } from "@/server/ids";
 import { rebuildAccount } from "@/server/rebuild";
 import { syncAccount } from "@/server/sync";
 import { ibkrTransferTimeZone } from "@/server/ibkr-sync-timezone";
+import { getCurrentAccountId, setCurrentAccountId } from "@/server/settings";
 
 type Params = { params: Promise<{ id: string }> };
 
@@ -22,7 +23,12 @@ export const POST = handler(async (request: Request, { params }: Params) => {
 
   switch (body.action) {
     case "archive":
-      db.update(accounts).set({ archivedAt: nowIso() }).where(eq(accounts.id, id)).run();
+      db.transaction((tx) => {
+        tx.update(accounts).set({ archivedAt: nowIso() }).where(eq(accounts.id, id)).run();
+        // Archived accounts are filtered out by the auto-fill hook, so a
+        // persisted default pointing at one would silently disable auto-select.
+        if (getCurrentAccountId() === id) setCurrentAccountId(null);
+      });
       return ok({ archived: true });
     case "unarchive":
       db.update(accounts).set({ archivedAt: null }).where(eq(accounts.id, id)).run();

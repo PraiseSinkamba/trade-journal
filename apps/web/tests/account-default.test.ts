@@ -11,6 +11,8 @@ const { db, settings, accounts } = await import("../src/db");
 const { getCurrentAccountId, setCurrentAccountId, setSetting } =
   await import("../src/server/settings");
 const { GET, PATCH } = await import("../src/app/api/settings/route");
+const { DELETE } = await import("../src/app/api/accounts/[id]/route");
+const { POST: accountAction } = await import("../src/app/api/accounts/[id]/actions/route");
 
 vi.mock("next/headers", () => ({ cookies: async () => ({ get: () => undefined }) }));
 
@@ -83,5 +85,63 @@ describe("currentAccountId settings helpers", () => {
     setSetting("currentAccountId", "ghost-id");
     seedAccount("acct-live", "Live");
     expect(getCurrentAccountId()).toBe("ghost-id");
+  });
+});
+
+const deleteRequest = (id: string) =>
+  new Request(`http://localhost/api/accounts/${id}`, { method: "DELETE" });
+const archiveRequest = (id: string) =>
+  new Request(`http://localhost/api/accounts/${id}/actions`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ action: "archive" }),
+  });
+const debug = async (res: Response) => {
+  if (res.status === 200) return res;
+  const body = await res.text();
+  throw new Error(`status ${res.status}: ${body}`);
+};
+const params = (id: string) => ({ params: Promise.resolve({ id }) });
+
+describe("currentAccountId cleanup on account changes", () => {
+  it("clears the persisted default when the matching account is deleted", async () => {
+    seedAccount("acct-del", "Doomed");
+    setCurrentAccountId("acct-del");
+    expect(getCurrentAccountId()).toBe("acct-del");
+    const res = await debug(await DELETE(deleteRequest("acct-del"), params("acct-del")));
+    expect(res.status).toBe(200);
+    expect(getCurrentAccountId()).toBeNull();
+  });
+
+  it("leaves the persisted default alone when deleting a different account", async () => {
+    seedAccount("acct-keep", "Keep");
+    seedAccount("acct-other", "Other");
+    setCurrentAccountId("acct-keep");
+    const res = await debug(
+      await DELETE(deleteRequest("acct-other"), params("acct-other")),
+    );
+    expect(res.status).toBe(200);
+    expect(getCurrentAccountId()).toBe("acct-keep");
+  });
+
+  it("clears the persisted default when the matching account is archived", async () => {
+    seedAccount("acct-arc", "Archive me");
+    setCurrentAccountId("acct-arc");
+    const res = await debug(
+      await accountAction(archiveRequest("acct-arc"), params("acct-arc")),
+    );
+    expect(res.status).toBe(200);
+    expect(getCurrentAccountId()).toBeNull();
+  });
+
+  it("leaves the persisted default alone when archiving a different account", async () => {
+    seedAccount("acct-keep2", "Keep2");
+    seedAccount("acct-arc-other", "Archive other");
+    setCurrentAccountId("acct-keep2");
+    const res = await debug(
+      await accountAction(archiveRequest("acct-arc-other"), params("acct-arc-other")),
+    );
+    expect(res.status).toBe(200);
+    expect(getCurrentAccountId()).toBe("acct-keep2");
   });
 });
