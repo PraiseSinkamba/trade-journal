@@ -35,6 +35,7 @@ The assistant shows supplemental attached context as removable chips. The server
 - The prior thread and all unsaved drafts remain resumable through Recent AI work.
 - Any draft stays attached to the entity it changes. A conversation that spans a trade and a note produces separate review cards.
 - Removing every supplemental chip returns the conversation to its primary record. To remove that record, the user ends the thread or explicitly starts a new one; no scope-less or all-accounts fallback exists.
+- A “related” handoff is permitted only when the server resolves the target from a direct, account-scoped relationship of an already attached record. Resuming a thread revalidates every attached record against current account access; deleted or unauthorized records end the thread and make its pending drafts unavailable for application.
 
 ## Interaction model
 
@@ -84,7 +85,7 @@ Draft-generation capability is not persistence. It creates typed proposal object
 ## Execution model
 
 - Feature routes remain thin adapters: validate input, establish trusted context, invoke the AI feature interface, return typed conversation/draft results.
-- A provider-neutral runtime resolves the selected model and encrypted BYO key, applies feature policy, normalizes errors, and records redacted operational events.
+- A provider-neutral runtime resolves the selected model and encrypted BYO key, applies feature policy, normalizes errors, and returns redacted per-execution metadata to server callers. Durable operational-event recording is deferred.
 - Provider-specific options remain in the OpenAI/Anthropic adapter boundary.
 - Agent execution is reserved for workflows requiring dynamic, bounded read-only capability use. Fixed-context recap, trade critique, and structured statement parsing stay direct model calls.
 - Draft creation remains deterministic around the agent: structured output validation occurs before a card appears.
@@ -95,8 +96,8 @@ Draft-generation capability is not persistence. It creates typed proposal object
 - No unbounded journal search or account scope chosen by the model.
 - No provider key reaches the browser, prompt log, draft, or trace.
 - No telemetry endpoint or external journal analytics service.
-- Assistant-rendered money, execution values, fees, draft fields, and generated prose honor the existing journal privacy setting; privacy mode never creates a new disclosure path.
-- Local operational events, if introduced, are redacted and retain feature ID, provider/model, prompt/agent version, duration, usage, retry count, finish reason, and tool/step count—not prompt or response content.
+- Assistant-rendered money, execution values, fees, draft fields, and generated prose honor the existing journal privacy setting before DOM and accessibility-tree rendering; privacy mode must also prevent disclosure through clipboard actions.
+- When durable local operational events are introduced in a later phase, they retain feature ID, provider/model, prompt/agent version, duration, usage, retry count, finish reason, and tool/step count—not prompt or response content.
 - Import remains its existing extraction → validation → human review → commit workflow; it is not converted into an autonomous agent.
 
 ## Failure UX
