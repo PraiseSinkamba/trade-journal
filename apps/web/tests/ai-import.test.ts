@@ -2,17 +2,32 @@ import { afterAll, beforeEach, expect, it, vi } from "vitest";
 import { mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+
+const { mockRunObjectAi, mockGenerateText } = vi.hoisted(() => ({
+  mockRunObjectAi: vi.fn(),
+  mockGenerateText: vi.fn(),
+}));
+
 vi.mock("ai", async (original) => ({
   ...(await original<typeof import("ai")>()),
-  generateText: vi.fn(),
+  generateText: mockGenerateText,
+}));
+vi.mock("../src/server/ai-runtime", () => ({
+  runTextAi: vi.fn(),
+  runObjectAi: mockRunObjectAi,
+  mapAiRuntimeError: (error: unknown) => error,
 }));
 const originalDir = process.env.JOURNAL_DATA_DIR;
 const scratch = mkdtempSync(join(tmpdir(), "journal-ai-import-"));
 process.env.JOURNAL_DATA_DIR = scratch;
 const { db, accounts, executions, trades, settings } = await import("../src/db");
-const { setSetting } = await import("../src/server/settings");
-const { generateText } = await import("ai");
-const { validateAiExtraction, readAiImportPreview } = await import("../src/server/ai-import");
+const { setAiKey, setSetting } = await import("../src/server/settings");
+const {
+  parseStatementWithAi,
+  validateAiExtraction,
+  readAiImportPreview,
+} = await import("../src/server/ai-import");
+const { AiRuntimeError } = await import("../src/server/ai-contracts");
 const { POST } = await import("../src/app/api/import/route");
 const valid = () => ({
   complete: true,
@@ -46,7 +61,6 @@ const base = {
   content: "Unfamiliar statement: buy 2 AAPL at 100; sell 2 AAPL at 110",
   fileName: "statement.txt",
   timeZone: "America/Jamaica",
-  ai: { provider: "openai", model: "gpt-4.1-mini", apiKey: "test-only-key" },
 };
 const request = (body: unknown) =>
   POST(
@@ -57,9 +71,10 @@ const request = (body: unknown) =>
     }),
   );
 const modelResult = (output: unknown, finishReason = "stop") =>
-  vi
-    .mocked(generateText)
-    .mockResolvedValue({ output, finishReason } as Awaited<ReturnType<typeof generateText>>);
+  mockRunObjectAi.mockResolvedValue({
+    output,
+    meta: { finishReason },
+  });
 beforeEach(() => {
   vi.stubEnv("JOURNAL_PASSWORD", "");
   vi.stubEnv("OPENAI_API_KEY", "");
@@ -71,7 +86,8 @@ beforeEach(() => {
   db.insert(accounts)
     .values({ id: "a", name: "Test", kind: "import", createdAt: "2026-01-01" })
     .run();
-  vi.mocked(generateText).mockReset();
+  mockRunObjectAi.mockReset();
+  mockGenerateText.mockReset();
   modelResult(valid());
 });
 afterAll(() => {
@@ -92,41 +108,71 @@ it("keeps native parsing local and unchanged when AI is off", async () => {
   expect(result.detected).toBe("tradervue");
   expect(result.totals.executions).toBe(1);
   expect(result.aiPreviewToken).toBeUndefined();
-  expect(generateText).not.toHaveBeenCalled();
+  expect(mockRunObjectAi).not.toHaveBeenCalled();
 });
-it.each(["openai", "anthropic"])(
-  "uses %s for preview only, with no stored upload key",
-  async (provider) => {
-    const response = await request({ ...base, mode: "preview", ai: { ...base.ai, provider } });
-    expect(response.status).toBe(200);
-    const preview = await response.json();
-    expect(preview.executions[0].executedAt).toBe("2026-09-01T14:30:00.000Z");
-    expect(preview.sources).toHaveLength(2);
-    expect(preview.aiPreviewToken).toBeTruthy();
-    expect(db.select().from(executions).all()).toHaveLength(0);
-    expect(db.select().from(settings).all()).toHaveLength(0);
-    const options = vi.mocked(generateText).mock.calls[0]![0];
-    expect(options.model).toHaveProperty(
-      "provider",
-      provider === "openai" ? "openai.responses" : "anthropic.messages",
-    );
-    if (provider === "openai")
-      expect(options.providerOptions).toEqual({ openai: { store: false } });
-    expect(JSON.stringify(preview)).not.toContain("test-only-key");
-  },
-);
+it("uses the selected provider key from Settings and sends the import through the runtime", async () => {
+  setAiKey("openai", "settings-openai-key");
+  setSetting("aiProvider", "openai");
+  const response = await request({ ...base, mode: "preview", ai: true });
+  expect(response.status).toBe(200);
+  const preview = await response.json();
+  expect(preview.executions[0].executedAt).toBe("2026-09-01T14:30:00.000Z");
+  expect(preview.sources).toHaveLength(2);
+  expect(preview.aiPreviewToken).toBeTruthy();
+  expect(db.select().from(executions).all()).toHaveLength(0);
+  // The runtime is invoked with the statementImport feature and the
+  // server-resolved configuration: provider, model, and key come from
+  // Settings — never from the import request body.
+  expect(mockRunObjectAi).toHaveBeenCalledWith(
+    expect.objectContaining({
+      feature: "statementImport",
+      promptVersion: "statement-import-v1",
+      output: expect.anything(),
+      abortSignal: expect.any(AbortSignal),
+      configuration: expect.objectContaining({
+        provider: "openai",
+        apiKey: "settings-openai-key",
+      }),
+    }),
+  );
+  // The browser preview response must not echo the key.
+  expect(JSON.stringify(preview)).not.toContain("settings-openai-key");
+});
+it("never serializes apiKey, provider, or model in the import request body", async () => {
+  setAiKey("openai", "settings-openai-key");
+  const response = await request({ ...base, mode: "preview", ai: true });
+  const preview = await response.json();
+  expect(response.status).toBe(200);
+  const posted = JSON.stringify(preview);
+  // The browser preview response should never echo back a caller-supplied
+  // API key, provider, or model: those are now resolved on the server.
+  expect(posted).not.toContain("settings-openai-key");
+  expect(preview).not.toHaveProperty("apiKey");
+  expect(preview).not.toHaveProperty("provider");
+  expect(preview).not.toHaveProperty("model");
+});
+it("returns the safe configuration error when no saved or environment key is configured", async () => {
+  setSetting("aiProvider", "openai");
+  const response = await request({ ...base, mode: "preview", ai: true });
+  expect(response.status).toBe(400);
+  const result = await response.json();
+  expect(result.error).toMatch(/add your openai api key in settings/i);
+  expect(mockRunObjectAi).not.toHaveBeenCalled();
+  expect(db.select().from(executions).all()).toHaveLength(0);
+});
 it("commits exactly the reviewed result without calling AI again and preserves zero fees", async () => {
+  setAiKey("openai", "settings-openai-key");
   setSetting(
     "journalDefaults",
     JSON.stringify({
       feeRules: [{ id: "default", accountId: "", symbol: "", amount: 5, mode: "execution" }],
     }),
   );
-  const preview = await (await request({ ...base, mode: "preview" })).json();
+  const preview = await (await request({ ...base, mode: "preview", ai: true })).json();
   const commit = {
     ...base,
-    ai: { ...base.ai, apiKey: undefined },
     mode: "commit",
+    ai: true,
     aiReviewed: true,
     aiPreviewToken: preview.aiPreviewToken,
     accountId: "a",
@@ -134,7 +180,8 @@ it("commits exactly the reviewed result without calling AI again and preserves z
   const response = await request(commit);
   expect(response.status).toBe(200);
   expect((await response.json()).inserted).toBe(2);
-  expect(generateText).toHaveBeenCalledTimes(1);
+  // Preview only; commit must not invoke the runtime.
+  expect(mockRunObjectAi).toHaveBeenCalledTimes(1);
   expect(
     db
       .select()
@@ -143,14 +190,16 @@ it("commits exactly the reviewed result without calling AI again and preserves z
       .map((e) => e.fee),
   ).toEqual([0, 1]);
   expect((await (await request(commit)).json()).duplicates).toBe(2);
-  expect(generateText).toHaveBeenCalledTimes(1);
+  expect(mockRunObjectAi).toHaveBeenCalledTimes(1);
 });
 it("requires review and rejects tampered or stale previews", async () => {
-  const preview = await (await request({ ...base, mode: "preview" })).json();
+  setAiKey("openai", "settings-openai-key");
+  const preview = await (await request({ ...base, mode: "preview", ai: true })).json();
   const commit = {
     ...base,
     mode: "commit",
     accountId: "a",
+    ai: true,
     aiPreviewToken: preview.aiPreviewToken,
   };
   expect((await request(commit)).status).toBe(400);
@@ -180,32 +229,53 @@ it.each([
   expect(() => validateAiExtraction({ ...valid(), ...patch }, "UTC")).toThrow();
 });
 it("does not send an upload without a key, or when it exceeds the text limit", async () => {
-  expect((await request({ ...base, mode: "preview", ai: { ...base.ai, apiKey: "" } })).status).toBe(
-    400,
-  );
-  expect((await request({ ...base, mode: "preview", content: "a".repeat(150001) })).status).toBe(
-    400,
-  );
-  expect(generateText).not.toHaveBeenCalled();
+  setAiKey("openai", "settings-openai-key");
+  setSetting("aiProvider", "openai");
+  expect((await request({ ...base, mode: "preview", ai: true })).status).toBe(200);
+  expect(mockRunObjectAi).toHaveBeenCalledTimes(1);
+  // Wipe the key to simulate a deleted Settings entry: server must now refuse
+  // the preview with the safe configuration error rather than sending it.
+  setAiKey("openai", null);
+  expect((await request({ ...base, mode: "preview", ai: true })).status).toBe(400);
+  expect(mockRunObjectAi).toHaveBeenCalledTimes(1);
+  expect(
+    (await request({ ...base, mode: "preview", ai: true, content: "a".repeat(150001) })).status,
+  ).toBe(400);
+  expect(mockRunObjectAi).toHaveBeenCalledTimes(1);
 });
-it.each(["openai", "anthropic"])("sends PDF bytes as a file input for %s", async (provider) => {
+it("sends PDF bytes as a file input", async () => {
+  setAiKey("openai", "settings-openai-key");
   const response = await request({
     ...base,
     mode: "preview",
     encoding: "pdf",
     content: Buffer.from("%PDF-1.4\nsynthetic test").toString("base64"),
-    ai: { ...base.ai, provider },
+    ai: true,
   });
   expect(response.status).toBe(200);
-  expect(JSON.stringify(vi.mocked(generateText).mock.calls[0]![0].messages)).toContain(
+  expect(JSON.stringify(mockRunObjectAi.mock.calls[0]![0].messages)).toContain(
     '"mediaType":"application/pdf"',
   );
 });
 it("fails closed on truncated model output and sanitizes provider errors", async () => {
-  modelResult(valid(), "length");
-  expect((await request({ ...base, mode: "preview" })).ok).toBe(false);
-  vi.mocked(generateText).mockRejectedValue(new Error("private-key provider request contents"));
-  const response = await request({ ...base, mode: "preview" });
+  setAiKey("openai", "settings-openai-key");
+  mockRunObjectAi.mockResolvedValueOnce({
+    output: valid(),
+    meta: { finishReason: "length" },
+  });
+  expect((await request({ ...base, mode: "preview", ai: true })).ok).toBe(false);
+  mockRunObjectAi.mockRejectedValueOnce(
+    new AiRuntimeError("provider", "AI request failed. Check your provider settings."),
+  );
+  const response = await request({ ...base, mode: "preview", ai: true });
   expect(JSON.stringify(await response.json())).not.toContain("private-key");
   expect(db.select().from(executions).all()).toHaveLength(0);
+});
+it("rejects non-stop finish reasons with the existing incomplete-response message", async () => {
+  setAiKey("openai", "settings-openai-key");
+  mockRunObjectAi.mockResolvedValueOnce({
+    output: valid(),
+    meta: { finishReason: "length" },
+  });
+  await expect(parseStatementWithAi({ ...base })).rejects.toThrow("AI response was incomplete");
 });

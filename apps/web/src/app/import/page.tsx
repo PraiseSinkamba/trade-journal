@@ -27,13 +27,9 @@ import { dayKeyOf } from "@luxalgo/journal-core";
 import { ImportReconciliation } from "@/components/import-reconciliation";
 import type { ImportReview, ImportReviewOptions } from "@/lib/import-review";
 import { TimeZonePicker } from "@/components/timezone-picker";
-import { AiImportOptions } from "@/components/ai-import-options";
-import { AI_DEFAULT_MODELS, type AiSettingsPayload } from "@/lib/ai-settings";
-import {
-  AI_IMPORT_MAX_BYTES,
-  AI_IMPORT_MAX_TEXT,
-  type AiImportOptions as AiOptions,
-} from "@/lib/ai-import";
+import { AiImportToggle } from "@/components/ai-import-options";
+import { AI_PROVIDER_NAMES, type AiSettingsPayload } from "@/lib/ai-settings";
+import { AI_IMPORT_MAX_BYTES, AI_IMPORT_MAX_TEXT } from "@/lib/ai-import";
 import { readHeaders, type SkippedReason } from "@luxalgo/journal-importers";
 import { Checkbox } from "@/components/ui/checkbox";
 
@@ -156,11 +152,6 @@ function FileImport() {
   const [mapping, setMapping] = useState<Record<string, string>>({});
   const [busy, setBusy] = useState(false);
   const [aiEnabled, setAiEnabled] = useState(false);
-  const [aiOptions, setAiOptions] = useState<AiOptions>({
-    provider: "openai",
-    model: AI_DEFAULT_MODELS.openai,
-    apiKey: "",
-  });
   const [encoding, setEncoding] = useState<"text" | "pdf">("text");
   const [aiReviewed, setAiReviewed] = useState(false);
   const { data: formatData } = useApi<{ formats: { id: string; label: string }[] }>("/api/import");
@@ -174,10 +165,11 @@ function FileImport() {
   const timeZone = statementTimeZone ?? settingsData?.importTimeZone ?? "";
   const validTimeZone = isTimeZone(timeZone);
   const displayTimeZone = settingsData?.timeZone ?? "UTC";
-  const aiReady = Boolean(
-    aiOptions.model.trim() &&
-    (aiOptions.apiKey?.trim() || settingsData?.aiConnections[aiOptions.provider].configured),
-  );
+  const selectedAiProvider = settingsData?.aiProvider ?? "openai";
+  const aiReady = Boolean(settingsData?.aiConnections[selectedAiProvider].configured);
+  const aiConfigError = aiEnabled && !aiReady
+    ? `Add your ${AI_PROVIDER_NAMES[selectedAiProvider]} API key in Settings to parse with AI.`
+    : null;
   const invalidateAiPreview = () => {
     setPreview(null);
     setAiReviewed(false);
@@ -261,7 +253,7 @@ function FileImport() {
           symbol,
           timeZone,
           encoding,
-          ...(aiEnabled ? { ai: aiOptions } : {}),
+          ...(aiEnabled ? { ai: true } : {}),
           ...(aiEnabled && encoding !== "pdf" ? { headers: readHeaders(content) } : {}),
         }),
       );
@@ -315,7 +307,7 @@ function FileImport() {
         timeZone: preview.timeZone,
         ...(preview.aiPreviewToken
           ? {
-              ai: { provider: aiOptions.provider, model: aiOptions.model },
+              ai: true,
               encoding,
               aiPreviewToken: preview.aiPreviewToken,
               aiReviewed,
@@ -345,23 +337,30 @@ function FileImport() {
       <Card>
         <CardHeader className="flex-row flex-wrap items-center justify-between gap-2 space-y-0">
           <CardTitle>Upload a statement or export</CardTitle>
-          <AiImportOptions
-            enabled={aiEnabled}
-            onEnabledChange={(enabled) => {
-              setAiEnabled(enabled);
-              invalidateAiPreview();
-              setContent(null);
-              setFileName("");
-              setMappingApplied(false);
-            }}
-            value={aiOptions}
-            onChange={(options) => {
-              setAiOptions(options);
-              invalidateAiPreview();
-            }}
-            settings={settingsData ?? undefined}
-            disabled={busy}
-          />
+          <div className="flex shrink-0 items-center gap-2">
+            {aiReady ? (
+              <AiImportToggle
+                enabled={aiEnabled}
+                onEnabledChange={(enabled) => {
+                  setAiEnabled(enabled);
+                  invalidateAiPreview();
+                  setContent(null);
+                  setFileName("");
+                  setMappingApplied(false);
+                }}
+                provider={selectedAiProvider}
+                disabled={busy}
+              />
+            ) : (
+              <a
+                href="/settings#ai-settings"
+                className="text-xs text-muted-foreground underline hover:text-foreground"
+              >
+                {aiConfigError ??
+                  `Add your ${AI_PROVIDER_NAMES[selectedAiProvider]} API key in Settings to parse with AI.`}
+              </a>
+            )}
+          </div>
         </CardHeader>
         <CardContent className="space-y-3">
           <div>

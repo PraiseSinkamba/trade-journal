@@ -1,7 +1,5 @@
 import { createHash } from "node:crypto";
-import { createOpenAI } from "@ai-sdk/openai";
-import { createAnthropic } from "@ai-sdk/anthropic";
-import { generateText, jsonSchema, Output, type UserContent } from "ai";
+import { jsonSchema, Output, type UserContent } from "ai";
 import {
   parseTimestamp,
   type ImportedExecution,
@@ -11,11 +9,12 @@ import {
   AI_IMPORT_MAX_BYTES,
   AI_IMPORT_MAX_EXECUTIONS,
   AI_IMPORT_MAX_TEXT,
-  type AiImportOptions,
 } from "@/lib/ai-import";
-import { isAiProvider } from "@/lib/ai-settings";
+import { AI_PROVIDER_NAMES } from "@/lib/ai-settings";
 import { requireValue } from "./api";
-import { getAiKey } from "./settings";
+import { resolveAiConfiguration } from "./settings";
+import { AiRuntimeError, AI_PROMPT_VERSIONS } from "./ai-contracts";
+import { runObjectAi } from "./ai-runtime";
 import { encryptJson, decryptJson } from "./crypto";
 import { executionHash } from "./ids";
 import { executionProblem } from "./executions";
@@ -165,29 +164,25 @@ export function validateAiExtraction(
     sources.push(row.source);
     return execution;
   });
-  return { format: "AI-assisted", executions, sources, skippedRows: 0, skippedReasons: [], warnings: data.warnings };
+  return {
+    format: "AI-assisted",
+    executions,
+    sources,
+    skippedRows: 0,
+    skippedReasons: [],
+    warnings: data.warnings,
+  };
 }
 
 export async function parseStatementWithAi(
   statement: AiStatement,
-  options: AiImportOptions,
   signal?: AbortSignal,
 ) {
-  requireValue(options && isAiProvider(options.provider), "Choose OpenAI or Anthropic.");
+  const configuration = resolveAiConfiguration();
   requireValue(
-    typeof options.model === "string" &&
-      options.model.trim().length > 0 &&
-      options.model.length <= 160 &&
-      /^[a-zA-Z0-9._:/-]+$/.test(options.model),
-    "Enter a valid model ID.",
+    configuration.apiKey,
+    `Add your ${AI_PROVIDER_NAMES[configuration.provider]} API key in Settings.`,
   );
-  requireValue(
-    options.apiKey === undefined ||
-      (typeof options.apiKey === "string" && options.apiKey.length <= 1000),
-    "Invalid API key.",
-  );
-  const apiKey = options.apiKey?.trim() || getAiKey(options.provider);
-  requireValue(apiKey, "Add an API key for the selected provider to parse this upload.");
   let input: UserContent;
   if (statement.encoding === "pdf") {
     requireValue(
@@ -210,13 +205,16 @@ export async function parseStatementWithAi(
     input = [{ type: "text", text: statement.content }];
   }
   let output: unknown;
+  let finishReason: string | undefined;
   try {
-    const result = await generateText({
-      model:
-        options.provider === "openai"
-          ? createOpenAI({ apiKey }).responses(options.model)
-          : createAnthropic({ apiKey })(options.model),
-      ...(options.provider === "openai" ? { providerOptions: { openai: { store: false } } } : {}),
+    const result = await runObjectAi({
+      feature: "statementImport",
+      configuration: {
+        provider: configuration.provider,
+        modelId: configuration.modelId,
+        apiKey: configuration.apiKey,
+      },
+      promptVersion: AI_PROMPT_VERSIONS.statementImport,
       system: SYSTEM,
       messages: [
         {
@@ -225,34 +223,34 @@ export async function parseStatementWithAi(
             {
               type: "text",
               text: `${
-  statement.encoding !== "pdf" && statement.headers && statement.headers.length
-    ? `Detected columns (first row of file):\n${statement.headers
-        .map((h, i) => `  ${i}: ${h.slice(0, 80)}`)
-        .join("\n")}\n\n`
-    : ""
-}Extract this statement for review. Local timestamps will be interpreted by the journal; do not convert them.`,
+                statement.encoding !== "pdf" && statement.headers && statement.headers.length
+                  ? `Detected columns (first row of file):\n${statement.headers
+                      .map((h, i) => `  ${i}: ${h.slice(0, 80)}`)
+                      .join("\n")}\n\n`
+                  : ""
+              }Extract this statement for review. Local timestamps will be interpreted by the journal; do not convert them.`,
             },
             ...input,
           ],
         },
       ],
       output: Output.object({ schema }),
-      maxOutputTokens: 32000,
-      maxRetries: 0,
       abortSignal: signal
         ? AbortSignal.any([signal, AbortSignal.timeout(120_000)])
         : AbortSignal.timeout(120_000),
     });
-    requireValue(
-      result.finishReason === "stop",
-      "AI response was incomplete. Split the statement into smaller files.",
-    );
     output = result.output;
-  } catch {
+    finishReason = result.meta.finishReason;
+  } catch (error) {
+    if (error instanceof AiRuntimeError) throw new Error(error.message);
     throw new Error(
       "AI parsing failed or returned an incomplete response. Check your key, model, provider credits and file size, then try again. PDF uploads require a model that accepts PDFs.",
     );
   }
+  requireValue(
+    finishReason === "stop",
+    "AI response was incomplete. Split the statement into smaller files.",
+  );
   return validateAiExtraction(output, statement.timeZone);
 }
 const fingerprint = (s: AiStatement) =>
