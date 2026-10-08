@@ -196,13 +196,13 @@ describe("AI provider requests through the real SDK adapters", () => {
       }),
     );
     vi.stubGlobal("fetch", fetcher);
-    expect(await runAi("Fixture journal question", 700)).toBe("Fixture reflection");
+    expect(await runAi("Fixture journal question")).toBe("Fixture reflection");
     const [url, init] = (fetcher.mock.calls as unknown as [string, RequestInit][])[0]!;
     expect(url).toBe("https://api.openai.com/v1/responses");
     expect(new Headers(init.headers).get("Authorization")).toBe("Bearer fixture-openai");
     expect(JSON.stringify(init)).not.toContain("fixture-anthropic");
     const body = JSON.parse(init.body as string);
-    expect(body).toMatchObject({ model: "gpt-4.1-mini", max_output_tokens: 700, store: false });
+    expect(body).toMatchObject({ model: "gpt-4.1-mini", max_output_tokens: 1200, store: false });
     expect(JSON.stringify(body.input)).toContain("Fixture journal question");
   });
 
@@ -226,15 +226,19 @@ describe("AI provider requests through the real SDK adapters", () => {
       }),
     );
     vi.stubGlobal("fetch", fetcher);
-    expect(await runAi("Fixture prompt", 800)).toBe("Anthropic fixture");
+    expect(await runAi("Fixture journal question")).toBe("Anthropic fixture");
     const [url, init] = (fetcher.mock.calls as unknown as [string, RequestInit][])[0]!;
     expect(url).toBe("https://api.anthropic.com/v1/messages");
     expect(new Headers(init.headers).get("x-api-key")).toBe("fixture-anthropic");
     expect(JSON.stringify(init)).not.toContain("fixture-openai");
-    expect(JSON.parse(init.body as string)).toMatchObject({
+    const anthropicBody = JSON.parse(init.body as string);
+    expect(anthropicBody).toMatchObject({
       model: "claude-custom",
-      max_tokens: 800,
+      max_tokens: 1200,
     });
+    expect(anthropicBody.messages).toEqual([
+      { role: "user", content: [{ type: "text", text: "Fixture journal question" }] },
+    ]);
   });
 
   it.each([

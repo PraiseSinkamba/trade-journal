@@ -3,6 +3,7 @@ import { computeMetrics, dayKeyOf } from "@luxalgo/journal-core";
 import { db, journalDays } from "@/db";
 import { bad, handler, ok } from "@/server/api";
 import { runAi } from "@/server/ai";
+import { buildDailyRecapPrompt } from "@/server/ai-prompts";
 import { queryTrades } from "@/server/trades-query";
 import { accountContext, readAiRequest } from "@/server/ai-scope";
 
@@ -38,20 +39,16 @@ export const POST = handler(async (request: Request) => {
     .join("\n");
 
   const recap = await runAi(
-    `Write a session recap for ${date} in first person ("I"), 120-200 words, markdown with a
-short "**Keep**" and "**Fix**" list at the end.
-
-${scope.context}
-${accountContext(dayTrades, scope)}
-
-Day stats: net P&L ${metrics.netPnl.toFixed(2)}, ${metrics.closedTrades} trades,
+    buildDailyRecapPrompt({
+      date,
+      scopeContext: scope.context,
+      accountContext: accountContext(dayTrades, scope),
+      metricsLine: `net P&L ${metrics.netPnl.toFixed(2)}, ${metrics.closedTrades} trades,
 win rate ${metrics.winRate === null ? "n/a" : (metrics.winRate * 100).toFixed(0)}%,
-fees ${metrics.fees.toFixed(2)}.
-
-Trades:
-${tradeLines}
-
-${existingNote ? `The trader's own note so far (respect it, build on it):\n${existingNote}` : ""}`,
+fees ${metrics.fees.toFixed(2)}.`,
+      tradeLines,
+      existingNote,
+    }),
   );
 
   return ok({ recap, scope: scope.scope });

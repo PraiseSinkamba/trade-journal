@@ -11,6 +11,7 @@ import {
 } from "@luxalgo/journal-core";
 import { bad, handler, ok } from "@/server/api";
 import { runAi } from "@/server/ai";
+import { buildAskJournalPrompt } from "@/server/ai-prompts";
 import { queryTrades } from "@/server/trades-query";
 import { accountContext, readAiRequest } from "@/server/ai-scope";
 
@@ -50,13 +51,7 @@ export const POST = handler(async (request: Request) => {
   ].join("\n");
 
   const answer = await runAi(
-    `Answer the trader's question using ONLY these aggregates from their journal. If the data
-can't answer it, say exactly what's missing (e.g. "tag your trades' stops to get R stats").
-Cite the numbers you used. Under 200 words.
-
-${context}
-
-Question: ${question}`,
+    buildAskJournalPrompt({ question, context }),
   );
 
   return ok({ answer, scope: scope.scope });

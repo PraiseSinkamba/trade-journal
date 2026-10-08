@@ -1,5 +1,6 @@
 import { bad, handler, ok } from "@/server/api";
 import { runAi } from "@/server/ai";
+import { buildTradeCritiquePrompt } from "@/server/ai-prompts";
 import { listExecutions } from "@/server/executions";
 import { getTradeByKey, rowToTrade } from "@/server/trades-query";
 
@@ -15,20 +16,28 @@ export const POST = handler(async (request: Request) => {
   );
 
   const critique = await runAi(
-    `Critique this single trade in under 150 words. Focus on execution quality visible in the
-fills (entry clustering, scaling, exit discipline), risk (stop honored or not, R multiple),
-and the trader's own tags/mistakes. End with one concrete instruction for the next
-occurrence of this setup.
-
-Trade: ${trade.symbol} ${trade.direction}, status ${trade.status}
-Net P&L: ${trade.netPnl.toFixed(2)} (gross ${trade.grossPnl.toFixed(2)}, fees ${trade.fees.toFixed(2)})
-Avg entry ${trade.avgEntry} → avg exit ${trade.avgExit ?? "still open"}
-Planned stop: ${row.stopLoss ?? "none recorded"} | target: ${row.profitTarget ?? "none recorded"}
-Rating: ${row.rating ?? "unrated"} | tags: ${(trade.annotations?.tags ?? []).join(", ") || "none"} | mistakes: ${(trade.annotations?.mistakes ?? []).join(", ") || "none"}
-Notes: ${row.notes ?? "none"}
-
-Fills:
-${fills.map((fill) => `${fill.executedAt} ${fill.side} ${fill.quantity} @ ${fill.price}${fill.fee ? ` fee ${fill.fee}` : ""}`).join("\n")}`,
+    buildTradeCritiquePrompt({
+      trade: {
+        symbol: trade.symbol,
+        direction: trade.direction,
+        status: trade.status,
+        netPnl: trade.netPnl,
+        grossPnl: trade.grossPnl,
+        fees: trade.fees,
+        avgEntry: trade.avgEntry,
+        avgExit: trade.avgExit,
+        stopLoss: row.stopLoss,
+        profitTarget: row.profitTarget,
+        rating: row.rating,
+        tags: trade.annotations?.tags ?? [],
+        mistakes: trade.annotations?.mistakes ?? [],
+        notes: row.notes,
+      },
+      fills: fills.map(
+        (fill) =>
+          `${fill.executedAt} ${fill.side} ${fill.quantity} @ ${fill.price}${fill.fee ? ` fee ${fill.fee}` : ""}`,
+      ),
+    }),
   );
 
   return ok({ critique });
