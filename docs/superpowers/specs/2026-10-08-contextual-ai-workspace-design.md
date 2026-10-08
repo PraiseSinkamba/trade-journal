@@ -3,14 +3,17 @@
 **Status:** Draft for user review
 
 ## Goal
+
 Make AI a native, conversational assistant within Trade Journal workspaces while preserving explicit user control over every persisted change.
 
 ## Product boundary
+
 The assistant works with every supported account and journal workflow: personal accounts, funded/evaluation accounts, broker-connected accounts, imported history, and manually entered data. It is not a prop-firm-only feature.
 
 The assistant may reason over authorized journal context and prepare typed drafts. It does not persist financial or journal data directly. Existing validated forms and APIs remain the only mutation path.
 
 ## Selected surface
+
 Use the **focused side-sheet** interaction from `.planning/sketches/001-contextual-ai-assistant/index.html` variant B.
 
 - The workspace remains primary.
@@ -19,6 +22,7 @@ Use the **focused side-sheet** interaction from `.planning/sketches/001-contextu
 - A compact global **Recent AI work** entry point resumes active drafts and previous scoped threads. It is not unrestricted global chat.
 
 ## Conversation scope
+
 A conversation begins with explicit, server-derived context from the workspace currently being viewed.
 
 Example header:
@@ -40,6 +44,7 @@ The assistant shows supplemental attached context as removable chips. The server
 ## Interaction model
 
 ### Conversation
+
 Users describe intent naturally:
 
 - “Add the scaling entry I missed.”
@@ -50,6 +55,7 @@ Users describe intent naturally:
 The assistant uses existing attached facts before asking questions. It asks focused follow-ups only for missing or ambiguous values and distinguishes confirmed, inferred, and unknown values.
 
 ### Action cards
+
 The assistant produces typed, visible draft cards instead of relying on prose alone:
 
 - trade-create or trade-edit draft;
@@ -67,9 +73,11 @@ Every card has:
 - **Refine**, **Discard**, and a destination-specific review action.
 
 ### Review and persistence
+
 AI does not become a second form system. A review action such as **Review in trade form**, **Open in notebook**, or **Review playbook** opens the existing editing surface with the typed draft prefilled. The user may correct, reject, or submit it there. Existing validation, authorization, and persistence behavior applies unchanged.
 
 ## AI capability boundary
+
 The assistant receives application capabilities through typed, permission-scoped server interfaces—not prose descriptions of database behavior and not raw database access.
 
 Initial read-only capabilities should map to existing domain/query behavior:
@@ -124,6 +132,21 @@ The design must be testable without a live model.
 - A separate AI-only form/editor system.
 - A multi-agent hierarchy, delegation framework, market-data/research agent, or broker-execution agent.
 - Replacing all current direct model calls with agents.
+
+## Foundation acceptance checklist
+
+The AI foundation refactor (Tasks 1–4 of
+`docs/superpowers/plans/2026-10-08-ai-foundation-refactor.md`) lands only the
+server-only execution foundation. All of the following must be true once that
+work is merged; anything in `## Non-goals` or `## Incremental adoption` that is
+not enumerated below remains intentionally out of scope.
+
+- [ ] Provider/model/key resolution occurs only in the server runtime.
+- [ ] Provider options do not leak into AI feature routes.
+- [ ] Reflection and import have explicit policy and prompt versions.
+- [ ] No feature route returns provider credentials or raw provider errors.
+- [ ] No agent session, tool, draft persistence, or assistant UI ships in this
+      foundation refactor.
 
 ## Incremental adoption
 

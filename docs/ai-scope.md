@@ -2,6 +2,47 @@
 
 Ask your journal and daily recaps use the account selection and analysis filters shown on the page. The client sends the computed date range, rather than asking the server to reinterpret a relative range. The server validates that snapshot, then uses the same trade query and timezone as the journal before building any AI context.
 
+## Execution boundary (current foundation)
+
+The current AI surface in this repository is the **server-only execution foundation** shipped by the plan in `docs/superpowers/plans/2026-10-08-ai-foundation-refactor.md`:
+
+- Provider, model, and key resolution happen **only** inside
+  `apps/web/src/server/ai-runtime.ts` and `apps/web/src/server/settings.ts`
+  via `resolveAiConfiguration()`. Feature routes never receive a key, model
+  ID, or provider ID from the client and never read raw `process.env` values.
+- Every AI execution returns **redacted** `AiExecutionMeta` to the server
+  caller: feature ID, provider, model ID, prompt version, duration, finish
+  reason, input/output tokens, and retry count. Prompt text, response text,
+  and the resolved key never appear in metadata.
+- `AI_FEATURE_POLICIES` fixes the per-feature `maxOutputTokens`,
+  `maxRetries`, and optional `timeoutMs`. `statementImport` is
+  `maxRetries: 0` and time-bounded at 120 seconds; `reflection` is
+  bounded for `maxOutputTokens` and `maxRetries`. The closed `AiFeature`
+  union prevents unreviewed features from inheriting unsafe defaults.
+- Errors are normalized to `AiRuntimeError` with safe, user-facing
+  categories (`missing_key`, `authentication`, `billing`, `rate_limited`,
+  `model_unavailable`, `timeout`, `provider`). Raw provider response text
+  never reaches the client.
+- Prompt construction lives in `apps/web/src/server/ai-prompts.ts` with
+  explicit `AI_PROMPT_VERSIONS` per feature. Route handlers stay thin and
+  contain no embedded prompt text.
+- The import request body is now `{ ai: true }` only; the import
+  preview/commit endpoints resolve credentials on the server and the
+  commit step never calls a model.
+- Privacy boundary (the account/filter rules below) is unchanged. The
+  foundation adds a server-only execution boundary **on top of** that
+  privacy boundary; it does not relax it.
+
+## Future assistant/UI/tool work (not in this foundation)
+
+The contextual assistant, scoped sessions, draft cards, side-sheet UI, and
+bounded read-only tools described in
+`docs/superpowers/specs/2026-10-08-contextual-ai-workspace-design.md`
+remain intentionally out of scope. They will land in a later plan and must
+re-validate the foundation checklist rather than assume any of it.
+
+## Account and filter scope (privacy boundary)
+
 - All accounts remains the default when no account filter is selected. An explicitly malformed or unknown account selection is rejected; it never falls back to all accounts.
 - No matching trades produces a data-specific message without a provider call. A daily recap also requires closed trades on the requested local calendar day.
 - Context includes the scope and per-account totals with account names and currencies. Mixed-currency sums are explicitly described as unconverted.
