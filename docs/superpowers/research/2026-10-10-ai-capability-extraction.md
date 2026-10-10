@@ -25,7 +25,7 @@ request.json() → readAiRequest(…, "question")
                → ok({answer, scope: {label, timeZone}})
 ```
 
-Validation gate: `readAiRequest` rejects unknown fields, unrecognised accounts, invalid date ranges, invalid `weekdays` values, and mismatched timezones — then returns an immutable snapshot. The 7 bucket computations are pure transforms over `trades[]`; no database side effects.
+Validation gate: `readAiRequest` rejects unknown fields, unrecognised accounts, invalid date ranges, invalid `weekdays` values, and mismatched timezones — returning a **validated but still-mutable** object. The proposed Phase 2 capability boundary adds a post-validation step: detach a deep clone and recursively `Object.freeze` it so the capability receives a genuinely immutable snapshot. The 7 bucket computations are pure transforms over `trades[]`; no database side effects.
 
 Evidence: `apps/web/src/app/api/ai/ask/route.ts:32-62`, `apps/web/src/server/ai-scope.ts:22-127`, `apps/web/src/server/ai-prompts.ts`.
 
@@ -126,9 +126,9 @@ Evidence: `apps/web/src/server/ai-scope.ts:107-127` — return object constructe
 
 ## Step 3 — Minimum Capability Operations and Data Bounds
 
-### Capability 1: `askJournal(tradeQuery, question) → AskJournalContext`
+### Capability 1: `askJournal(scope: FrozenApprovedScope, question: string) → AskJournalContext`
 
-`askJournal` is the read-only data-preparation pipeline for the Ask route. It accepts a validated scope and returns a typed context object containing the pre-computed buckets, metrics, and account totals. The route retains prompt construction and the `runAi` call.
+`askJournal` is the read-only data-preparation pipeline for the Ask route. It accepts a frozen scope snapshot and returns a typed context object containing the pre-computed buckets, metrics, and account totals. The capability calls `queryTrades(scope.filters)` internally; callers never pass a trade query object. The route retains prompt construction and the `runAi` call.
 
 ```typescript
 type AskJournalContext = Readonly<{
@@ -165,9 +165,9 @@ type AskScope = Readonly<{
 | **No writes**                   | Metrics are computed in-memory; no DB writes                                                                            |
 | **No provider/settings access** | Prompt string only; `runAi` resolves provider server-side                                                               |
 
-### Capability 2: `dailyRecapContext(tradeQuery, date, existingNote?) → RecapContext`
+### Capability 2: `dailyRecapContext(scope: FrozenApprovedScope, date: string, existingNote: string | null) → RecapContext`
 
-`dailyRecapContext` is the read-only data-preparation pipeline for the Recap route. It accepts the day-filtered trades and the already-authorized note (or `null`). The route retains the `onlyDateFilters` gate, the note database read, and the `runAi` call.
+`dailyRecapContext` is the read-only data-preparation pipeline for the Recap route. It accepts a frozen scope snapshot, the target date, and the already-route-authorized note (or `null` when not authorized). The capability calls `queryTrades(scope.filters)` internally; callers never pass a trade query object. The route retains the `onlyDateFilters` gate, the note database read, and the `runAi` call.
 
 ```typescript
 type RecapContext = Readonly<{
@@ -301,10 +301,10 @@ These tests exercise capability behaviour, not forwarding. They belong in `apps/
 No `readAiRequest`, no filter, no account subset, no timezone. Input is one validated key. Cutover extracts the `getTradeByKey` + `listExecutions` + `rowToTrade` sequence into `tradeCritiqueContext(key)`. The route retains `buildTradeCritiquePrompt` and `runAi`. This is the lowest-risk cutover.
 
 **Phase 3 Task B — `dailyRecapContext`**
-Uses `readAiRequest(…, "date")`. Scope snapshot is deep-frozen after validation. Cutover extracts `queryTrades` + day-filter + `computeMetrics` + `accountContext` into `dailyRecapContext(tradeQuery, date, existingNote)`. The route retains the `onlyDateFilters` guard, the `journalDays.note` database read, `buildDailyRecapPrompt`, and `runAi`. Note authorization remains route-controlled.
+Uses `readAiRequest(…, "date")`. Scope snapshot is deep-frozen after validation. Cutover extracts `queryTrades` + day-filter + `computeMetrics` + `accountContext` into `dailyRecapContext(scope: FrozenApprovedScope, date: string, existingNote: string | null)`. The capability internally calls `queryTrades(scope.filters)`. The route retains the `onlyDateFilters` guard, the `journalDays.note` database read, `buildDailyRecapPrompt`, and `runAi`. Note authorization remains route-controlled.
 
 **Phase 3 Task C — `askJournal`**
-Uses `readAiRequest(…, "question")` with the full filter + account + bucket + context pipeline. Cutover extracts `queryTrades` + all bucket computations + `accountContext` into `askJournal(tradeQuery, question)`. The route retains `buildAskJournalPrompt` and `runAi`. This is the most complex cutover; it should be last.
+Uses `readAiRequest(…, "question")` with the full filter + account + bucket + context pipeline. Cutover extracts `queryTrades` + all bucket computations + `accountContext` into `askJournal(scope: FrozenApprovedScope, question: string)`. The capability internally calls `queryTrades(scope.filters)`. The route retains `buildAskJournalPrompt` and `runAi`. This is the most complex cutover; it should be last.
 
 ### Phase 3 Ask-Journal Agent Loop Gate
 
