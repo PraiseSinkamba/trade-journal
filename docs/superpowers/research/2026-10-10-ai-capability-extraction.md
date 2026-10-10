@@ -167,7 +167,7 @@ type AskScope = Readonly<{
 
 ### Capability 2: `dailyRecapContext(scope: FrozenApprovedScope, date: string, existingNote: string | undefined) → RecapContext`
 
-`dailyRecapContext` is the read-only data-preparation pipeline for the Recap route. It accepts a frozen scope snapshot, the target date, and the already-route-authorized note (or `null` when not authorized). The capability calls `queryTrades(scope.filters)` internally; callers never pass a trade query object. The route retains the `onlyDateFilters` gate, the note database read, and the `runAi` call.
+`dailyRecapContext` is the read-only data-preparation pipeline for the Recap route. It accepts a frozen scope snapshot, the target date, and the already-route-authorized note (or `undefined` when not authorized). The capability calls `queryTrades(scope.filters)` internally; callers never pass a trade query object. The route retains the `onlyDateFilters` gate, the note database read, and the `runAi` call.
 
 ```typescript
 type RecapContext = Readonly<{
@@ -175,7 +175,7 @@ type RecapContext = Readonly<{
   metrics: ReturnType<typeof computeMetrics>;
   tradeLines: string; // pre-formatted: "AccountName | Symbol Direction qty N | entry X → exit Y | net ±0.00 | held Nm" — one line per trade, same format buildDailyRecapPrompt consumes
   accountContext: ReturnType<typeof accountContext>;
-  existingNote: string | undefined; // null when onlyDateFilters is false
+  existingNote: string | undefined; // undefined when onlyDateFilters is false
   scope: RecapScope;
 }>;
 
@@ -193,7 +193,7 @@ type RecapScope = Readonly<{
 | **Transforms**               | `computeMetrics(dayTrades, {tz})`, `accountContext(dayTrades, scope)`                                                                                               |
 | **Typed output**             | `RecapContext` (structured data; no raw DB access)                                                                                                                  |
 | **Route retains**            | `onlyDateFilters` guard, `journalDays.note` read, `buildDailyRecapPrompt`, `runAi`                                                                                  |
-| **Note exclusion guarantee** | Gate is in the route; capability receives `null` for any non-date-only filter                                                                                       |
+| **Note exclusion guarantee** | Gate is in the route; capability receives `undefined` for any non-date-only filter                                                                                  |
 | **No writes**                | Read-only                                                                                                                                                           |
 
 ### Capability 3: `tradeCritiqueContext(tradeKey) → TradeCritiqueContext`
@@ -273,23 +273,23 @@ type CritiqueScope = Readonly<{
 
 These tests exercise capability behaviour, not forwarding. They belong in `apps/web/tests/ai-capability.test.ts` (new file).
 
-| #   | Test name                                                                       | What it exercises                                                                                                   |
-| --- | ------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------- |
-| 1   | `askJournal rejects scope with unknown account id`                              | Capabilities built from a tampered `FrozenApprovedScope` (account id not in DB)                                     |
-| 2   | `askJournal with zero trades returns error not empty string`                    | Empty result is a 400, not a silent empty-prompt call                                                               |
-| 3   | `askJournal applies top-N to each bucket independently`                         | Bucket arrays are independently sliced; no cross-bucket bleed                                                       |
-| 4   | `dailyRecap note excluded when filters contain account`                         | `onlyDateFilters` gate fires correctly; note absent from prompt                                                     |
-| 5   | `dailyRecap note included when filters are only from/to`                        | Note included for date-only recap                                                                                   |
-| 6   | `dailyRecap returns 400 when no closed trades on that day`                      | Empty day trades → 400, no AI call                                                                                  |
-| 7   | `tradeCritique returns 404 for unknown key`                                     | Direct key lookup is the only guard                                                                                 |
-| 8   | `tradeCritique never sees fills from other trades`                              | `executionIds` array is the only execution scope                                                                    |
-| 9   | `approvedScope filters cannot be widened after readAiRequest`                   | Deep-frozen snapshot prevents mutation; `queryTrades` output is unaffected by post-freeze mutations to the original |
-| 10  | `askJournal timezone mismatch rejected`                                         | `body.timeZone !== getTimeZone()` → error before any data read                                                      |
-| 11  | `askJournal with selected-account scope excludes unselected-account trades`     | Given two accounts A and B, Ask with scope A's filters never includes B's trades in any bucket or aggregate         |
-| 12  | `askJournal with selected-account scope excludes unselected-account totals`     | `accountContext` totals for unselected accounts are absent from the context object                                  |
-| 13  | `dailyRecap with selected-account scope excludes unselected-account trades`     | Given two accounts A and B, Recap with scope A's filters never includes B's trades in `tradeLines` or `metrics`     |
-| 14  | `dailyRecap with selected-account scope excludes unselected-account totals`     | `accountContext` totals for unselected accounts are absent from the context object                                  |
-| 15  | `dailyRecap note is null for multi-account scope even when from/to are present` | When scope includes multiple accounts (not `onlyDateFilters`), `existingNote` is `null` regardless of note content  |
+| #   | Test name                                                                            | What it exercises                                                                                                       |
+| --- | ------------------------------------------------------------------------------------ | ----------------------------------------------------------------------------------------------------------------------- |
+| 1   | `askJournal rejects scope with unknown account id`                                   | Capabilities built from a tampered `FrozenApprovedScope` (account id not in DB)                                         |
+| 2   | `askJournal with zero trades returns error not empty string`                         | Empty result is a 400, not a silent empty-prompt call                                                                   |
+| 3   | `askJournal applies top-N to each bucket independently`                              | Bucket arrays are independently sliced; no cross-bucket bleed                                                           |
+| 4   | `dailyRecap note excluded when filters contain account`                              | `onlyDateFilters` gate fires correctly; note absent from prompt                                                         |
+| 5   | `dailyRecap note included when filters are only from/to`                             | Note included for date-only recap                                                                                       |
+| 6   | `dailyRecap returns 400 when no closed trades on that day`                           | Empty day trades → 400, no AI call                                                                                      |
+| 7   | `tradeCritique returns 404 for unknown key`                                          | Direct key lookup is the only guard                                                                                     |
+| 8   | `tradeCritique never sees fills from other trades`                                   | `executionIds` array is the only execution scope                                                                        |
+| 9   | `approvedScope filters cannot be widened after readAiRequest`                        | Deep-frozen snapshot prevents mutation; `queryTrades` output is unaffected by post-freeze mutations to the original     |
+| 10  | `askJournal timezone mismatch rejected`                                              | `body.timeZone !== getTimeZone()` → error before any data read                                                          |
+| 11  | `askJournal with selected-account scope excludes unselected-account trades`          | Given two accounts A and B, Ask with scope A's filters never includes B's trades in any bucket or aggregate             |
+| 12  | `askJournal with selected-account scope excludes unselected-account totals`          | `accountContext` totals for unselected accounts are absent from the context object                                      |
+| 13  | `dailyRecap with selected-account scope excludes unselected-account trades`          | Given two accounts A and B, Recap with scope A's filters never includes B's trades in `tradeLines` or `metrics`         |
+| 14  | `dailyRecap with selected-account scope excludes unselected-account totals`          | `accountContext` totals for unselected accounts are absent from the context object                                      |
+| 15  | `dailyRecap note is undefined for multi-account scope even when from/to are present` | When scope includes multiple accounts (not `onlyDateFilters`), `existingNote` is `undefined` regardless of note content |
 
 ---
 
