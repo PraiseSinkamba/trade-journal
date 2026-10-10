@@ -66,14 +66,14 @@ Evidence: `apps/web/src/app/api/ai/critique/route.ts:12-43`, `apps/web/src/serve
 
 ### What Stays Outside Every Capability
 
-| Side effect                      | Location                        | Reason it cannot enter a capability                |
-| -------------------------------- | ------------------------------- | -------------------------------------------------- |
-| `journalDays.note` read          | `recap/route.ts`                | Shared across accounts; gated by `onlyDateFilters` |
-| Trade writes / execution inserts | `executions.ts`                 | Write path not part of Phase 2                     |
-| Provider / API key resolution    | `ai-settings.ts`, `settings.ts` | Provider boundary is `runTextAi` / `runObjectAi`   |
-| Import schema / preview token    | `ai-import.ts`                  | Separate feature with its own workflow             |
-| Prompt text changes              | `ai-prompts.ts`                 | Pure builders; not data reads                      |
-| AI execution itself              | `ai-runtime.ts`                 | The execution foundation is not being moved        |
+| Side effect                      | Location                        | Reason it cannot enter a capability                                                                |
+| -------------------------------- | ------------------------------- | -------------------------------------------------------------------------------------------------- |
+| `journalDays.note` read          | `recap/route.ts`                | Shared across accounts; gated by `onlyDateFilters`. Route reads note, passes `existingNote: string | null` to capability; capability has no DB access. |
+| Trade writes / execution inserts | `executions.ts`                 | Write path not part of Phase 2                                                                     |
+| Provider / API key resolution    | `ai-settings.ts`, `settings.ts` | Provider boundary is `runTextAi` / `runObjectAi`                                                   |
+| Import schema / preview token    | `ai-import.ts`                  | Separate feature with its own workflow                                                             |
+| Prompt text changes              | `ai-prompts.ts`                 | Pure builders; not data reads                                                                      |
+| AI execution itself              | `ai-runtime.ts`                 | The execution foundation is not being moved                                                        |
 
 ---
 
@@ -93,17 +93,26 @@ Evidence: `apps/web/src/app/api/ai/critique/route.ts:12-43`, `apps/web/src/serve
 }
 ```
 
-**Cloning / freezing:** The return value is constructed fresh in every call — no shared mutable reference exists between requests. `filters` is a normalised object derived from the raw body; `accounts` is a newly allocated array. Callers (`ask/route.ts`, `recap/route.ts`) destructure immediately and pass `filters` into `queryTrades`. No caller reassigns fields of the returned object or passes it as a mutable out-parameter.
+**Cloning / freezing:** TypeScript `Readonly<T>` is a compile-time annotation only — it has no runtime effect. A malicious or buggy caller can still mutate a plain object reference. Effective immutability requires two steps:
 
-**Conclusion:** No `Object.freeze` or deep clone is required. The return value is already effectively immutable at the point it is handed off. If a capability needs a hold-over reference across async turns, a shallow copy of the top-level fields is sufficient.
+1. **Clone** every nested value that participates in query scope (`filters`, `accounts`, `scope`) using a deep-copy utility.
+2. **Freeze** the result recursively with `Object.freeze` on every nested object and array.
 
-**Minimal approved-scope type for capabilities:**
+`filters` is the most critical: it is the direct input to `queryTrades`. If it is not frozen, a capability that holds a reference and awaits an async turn can be surprised by a caller that mutated the original. `accounts` is the scope set used in `accountContext`. Both must be frozen.
+
+The approved scope is produced once, immediately after validation, before any data is read. No caller receives a mutable reference to it.
+
+**`FrozenApprovedScope` — runtime-immutable snapshot:**
 
 ```typescript
-type ApprovedScope = Readonly<{
+type FrozenApprovedScope = Readonly<{
   filters: Readonly<AnalysisFilters>;
   timeZone: string;
-  accounts: ReadonlyArray<{ id: string; name: string; currency: string }>;
+  accounts: ReadonlyArray<{
+    readonly id: string;
+    readonly name: string;
+    readonly currency: string;
+  }>;
   date?: string;
   question?: string;
   scope: Readonly<{ label: string; timeZone: string }>;
@@ -117,44 +126,99 @@ Evidence: `apps/web/src/server/ai-scope.ts:107-127` — return object constructe
 
 ## Step 3 — Minimum Capability Operations and Data Bounds
 
-### Capability 1: `askJournal(tradeQuery, question) → string`
+### Capability 1: `askJournal(tradeQuery, question) → AskJournalContext`
 
-| Field                           | Value                                                                                                                                        |
-| ------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------- |
-| **Accepted scope**              | `ApprovedScope` from `readAiRequest(…, "question")`                                                                                          |
-| **Data read**                   | `queryTrades(scope.filters)` → `AnnotatedTrade[]`                                                                                            |
-| **Transforms**                  | `computeMetrics`, `bySymbol/top-12`, `byWeekday`, `byHour`, `byDuration`, `byTag/top-12`, `byMistake/top-12`, `byPlaybook`, `accountContext` |
-| **Typed output**                | `string` (AI answer text)                                                                                                                    |
-| **Maximum result bound**        | `AI_FEATURE_POLICIES.reflection.maxOutputTokens = 1200`                                                                                      |
-| **Route consumer**              | `POST /api/ai/ask` (current) → capability (Phase 3 target)                                                                                   |
-| **No raw SQL**                  | `queryTrades` applies `matchesFilters` from `@luxalgo/journal-core`; no custom WHERE clause                                                  |
-| **No generic query language**   | Filters are whitelisted `AnalysisFilters`; no arbitrary key/value                                                                            |
-| **No writes**                   | Metrics are computed in-memory; no DB writes                                                                                                 |
-| **No provider/settings access** | Prompt string only; `runAi` resolves provider server-side                                                                                    |
+`askJournal` is the read-only data-preparation pipeline for the Ask route. It accepts a validated scope and returns a typed context object containing the pre-computed buckets, metrics, and account totals. The route retains prompt construction and the `runAi` call.
 
-### Capability 2: `dailyRecap(tradeQuery, date) → string`
+```typescript
+type AskJournalContext = Readonly<{
+  filters: Readonly<AnalysisFilters>;
+  metrics: ReturnType<typeof computeMetrics>;
+  buckets: {
+    bySymbol: ReturnType<typeof bySymbol>;
+    byWeekday: ReturnType<typeof byWeekday>;
+    byHour: ReturnType<typeof byHour>;
+    byDuration: ReturnType<typeof byDuration>;
+    byTag: ReturnType<typeof byTag>;
+    byMistake: ReturnType<typeof byMistake>;
+    byPlaybook: ReturnType<typeof byPlaybook>;
+  };
+  accountContext: ReturnType<typeof accountContext>;
+  scope: AskScope;
+}>;
 
-| Field                        | Value                                                                                                                                     |
-| ---------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------- |
-| **Accepted scope**           | `ApprovedScope` from `readAiRequest(…, "date")`                                                                                           |
-| **Data read**                | `queryTrades(scope.filters).trades` then `dayTrades = filter(closedAt → dayKeyOf === date)`                                               |
-| **Transforms**               | `computeMetrics(dayTrades, {tz})`, `accountContext(dayTrades, scope)`, note inclusion (only when `onlyDateFilters`)                       |
-| **Typed output**             | `string` (recap text)                                                                                                                     |
-| **Maximum result bound**     | `AI_FEATURE_POLICIES.reflection.maxOutputTokens = 1200`                                                                                   |
-| **Route consumer**           | `POST /api/ai/recap` (current) → capability (Phase 3 target)                                                                              |
-| **Note exclusion guarantee** | `onlyDateFilters` gate is checked before `journalDays.note` is read; a filtered subset (by account or symbol) never receives shared notes |
-| **No writes**                | Read-only                                                                                                                                 |
+type AskScope = Readonly<{
+  label: string;
+  timeZone: string;
+}>;
+```
 
-### Capability 3: `tradeCritique(tradeKey) → string`
+| Field                           | Value                                                                                                                   |
+| ------------------------------- | ----------------------------------------------------------------------------------------------------------------------- |
+| **Accepted scope**              | `FrozenApprovedScope` from `readAiRequest(…, "question")` (deep-frozen after validation)                                |
+| **Data read**                   | `queryTrades(scope.filters)` → `AnnotatedTrade[]`                                                                       |
+| **Transforms**                  | `computeMetrics`, `bySymbol`, `byWeekday`, `byHour`, `byDuration`, `byTag`, `byMistake`, `byPlaybook`, `accountContext` |
+| **Typed output**                | `AskJournalContext` (structured data; no raw trade list)                                                                |
+| **Route retains**               | `buildAskJournalPrompt`, `runAi`                                                                                        |
+| **No raw SQL**                  | `queryTrades` applies `matchesFilters` from `@luxalgo/journal-core`; no custom WHERE clause                             |
+| **No generic query language**   | Filters are whitelisted `AnalysisFilters`; no arbitrary key/value                                                       |
+| **No writes**                   | Metrics are computed in-memory; no DB writes                                                                            |
+| **No provider/settings access** | Prompt string only; `runAi` resolves provider server-side                                                               |
+
+### Capability 2: `dailyRecapContext(tradeQuery, date, existingNote?) → RecapContext`
+
+`dailyRecapContext` is the read-only data-preparation pipeline for the Recap route. It accepts the day-filtered trades and the already-authorized note (or `null`). The route retains the `onlyDateFilters` gate, the note database read, and the `runAi` call.
+
+```typescript
+type RecapContext = Readonly<{
+  date: string; // YYYY-MM-DD
+  metrics: ReturnType<typeof computeMetrics>;
+  tradeLines: TradeLine[]; // day-trades only
+  accountContext: ReturnType<typeof accountContext>;
+  existingNote: string | null; // null when onlyDateFilters is false
+  scope: RecapScope;
+}>;
+
+type RecapScope = Readonly<{
+  label: string;
+  timeZone: string;
+}>;
+```
+
+| Field                        | Value                                                                                                                                                               |
+| ---------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| **Accepted scope**           | `FrozenApprovedScope` from `readAiRequest(…, "date")` (deep-frozen after validation)                                                                                |
+| **Note read**                | **The capability does not read the database.** Route performs the `onlyDateFilters` guard, reads `journalDays.note` if authorized, and passes `existingNote: string | null` as a parameter. |
+| **Data read**                | `queryTrades(scope.filters).trades` then `dayTrades = filter(closedAt → dayKeyOf === date)`                                                                         |
+| **Transforms**               | `computeMetrics(dayTrades, {tz})`, `accountContext(dayTrades, scope)`                                                                                               |
+| **Typed output**             | `RecapContext` (structured data; no raw DB access)                                                                                                                  |
+| **Route retains**            | `onlyDateFilters` guard, `journalDays.note` read, `buildDailyRecapPrompt`, `runAi`                                                                                  |
+| **Note exclusion guarantee** | Gate is in the route; capability receives `null` for any non-date-only filter                                                                                       |
+| **No writes**                | Read-only                                                                                                                                                           |
+
+### Capability 3: `tradeCritiqueContext(tradeKey) → TradeCritiqueContext`
+
+`tradeCritiqueContext` is the read-only data-preparation pipeline for the Critique route. The route retains prompt construction and `runAi`.
+
+```typescript
+type TradeCritiqueContext = Readonly<{
+  trade: Trade; // hydrated via rowToTrade + settings.contractMultiplier
+  fills: Fill[]; // sorted by executedAt, scoped to trade.executionIds only
+  scope: CritiqueScope;
+}>;
+
+type CritiqueScope = Readonly<{
+  key: string; // the trade key; sole isolation boundary
+}>;
+```
 
 | Field                      | Value                                                                                                                   |
 | -------------------------- | ----------------------------------------------------------------------------------------------------------------------- |
 | **Accepted input**         | `string` trade key (primary key, validated non-empty)                                                                   |
 | **Data read**              | `getTradeByKey(key)` (one row, direct lookup, 404 if absent) + `listExecutions(accountId, executionIds)` (sorted fills) |
-| **Transforms**             | `rowToTrade` (hydrates `contractMultiplier` from settings), `buildTradeCritiquePrompt`                                  |
-| **Typed output**           | `string` (critique text)                                                                                                |
-| **Maximum result bound**   | `AI_FEATURE_POLICIES.reflection.maxOutputTokens = 1200`                                                                 |
-| **Route consumer**         | `POST /api/ai/critique` (current) → capability (Phase 3 target)                                                         |
+| **Transforms**             | `rowToTrade` (hydrates `contractMultiplier` from settings)                                                              |
+| **Typed output**           | `TradeCritiqueContext` (trade + fills; route builds prompt and calls `runAi`)                                           |
+| **Route retains**          | `buildTradeCritiquePrompt`, `runAi`                                                                                     |
 | **No account/date filter** | Trade key is the sole scope; no filter expansion possible                                                               |
 | **No writes**              | Read-only                                                                                                               |
 
@@ -173,12 +237,12 @@ Evidence: `apps/web/src/server/ai-scope.ts:107-127` — return object constructe
 
 ### Where No Explicit Bound Exists Today
 
-| Behaviour                  | Current constraint                                   | Smallest compatibility-preserving bound decision                                                                                                                          |
-| -------------------------- | ---------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| Trade count in Ask context | Unbounded; `queryTrades` returns all matching trades | Cap `trades` array at 10,000 before bucket computations; log a warning if truncated. Trades are already filtered by `filters` so the practical bound is the journal size. |
-| Bucket top-N               | `slice(0, 12)` hard-coded                            | Extract to a named constant `MAX_BUCKET_ITEMS = 12`; promote to `AI_FEATURE_POLICIES` if it needs runtime configuration                                                   |
-| Fill count in critique     | `executionIds.length` (unbounded)                    | Cap at 200 fills; a trade with more is pathological and would produce an unparseable prompt                                                                               |
-| `journalDays.note`         | Single string, no size constraint in DB schema       | No action needed; the note field is a user-authored string bounded by the editor                                                                                          |
+| Behaviour                  | Current constraint                                   | Smallest compatibility-preserving bound decision                                                                                                                         |
+| -------------------------- | ---------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| Trade count in Ask context | Unbounded; `queryTrades` returns all matching trades | No compatible cap exists today. An explicit user-visible behavior decision (truncate silently, error, or paginate) is required before any truncation logic can be added. |
+| Bucket top-N               | `slice(0, 12)` hard-coded                            | Extract to a named constant `MAX_BUCKET_ITEMS = 12`; promote to `AI_FEATURE_POLICIES` if it needs runtime configuration                                                  |
+| Fill count in critique     | `executionIds.length` (unbounded)                    | No compatible cap exists today. A trade with more fills is pathological; an explicit user-visible behavior decision is required before any bound can be added.           |
+| `journalDays.note`         | Single string, no size constraint in DB schema       | No action needed; the note field is a user-authored string bounded by the editor                                                                                         |
 
 ---
 
@@ -209,18 +273,23 @@ Evidence: `apps/web/src/server/ai-scope.ts:107-127` — return object constructe
 
 These tests exercise capability behaviour, not forwarding. They belong in `apps/web/tests/ai-capability.test.ts` (new file).
 
-| #   | Test name                                                     | What it exercises                                                                                                                                               |
-| --- | ------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| 1   | `askJournal rejects scope with unknown account id`            | Capabilities built from a tampered `ApprovedScope` (account id not in DB)                                                                                       |
-| 2   | `askJournal with zero trades returns error not empty string`  | Empty result is a 400, not a silent empty-prompt call                                                                                                           |
-| 3   | `askJournal applies top-N to each bucket independently`       | Bucket arrays are independently sliced; no cross-bucket bleed                                                                                                   |
-| 4   | `dailyRecap note excluded when filters contain account`       | `onlyDateFilters` gate fires correctly; note absent from prompt                                                                                                 |
-| 5   | `dailyRecap note included when filters are only from/to`      | Note included for date-only recap                                                                                                                               |
-| 6   | `dailyRecap returns 400 when no closed trades on that day`    | Empty day trades → 400, no AI call                                                                                                                              |
-| 7   | `tradeCritique returns 404 for unknown key`                   | Direct key lookup is the only guard                                                                                                                             |
-| 8   | `tradeCritique never sees fills from other trades`            | `executionIds` array is the only execution scope                                                                                                                |
-| 9   | `approvedScope filters cannot be widened after readAiRequest` | Mutating the returned `filters` object does not affect `queryTrades` output (demonstrate by freezing the filters snapshot — if freezing is adopted as standard) |
-| 10  | `askJournal timezone mismatch rejected`                       | `body.timeZone !== getTimeZone()` → error before any data read                                                                                                  |
+| #   | Test name                                                                       | What it exercises                                                                                                   |
+| --- | ------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------- |
+| 1   | `askJournal rejects scope with unknown account id`                              | Capabilities built from a tampered `FrozenApprovedScope` (account id not in DB)                                     |
+| 2   | `askJournal with zero trades returns error not empty string`                    | Empty result is a 400, not a silent empty-prompt call                                                               |
+| 3   | `askJournal applies top-N to each bucket independently`                         | Bucket arrays are independently sliced; no cross-bucket bleed                                                       |
+| 4   | `dailyRecap note excluded when filters contain account`                         | `onlyDateFilters` gate fires correctly; note absent from prompt                                                     |
+| 5   | `dailyRecap note included when filters are only from/to`                        | Note included for date-only recap                                                                                   |
+| 6   | `dailyRecap returns 400 when no closed trades on that day`                      | Empty day trades → 400, no AI call                                                                                  |
+| 7   | `tradeCritique returns 404 for unknown key`                                     | Direct key lookup is the only guard                                                                                 |
+| 8   | `tradeCritique never sees fills from other trades`                              | `executionIds` array is the only execution scope                                                                    |
+| 9   | `approvedScope filters cannot be widened after readAiRequest`                   | Deep-frozen snapshot prevents mutation; `queryTrades` output is unaffected by post-freeze mutations to the original |
+| 10  | `askJournal timezone mismatch rejected`                                         | `body.timeZone !== getTimeZone()` → error before any data read                                                      |
+| 11  | `askJournal with selected-account scope excludes unselected-account trades`     | Given two accounts A and B, Ask with scope A's filters never includes B's trades in any bucket or aggregate         |
+| 12  | `askJournal with selected-account scope excludes unselected-account totals`     | `accountContext` totals for unselected accounts are absent from the context object                                  |
+| 13  | `dailyRecap with selected-account scope excludes unselected-account trades`     | Given two accounts A and B, Recap with scope A's filters never includes B's trades in `tradeLines` or `metrics`     |
+| 14  | `dailyRecap with selected-account scope excludes unselected-account totals`     | `accountContext` totals for unselected accounts are absent from the context object                                  |
+| 15  | `dailyRecap note is null for multi-account scope even when from/to are present` | When scope includes multiple accounts (not `onlyDateFilters`), `existingNote` is `null` regardless of note content  |
 
 ---
 
@@ -228,14 +297,14 @@ These tests exercise capability behaviour, not forwarding. They belong in `apps/
 
 ### Safe Cutover Order
 
-**Phase 3 Task A — `tradeCritique` capability (simplest)**
-No `readAiRequest`, no filter, no account subset, no timezone. Input is one validated key. Cutover is a mechanical replacement of the inline body-reading + `buildTradeCritiquePrompt` + `runAi` sequence with a call to `tradeCritique(key)`. This is the lowest-risk cutover.
+**Phase 3 Task A — `tradeCritiqueContext` (simplest)**
+No `readAiRequest`, no filter, no account subset, no timezone. Input is one validated key. Cutover extracts the `getTradeByKey` + `listExecutions` + `rowToTrade` sequence into `tradeCritiqueContext(key)`. The route retains `buildTradeCritiquePrompt` and `runAi`. This is the lowest-risk cutover.
 
-**Phase 3 Task B — `dailyRecap` capability**
-Uses `readAiRequest(…, "date")`. Scope snapshot is already well-validated. Cutover replaces the `queryTrades` + filter chain with a `dailyRecap(tradeQuery, date)` call. The `onlyDateFilters` note gate must be preserved as an internal detail of the capability, not caller-controlled.
+**Phase 3 Task B — `dailyRecapContext`**
+Uses `readAiRequest(…, "date")`. Scope snapshot is deep-frozen after validation. Cutover extracts `queryTrades` + day-filter + `computeMetrics` + `accountContext` into `dailyRecapContext(tradeQuery, date, existingNote)`. The route retains the `onlyDateFilters` guard, the `journalDays.note` database read, `buildDailyRecapPrompt`, and `runAi`. Note authorization remains route-controlled.
 
-**Phase 3 Task C — `askJournal` capability**
-Uses `readAiRequest(…, "question")` with the full filter + account + bucket + context pipeline. This is the most complex cutover. It should be last.
+**Phase 3 Task C — `askJournal`**
+Uses `readAiRequest(…, "question")` with the full filter + account + bucket + context pipeline. Cutover extracts `queryTrades` + all bucket computations + `accountContext` into `askJournal(tradeQuery, question)`. The route retains `buildAskJournalPrompt` and `runAi`. This is the most complex cutover; it should be last.
 
 ### Phase 3 Ask-Journal Agent Loop Gate
 
