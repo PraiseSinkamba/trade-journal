@@ -46,13 +46,13 @@ Evidence: "Where No Explicit Bound Exists Today" table.
 
 **After:** Five new tests added as tests 11–15:
 
-| #   | Test name                                                                       | What it exercises                                                                                                  |
-| --- | ------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------ |
-| 11  | `askJournal with selected-account scope excludes unselected-account trades`     | Given two accounts A and B, Ask with scope A's filters never includes B's trades in any bucket or aggregate        |
-| 12  | `askJournal with selected-account scope excludes unselected-account totals`     | `accountContext` totals for unselected accounts are absent from the context object                                 |
-| 13  | `dailyRecap with selected-account scope excludes unselected-account trades`     | Given two accounts A and B, Recap with scope A's filters never includes B's trades in `tradeLines` or `metrics`    |
-| 14  | `dailyRecap with selected-account scope excludes unselected-account totals`     | `accountContext` totals for unselected accounts are absent from the context object                                 |
-| 15  | `dailyRecap note is null for multi-account scope even when from/to are present` | When scope includes multiple accounts (not `onlyDateFilters`), `existingNote` is `null` regardless of note content |
+| #   | Test name                                                                            | What it exercises                                                                                                       |
+| --- | ------------------------------------------------------------------------------------ | ----------------------------------------------------------------------------------------------------------------------- |
+| 11  | `askJournal with selected-account scope excludes unselected-account trades`          | Given two accounts A and B, Ask with scope A's filters never includes B's trades in any bucket or aggregate             |
+| 12  | `askJournal with selected-account scope excludes unselected-account totals`          | `accountContext` totals for unselected accounts are absent from the context object                                      |
+| 13  | `dailyRecap with selected-account scope excludes unselected-account trades`          | Given two accounts A and B, Recap with scope A's filters never includes B's trades in `tradeLines` or `metrics`         |
+| 14  | `dailyRecap with selected-account scope excludes unselected-account totals`          | `accountContext` totals for unselected accounts are absent from the context object                                      |
+| 15  | `dailyRecap note is undefined for multi-account scope even when from/to are present` | When scope includes multiple accounts (not `onlyDateFilters`), `existingNote` is `undefined` regardless of note content |
 
 Evidence: Step 4 Required New Deterministic Tests table.
 
