@@ -173,7 +173,7 @@ type AskScope = Readonly<{
 type RecapContext = Readonly<{
   date: string; // YYYY-MM-DD
   metrics: ReturnType<typeof computeMetrics>;
-  tradeLines: TradeLine[]; // day-trades only
+  tradeLines: string; // pre-formatted: "AccountName | Symbol Direction qty N | entry X → exit Y | net ±0.00 | held Nm" — one line per trade, same format buildDailyRecapPrompt consumes
   accountContext: ReturnType<typeof accountContext>;
   existingNote: string | null; // null when onlyDateFilters is false
   scope: RecapScope;
