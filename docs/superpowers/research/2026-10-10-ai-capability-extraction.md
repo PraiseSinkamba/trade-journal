@@ -68,7 +68,7 @@ Evidence: `apps/web/src/app/api/ai/critique/route.ts:12-43`, `apps/web/src/serve
 
 | Side effect                      | Location                        | Reason it cannot enter a capability                                                                |
 | -------------------------------- | ------------------------------- | -------------------------------------------------------------------------------------------------- |
-| `journalDays.note` read          | `recap/route.ts`                | Shared across accounts; gated by `onlyDateFilters`. Route reads note, passes `existingNote: string | null` to capability; capability has no DB access. |
+| `journalDays.note` read          | `recap/route.ts`                | Shared across accounts; gated by `onlyDateFilters`. Route reads note, passes `existingNote: string | undefined` to capability; capability has no DB access. |
 | Trade writes / execution inserts | `executions.ts`                 | Write path not part of Phase 2                                                                     |
 | Provider / API key resolution    | `ai-settings.ts`, `settings.ts` | Provider boundary is `runTextAi` / `runObjectAi`                                                   |
 | Import schema / preview token    | `ai-import.ts`                  | Separate feature with its own workflow                                                             |
@@ -165,7 +165,7 @@ type AskScope = Readonly<{
 | **No writes**                   | Metrics are computed in-memory; no DB writes                                                                            |
 | **No provider/settings access** | Prompt string only; `runAi` resolves provider server-side                                                               |
 
-### Capability 2: `dailyRecapContext(scope: FrozenApprovedScope, date: string, existingNote: string | null) → RecapContext`
+### Capability 2: `dailyRecapContext(scope: FrozenApprovedScope, date: string, existingNote: string | undefined) → RecapContext`
 
 `dailyRecapContext` is the read-only data-preparation pipeline for the Recap route. It accepts a frozen scope snapshot, the target date, and the already-route-authorized note (or `null` when not authorized). The capability calls `queryTrades(scope.filters)` internally; callers never pass a trade query object. The route retains the `onlyDateFilters` gate, the note database read, and the `runAi` call.
 
@@ -175,7 +175,7 @@ type RecapContext = Readonly<{
   metrics: ReturnType<typeof computeMetrics>;
   tradeLines: string; // pre-formatted: "AccountName | Symbol Direction qty N | entry X → exit Y | net ±0.00 | held Nm" — one line per trade, same format buildDailyRecapPrompt consumes
   accountContext: ReturnType<typeof accountContext>;
-  existingNote: string | null; // null when onlyDateFilters is false
+  existingNote: string | undefined; // null when onlyDateFilters is false
   scope: RecapScope;
 }>;
 
@@ -188,7 +188,7 @@ type RecapScope = Readonly<{
 | Field                        | Value                                                                                                                                                               |
 | ---------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | **Accepted scope**           | `FrozenApprovedScope` from `readAiRequest(…, "date")` (deep-frozen after validation)                                                                                |
-| **Note read**                | **The capability does not read the database.** Route performs the `onlyDateFilters` guard, reads `journalDays.note` if authorized, and passes `existingNote: string | null` as a parameter. |
+| **Note read**                | **The capability does not read the database.** Route performs the `onlyDateFilters` guard, reads `journalDays.note` if authorized, and passes `existingNote: string | undefined` as a parameter. |
 | **Data read**                | `queryTrades(scope.filters).trades` then `dayTrades = filter(closedAt → dayKeyOf === date)`                                                                         |
 | **Transforms**               | `computeMetrics(dayTrades, {tz})`, `accountContext(dayTrades, scope)`                                                                                               |
 | **Typed output**             | `RecapContext` (structured data; no raw DB access)                                                                                                                  |
@@ -301,7 +301,7 @@ These tests exercise capability behaviour, not forwarding. They belong in `apps/
 No `readAiRequest`, no filter, no account subset, no timezone. Input is one validated key. Cutover extracts the `getTradeByKey` + `listExecutions` + `rowToTrade` sequence into `tradeCritiqueContext(key)`. The route retains `buildTradeCritiquePrompt` and `runAi`. This is the lowest-risk cutover.
 
 **Phase 3 Task B — `dailyRecapContext`**
-Uses `readAiRequest(…, "date")`. Scope snapshot is deep-frozen after validation. Cutover extracts `queryTrades` + day-filter + `computeMetrics` + `accountContext` into `dailyRecapContext(scope: FrozenApprovedScope, date: string, existingNote: string | null)`. The capability internally calls `queryTrades(scope.filters)`. The route retains the `onlyDateFilters` guard, the `journalDays.note` database read, `buildDailyRecapPrompt`, and `runAi`. Note authorization remains route-controlled.
+Uses `readAiRequest(…, "date")`. Scope snapshot is deep-frozen after validation. Cutover extracts `queryTrades` + day-filter + `computeMetrics` + `accountContext` into `dailyRecapContext(scope: FrozenApprovedScope, date: string, existingNote: string | undefined)`. The capability internally calls `queryTrades(scope.filters)`. The route retains the `onlyDateFilters` guard, the `journalDays.note` database read, `buildDailyRecapPrompt`, and `runAi`. Note authorization remains route-controlled.
 
 **Phase 3 Task C — `askJournal`**
 Uses `readAiRequest(…, "question")` with the full filter + account + bucket + context pipeline. Cutover extracts `queryTrades` + all bucket computations + `accountContext` into `askJournal(scope: FrozenApprovedScope, question: string)`. The capability internally calls `queryTrades(scope.filters)`. The route retains `buildAskJournalPrompt` and `runAi`. This is the most complex cutover; it should be last.

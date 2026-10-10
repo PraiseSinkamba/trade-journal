@@ -1,6 +1,7 @@
 # Task 1 Fix Report: Apply Critical/Important Review Findings
 
 ## Status
+
 **Complete.** All 5 review findings addressed. Research record corrected and committed.
 
 ---
@@ -27,7 +28,7 @@ Evidence: Step 2 Approved Scope section.
 
 **Before:** The capability table for `dailyRecap` implied the capability reads the database by stating "note inclusion (only when `onlyDateFilters`)" as a transform it performs.
 
-**After:** The capability receives `existingNote: string | null` as a parameter. The table's "Data read" row no longer mentions the note. A dedicated paragraph in the capability description states the route performs the `onlyDateFilters` guard, reads `journalDays.note` if authorized, and passes `existingNote` to the capability. The "What Stays Outside Every Capability" table row for the note read was updated to clarify the route → capability handoff pattern.
+**After:** The capability receives `existingNote: string | undefined` as a parameter. The table's "Data read" row no longer mentions the note. A dedicated paragraph in the capability description states the route performs the `onlyDateFilters` guard, reads `journalDays.note` if authorized, and passes `existingNote` to the capability. The "What Stays Outside Every Capability" table row for the note read was updated to clarify the route → capability handoff pattern.
 
 Evidence: Step 1 data paths table; Capability 2 description; Step 3 capability table.
 
@@ -41,17 +42,17 @@ Evidence: "Where No Explicit Bound Exists Today" table.
 
 ### Finding 5 — Added deterministic selected-account exclusion tests
 
-**Before:** Required tests 1–10 covered malformed scope, key scope, empty result, and timezone. No tests proved that a *valid* selected-account scope actually excludes other accounts' data.
+**Before:** Required tests 1–10 covered malformed scope, key scope, empty result, and timezone. No tests proved that a _valid_ selected-account scope actually excludes other accounts' data.
 
 **After:** Five new tests added as tests 11–15:
 
-| # | Test name | What it exercises |
-|---|-----------|-------------------|
-| 11 | `askJournal with selected-account scope excludes unselected-account trades` | Given two accounts A and B, Ask with scope A's filters never includes B's trades in any bucket or aggregate |
-| 12 | `askJournal with selected-account scope excludes unselected-account totals` | `accountContext` totals for unselected accounts are absent from the context object |
-| 13 | `dailyRecap with selected-account scope excludes unselected-account trades` | Given two accounts A and B, Recap with scope A's filters never includes B's trades in `tradeLines` or `metrics` |
-| 14 | `dailyRecap with selected-account scope excludes unselected-account totals` | `accountContext` totals for unselected accounts are absent from the context object |
-| 15 | `dailyRecap note is null for multi-account scope even when from/to are present` | When scope includes multiple accounts (not `onlyDateFilters`), `existingNote` is `null` regardless of note content |
+| #   | Test name                                                                       | What it exercises                                                                                                  |
+| --- | ------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------ |
+| 11  | `askJournal with selected-account scope excludes unselected-account trades`     | Given two accounts A and B, Ask with scope A's filters never includes B's trades in any bucket or aggregate        |
+| 12  | `askJournal with selected-account scope excludes unselected-account totals`     | `accountContext` totals for unselected accounts are absent from the context object                                 |
+| 13  | `dailyRecap with selected-account scope excludes unselected-account trades`     | Given two accounts A and B, Recap with scope A's filters never includes B's trades in `tradeLines` or `metrics`    |
+| 14  | `dailyRecap with selected-account scope excludes unselected-account totals`     | `accountContext` totals for unselected accounts are absent from the context object                                 |
+| 15  | `dailyRecap note is null for multi-account scope even when from/to are present` | When scope includes multiple accounts (not `onlyDateFilters`), `existingNote` is `null` regardless of note content |
 
 Evidence: Step 4 Required New Deterministic Tests table.
 
@@ -60,12 +61,14 @@ Evidence: Step 4 Required New Deterministic Tests table.
 ## Test Evidence
 
 ### Test Command
+
 ```
 pnpm test apps/web/tests/ai-scope.test.ts apps/web/tests/ai-ui.test.ts apps/web/tests/ai-runtime.test.ts
 pnpm exec prettier --check docs/superpowers/research/2026-10-10-ai-capability-extraction.md
 ```
 
 ### Test Output (60/60 passing)
+
 ```
  RUN  v3.2.7 E:/4004/orca/trade-journal
 
@@ -79,6 +82,7 @@ pnpm exec prettier --check docs/superpowers/research/2026-10-10-ai-capability-ex
 ```
 
 ### Prettier Output
+
 ```
 Checking formatting...
 All matched files use Prettier code style!
@@ -135,9 +139,11 @@ All matched files use Prettier code style!
 **Problem:** The `RecapContext` type in the research record declared `tradeLines: TradeLine[]` — a type that is never defined in the document and does not match what `buildDailyRecapPrompt` accepts.
 
 **Source truth:** `buildDailyRecapPrompt` takes `tradeLines: string` (`DailyRecapPromptInput.tradeLines: string`). The string format, built in the recap route, is:
+
 ```
 "AccountName | Symbol Direction qty N | entry X → exit Y | net ±0.00 | held Nm"
 ```
+
 —one line per trade, already a formatted string. No `TradeLine` interface exists in the codebase.
 
 **Fix applied:** `RecapContext.tradeLines` is now typed as `string` with an inline comment describing the exact format, matching what `buildDailyRecapPrompt` consumes. Zero source or test files were modified.
@@ -163,4 +169,5 @@ All matched files use Prettier code style!
 ```
 
 ### Changed Files
+
 - `docs/superpowers/research/2026-10-10-ai-capability-extraction.md` (type corrected, Prettier clean)
