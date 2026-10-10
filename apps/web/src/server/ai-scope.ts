@@ -9,6 +9,28 @@ import { describeFilters } from "@/lib/filter-description";
 import { requireValue } from "./api";
 import { getTimeZone } from "./settings";
 
+/** Recursively freeze a value in place. */
+export function deepFreeze<T>(value: T): T {
+  if (value === null || typeof value !== "object") return value;
+  if (Object.isFrozen(value)) return value;
+  Object.freeze(value);
+  for (const key of Object.keys(value as object)) {
+    deepFreeze((value as Record<string, unknown>)[key]);
+  }
+  return value;
+}
+
+/** Deep-frozen snapshot of the validated AI request scope. */
+export type FrozenApprovedScope = Readonly<{
+  filters: Readonly<Record<string, string>>;
+  timeZone: string;
+  accounts: ReadonlyArray<{ id: string; name: string; currency: string }>;
+  question: string;
+  date: string | undefined;
+  scope: Readonly<{ label: string; timeZone: string }>;
+  context: string;
+}>;
+
 export function isDay(value: unknown): value is string {
   return (
     typeof value === "string" &&
@@ -115,7 +137,7 @@ export function readAiRequest(value: unknown, field: "question" | "date") {
     ]
       .filter(Boolean)
       .join(" · ");
-  return {
+  return deepFreeze({
     filters,
     timeZone,
     accounts: selectedAccounts,
@@ -123,10 +145,10 @@ export function readAiRequest(value: unknown, field: "question" | "date") {
     date: date as string | undefined,
     scope: { label: label(true), timeZone },
     context: `Journal scope: ${label(false)}. Only the filtered data below is available. Do not infer results for excluded accounts or dates.`,
-  };
+  });
 }
 
-export function accountContext(trades: AnnotatedTrade[], scope: ReturnType<typeof readAiRequest>) {
+export function accountContext(trades: AnnotatedTrade[], scope: FrozenApprovedScope) {
   return (
     "By account (amounts in each account's currency; no currency conversion):\n" +
     scope.accounts
