@@ -1,6 +1,7 @@
 # Task 1.2 Review Package
 
 ## Commit
+
 - Range: `5a1f0c7..2538e6b`
 - Subject: `feat(importers): propagate skip reasons through rowsToFills consumers`
 - Stat: 4 files, +29/-19
@@ -16,6 +17,7 @@
 
 ```markdown
 ### Task 1.2: Update `rowsToFills` to emit reasons
+
 ...
 returns { executions, skippedRows, skippedReasons: SkippedReason[] }
 ```
@@ -23,7 +25,14 @@ returns { executions, skippedRows, skippedReasons: SkippedReason[] }
 ## Key diff (fills.ts loop body)
 
 ```ts
-if (!symbolRaw || !side || !executedAt || !Number.isFinite(quantity) || quantity <= 0 || !Number.isFinite(price)) {
+if (
+  !symbolRaw ||
+  !side ||
+  !executedAt ||
+  !Number.isFinite(quantity) ||
+  quantity <= 0 ||
+  !Number.isFinite(price)
+) {
   skippedRows++;
   const reason = !symbolRaw
     ? "missing symbol"

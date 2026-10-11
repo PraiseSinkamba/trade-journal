@@ -19,6 +19,7 @@ export const rowsToFills = (
 ```
 
 Key changes:
+
 - Refactored `for (const row of records)` → `for (let i = 0; i < records.length; i++)` to capture 1-based row index
 - `skippedReasons` array accumulates `{ row: i + 2, reason: string }` entries
 - Reasons: "row did not match the format filter", "missing symbol", "unrecognised side value", "unparseable timestamp", "non-positive quantity", "non-positive price"
@@ -27,6 +28,7 @@ Key changes:
 ## Consumer diffs
 
 **generic.ts** — destructure and forward:
+
 ```diff
 - const { executions, skippedRows } = rowsToFills(...)
 + const { executions, skippedRows, skippedReasons } = rowsToFills(...)
@@ -35,6 +37,7 @@ Key changes:
 ```
 
 **ninjatrader.ts** — accumulate in local array, push to return:
+
 ```diff
 + const skippedReasons: SkippedReason[] = [];
   ...
@@ -45,6 +48,7 @@ Key changes:
 ```
 
 **thinkorswim.ts** — destructure and forward + early-return fix:
+
 ```diff
 - const { executions, skippedRows } = rowsToFills(...)
 + const { executions, skippedRows, skippedReasons } = rowsToFills(...)
@@ -56,6 +60,7 @@ Key changes:
 ## Typecheck result
 
 Expected failures remain in unfilled files (Tasks 1.3+):
+
 - `history.ts` — 2 errors
 - `ibkr.ts` — 2 errors
 - `metatrader.ts` — 1 error

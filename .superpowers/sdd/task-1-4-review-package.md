@@ -1,6 +1,7 @@
 # Task 1.4 Review Package
 
 ## Commit
+
 - Range: `8497a92..471e9fb`
 - Subject: `feat(importers): propagate skip reasons through history adapters and parseHistory`
 - Stat: 8 files, +55/-11
@@ -20,7 +21,7 @@
 
 `filterByStatus` in generic.ts pushes ONE aggregate reason for N filtered rows (since it doesn't track individual row indices). Result: when status-filtered rows exist, `skippedReasons.length < skippedRows`. The `AdapterParseResult.skippedReasons` JSDoc says length equals skippedRows (inherited from `ParsedImport.skippedReasons`).
 
-The UI side: import/page.tsx renders the disclosure as "N rows skipped — M detailed". When M=1 and N=12, the user sees an honest "12 rows skipped, 1 detailed (non-filled status...)". 
+The UI side: import/page.tsx renders the disclosure as "N rows skipped — M detailed". When M=1 and N=12, the user sees an honest "12 rows skipped, 1 detailed (non-filled status...)".
 
 ## Implementer report path
 

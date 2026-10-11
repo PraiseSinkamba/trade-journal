@@ -23,6 +23,7 @@ Row number is `i + 2` (1-based, accounting for the CSV header at line 1).
 `packages/importers/src/formats/ninjatrader.ts`: **0 errors** ✓
 
 Pre-existing diagnostics in unfilled files (unchanged from Task 1.2 baseline):
+
 - `history.ts` — TS2741 + TS2322
 - `ibkr.ts` — TS2741 (×2)
 - `metatrader.ts` — TS2741
