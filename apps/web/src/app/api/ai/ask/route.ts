@@ -1,18 +1,17 @@
 import { bad, handler, ok } from "@/server/api";
 import { askJournalContext } from "@/server/ai-capabilities";
 import { readAiRequest } from "@/server/ai-scope";
-import { runAi } from "@/server/ai";
-import { buildAskJournalPrompt } from "@/server/ai-prompts";
+import { runAskJournalAi } from "@/server/ai";
 
 /**
- * "Ask your journal" — natural-language questions answered from the trader's
- * own aggregates. The same questions an agent can ask through the MCP tools.
+ * "Ask your journal" starts from aggregates, then runs one bounded read-only
+ * agent execution over the frozen route-created scope.
  */
 export const POST = handler(async (request: Request) => {
   const scope = readAiRequest(await request.json(), "question");
   const result = await askJournalContext(scope);
   if ("error" in result) return bad(result.error);
   const { context, scope: resolvedScope } = result;
-  const answer = await runAi(buildAskJournalPrompt({ question: resolvedScope.question!, context }));
+  const answer = await runAskJournalAi(resolvedScope, context);
   return ok({ answer, scope: resolvedScope.scope });
 });

@@ -17,8 +17,14 @@ The current AI surface in this repository is the **server-only execution foundat
 - `AI_FEATURE_POLICIES` fixes the per-feature `maxOutputTokens`,
   `maxRetries`, and optional `timeoutMs`. `statementImport` is
   `maxRetries: 0` and time-bounded at 120 seconds; `reflection` is
-  bounded for `maxOutputTokens` and `maxRetries`. The closed `AiFeature`
-  union prevents unreviewed features from inheriting unsafe defaults.
+  bounded for `maxOutputTokens`; `askJournalAgent` is time-bounded and
+  additionally fixes four model steps and four tool calls. The closed
+  `AiFeature` union prevents unreviewed features from inheriting unsafe defaults.
+- Ask Journal runs one provider-neutral, read-only tool loop over the immutable
+  route-created account/filter/timezone scope. It starts with the aggregate
+  context, then can request that same summary, up to five scoped trade summaries,
+  or one verified scoped trade with up to fifty fills. Tool inputs cannot choose
+  accounts, filters, dates, timezone, provider, model, or settings.
 - Errors are normalized to `AiRuntimeError` with safe, user-facing
   categories (`missing_key`, `authentication`, `billing`, `rate_limited`,
   `model_unavailable`, `timeout`, `provider`). Raw provider response text
@@ -33,10 +39,10 @@ The current AI surface in this repository is the **server-only execution foundat
   foundation adds a server-only execution boundary **on top of** that
   privacy boundary; it does not relax it.
 
-## Future assistant/UI/tool work (not in this foundation)
+## Future assistant/UI architecture (not in this foundation)
 
-The contextual assistant, scoped sessions, draft cards, side-sheet UI, and
-bounded read-only tools described in
+The contextual assistant, scoped sessions, draft cards, and side-sheet UI
+described in
 `docs/superpowers/specs/2026-10-08-contextual-ai-workspace-design.md`
 remain intentionally out of scope. They will land in a later plan and must
 re-validate the foundation checklist rather than assume any of it.
@@ -59,9 +65,13 @@ Successful responses retain `answer` or `recap` and add `scope: { label, timeZon
 
 ## Verification without an AI connection
 
-Run `pnpm test apps/web/tests/ai-scope.test.ts apps/web/tests/ai-ui.test.ts apps/web/tests/ai-feedback.test.ts`.
+Run `pnpm test apps/web/tests/ai-ask-agent.test.ts apps/web/tests/ai-scope.test.ts apps/web/tests/ai-runtime.test.ts apps/web/tests/ai-ui.test.ts apps/web/tests/ai-feedback.test.ts`.
 
-The route tests use an isolated SQLite database and replace only `runAi`, recording the exact context from the real handlers. The fixture has Account A at +10 and Account B at -50; A alone must contain no B trade data, while a combined selection reports -40 and the separate account totals. Tests cover each supported filter, invalid selections, empty results, local-midnight boundaries, overnight time windows, shared notes and single-trade critique.
+The route and Ask-agent tests use an isolated SQLite database. They prove that
+every tool read remains inside the selected account/date/filter scope, unsupported
+arguments expose no journal data, fabricated or excluded keys cannot reveal a
+trade, and tools do not write journal rows. Runtime tests verify the finite
+step/tool-call policy and the single provider-neutral tool-loop invocation.
 
 The React DOM tests use controlled delayed responses to exercise the actual Ask component and daily journal page. They verify outgoing filter snapshots, scope labels, account/date/timezone changes, returning to an earlier scope, obsolete errors, duplicate clicks, retries, unmounting and edits made while a recap is pending.
 

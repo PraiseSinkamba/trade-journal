@@ -29,7 +29,7 @@ OpenAI `store: false` and any other provider-specific options live in `apps/web/
 
 ### Feature policy and prompt versions
 
-Every feature declares its policy in `AI_FEATURE_POLICIES` and its prompt version in `AI_PROMPT_VERSIONS` (in `ai-contracts.ts`). The runtime applies `maxOutputTokens`, `maxRetries`, and `timeoutMs`; `statementImport` is `maxRetries: 0` and time-bounded at 120 seconds. New features must add a typed entry to both maps before any code calls the runtime.
+Every feature declares its policy in `AI_FEATURE_POLICIES` and its prompt version in `AI_PROMPT_VERSIONS` (in `ai-contracts.ts`). The runtime applies `maxOutputTokens`, `maxRetries`, and `timeoutMs`; `statementImport` is `maxRetries: 0` and time-bounded at 120 seconds. Ask Journal is the sole tool-using flow: it fixes four model steps and four scope-bound read-only tool calls. New features must add a typed entry to both maps before any code calls the runtime.
 
 ### Prompt location
 
@@ -51,7 +51,7 @@ const { output, meta } = await runTextAi({
 
 ### Runtime invocation shape
 
-Routes and adapters call the runtime; they never call the Vercel AI SDK directly. `runTextAi` returns `{ output: string, meta: AiExecutionMeta }`; `runObjectAi` returns `{ output: T, meta: AiExecutionMeta }` for structured extraction. The runtime sets the provider options, policy, timeout, and error mapping. Pass `AbortSignal.timeout(...)` (composed with the request signal via `AbortSignal.any`) for bounded features.
+Routes and adapters call the runtime; they never call the Vercel AI SDK directly. `runTextAi` returns `{ output: string, meta: AiExecutionMeta }`; `runObjectAi` returns `{ output: T, meta: AiExecutionMeta }` for structured extraction; `runAskAgentAi` performs the one bounded Ask Journal loop. The runtime sets the provider options, policy, timeout, and error mapping. Agent tools are closures over the route-created `FrozenApprovedScope`, may only narrow existing data, and must not call raw database APIs or write.
 
 ### Error Translation — `AiRuntimeError`
 
@@ -82,7 +82,7 @@ Every AI feature returns a typed result object. **Never return free-form text th
 
 ### Redacted execution metadata
 
-`AiExecutionMeta` is the only metadata surfaced to server callers: feature ID, provider, model ID, prompt version, duration, finish reason, input/output tokens, retry count. Prompt text, response text, and key material must never appear in metadata, logs, drafts, or traces.
+`AiExecutionMeta` is the only metadata surfaced to server callers: feature ID, provider, model ID, prompt version, duration, finish reason, input/output tokens, retry count, and (for Ask Journal) step/tool-call counts. Prompt text, response text, journal data, and key material must never appear in metadata, logs, drafts, or traces.
 
 ### Import safety
 
@@ -90,9 +90,9 @@ Import is the existing extraction → validation → human review → commit wor
 
 ---
 
-## Future assistant/UI/tool architecture (not implemented)
+## Future assistant/UI architecture (not implemented)
 
-The contextual assistant, scoped sessions, action/draft cards, side-sheet UI, and bounded read-only tools in `docs/superpowers/specs/2026-10-08-contextual-ai-workspace-design.md` are a future design, not current code. They will land in a separate plan and must re-validate the current requirements above. Specifically, the future architecture will need:
+The contextual assistant, scoped sessions, action/draft cards, and side-sheet UI in `docs/superpowers/specs/2026-10-08-contextual-ai-workspace-design.md` are future design work, not current code. They will land in a separate plan and must re-validate the current requirements above. Specifically, the future architecture will need:
 
 - **Streaming** responses with `ReadableStream`, backpressure, and per-chunk cancellation. Abort the underlying request on client disconnect.
 - **Per-request and session token budgets** read from the encrypted settings store (`maxTokens` per request, `sessionBudget` per session). Enforce a hard cap even when settings are misconfigured.

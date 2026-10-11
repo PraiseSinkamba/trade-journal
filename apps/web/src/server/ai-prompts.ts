@@ -45,11 +45,16 @@ Be direct and specific like a good trading coach: name the behavior, cite the nu
 say what to keep and what to fix. No platitudes, no disclaimers about trading being risky —
 the trader knows. Keep it tight.`;
 
+/**
+ * Build the initial Ask-agent prompt. The aggregate is visible immediately;
+ * the model may request the bounded read-only tools for specific trade context.
+ */
 export const buildAskJournalPrompt = (input: AskJournalPromptInput): string =>
-  `Answer the trader's question using ONLY these aggregates from their journal. If the data
+  `Answer the trader's question using ONLY this aggregate journal context and any data returned by the read-only journal tools. If the data
 can't answer it, say exactly what's missing (e.g. "tag your trades' stops to get R stats").
-Cite the numbers you used. Under 200 words.
+Cite the numbers you used. Under 200 words. Do not infer results for excluded accounts or dates.
 
+Initial aggregate context:
 ${input.context}
 
 Question: ${input.question}`;

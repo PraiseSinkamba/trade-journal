@@ -31,7 +31,7 @@ export async function askJournalContext(
 ): Promise<{ error: string } | { context: string; scope: FrozenApprovedScope }> {
   const { question, timeZone, filters } = scope;
 
-  const { trades } = queryTrades(filters);
+  const { trades } = queryTrades(filters, timeZone);
   if (trades.length === 0) return { error: "No trades match the selected accounts and filters" };
 
   const m = computeMetrics(trades, { timeZone });
@@ -105,9 +105,7 @@ fees ${metrics.fees.toFixed(2)}.`,
 }
 
 /** Trade critique capability — returns null when no trade matches the key. */
-export async function tradeCritiqueContext(
-  key: string,
-): Promise<null | {
+export async function tradeCritiqueContext(key: string): Promise<null | {
   trade: {
     symbol: string;
     direction: string;

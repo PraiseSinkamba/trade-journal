@@ -4,19 +4,23 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { eq } from "drizzle-orm";
 import { FILTER_KEYS } from "@luxalgo/journal-core";
+import { db, accounts, executions, trades, settings, journalDays } from "../src/db";
+import { insertExecutions } from "../src/server/executions";
+import { setSetting } from "../src/server/settings";
+import { queryTrades } from "../src/server/trades-query";
+import { runAi, runAskJournalAi } from "../src/server/ai";
+import { POST as ask } from "../src/app/api/ai/ask/route";
+import { POST as recap } from "../src/app/api/ai/recap/route";
+import { GET as day } from "../src/app/api/journal/[date]/route";
 
-vi.mock("@/server/ai", () => ({ runAi: vi.fn(async () => "Controlled AI response") }));
+const { mockAskJournalAi, mockRunAi } = vi.hoisted(() => ({
+  mockAskJournalAi: vi.fn(async () => "Controlled AI response"),
+  mockRunAi: vi.fn(async () => "Controlled AI response"),
+}));
+vi.mock("@/server/ai", () => ({ runAi: mockRunAi, runAskJournalAi: mockAskJournalAi }));
 const originalDir = process.env.JOURNAL_DATA_DIR;
 const scratch = mkdtempSync(join(tmpdir(), "journal-ai-scope-"));
 process.env.JOURNAL_DATA_DIR = scratch;
-const { db, accounts, executions, trades, settings, journalDays } = await import("../src/db");
-const { insertExecutions } = await import("../src/server/executions");
-const { setSetting } = await import("../src/server/settings");
-const { queryTrades } = await import("../src/server/trades-query");
-const { runAi } = await import("../src/server/ai");
-const { POST: ask } = await import("../src/app/api/ai/ask/route");
-const { POST: recap } = await import("../src/app/api/ai/recap/route");
-const { GET: day } = await import("../src/app/api/journal/[date]/route");
 const request = (body: unknown) =>
   new Request("http://localhost/api/ai/test", {
     method: "POST",
@@ -41,7 +45,13 @@ const fills = (symbol: string, exit: number, date = "2026-09-15") => [
     executedAt: date + "T10:00:00Z",
   },
 ];
-const prompt = () => vi.mocked(runAi).mock.calls.at(-1)![0];
+const prompt = () => {
+  const directCall = vi.mocked(runAi).mock;
+  const agentCall = vi.mocked(runAskJournalAi).mock;
+  const directOrder = directCall.invocationCallOrder.at(-1) ?? 0;
+  const agentOrder = agentCall.invocationCallOrder.at(-1) ?? 0;
+  return directOrder > agentOrder ? directCall.calls.at(-1)![0] : agentCall.calls.at(-1)![1];
+};
 beforeEach(() => {
   vi.stubEnv("JOURNAL_PASSWORD", "");
   db.delete(trades).run();
@@ -63,6 +73,7 @@ beforeEach(() => {
   insertExecutions("b", fills("ONLY_B", 50), "manual");
   setSetting("timeZone", "UTC");
   vi.mocked(runAi).mockClear();
+  vi.mocked(runAskJournalAi).mockClear();
 });
 afterAll(() => {
   db.$client.close();
@@ -83,6 +94,20 @@ it.each([
   expect(prompt()).not.toContain("ONLY_B");
   expect(prompt()).not.toContain("-40.00");
   expect((await response.json()).scope.label).toContain("Account A");
+});
+
+it("runs exactly one Ask agent execution and preserves the Ask response shape", async () => {
+  const response = await ask(
+    request({ question: "How did I do?", filters: { accounts: "a" }, timeZone: "UTC" }),
+  );
+
+  expect(response.status).toBe(200);
+  expect(await response.json()).toEqual({
+    answer: "Controlled AI response",
+    scope: expect.objectContaining({ timeZone: "UTC" }),
+  });
+  expect(runAskJournalAi).toHaveBeenCalledTimes(1);
+  expect(runAi).not.toHaveBeenCalled();
 });
 
 it.each(["ask", "recap"])(

@@ -21,15 +21,17 @@ the trader knows. Keep it tight.`);
 });
 
 describe("buildAskJournalPrompt", () => {
-  it("matches the verbatim ask template (question + context block)", () => {
+  it("gives the Ask agent initial aggregates and read-only tool guidance", () => {
     const input: AskJournalPromptInput = {
       question: "What is my edge?",
       context: "FIXTURE_CONTEXT_BLOCK",
     };
-    expect(buildAskJournalPrompt(input)).toBe(`Answer the trader's question using ONLY these aggregates from their journal. If the data
+    expect(buildAskJournalPrompt(input))
+      .toBe(`Answer the trader's question using ONLY this aggregate journal context and any data returned by the read-only journal tools. If the data
 can't answer it, say exactly what's missing (e.g. "tag your trades' stops to get R stats").
-Cite the numbers you used. Under 200 words.
+Cite the numbers you used. Under 200 words. Do not infer results for excluded accounts or dates.
 
+Initial aggregate context:
 FIXTURE_CONTEXT_BLOCK
 
 Question: What is my edge?`);
@@ -46,7 +48,8 @@ describe("buildDailyRecapPrompt", () => {
       metricsLine: "FIXTURE_METRICS_LINE",
       existingNote: "FIXTURE_NOTE",
     };
-    expect(buildDailyRecapPrompt(input)).toBe(`Write a session recap for 2026-09-15 in first person ("I"), 120-200 words, markdown with a
+    expect(buildDailyRecapPrompt(input))
+      .toBe(`Write a session recap for 2026-09-15 in first person ("I"), 120-200 words, markdown with a
 short "**Keep**" and "**Fix**" list at the end.
 
 FIXTURE_SCOPE_CONTEXT
@@ -71,7 +74,8 @@ FIXTURE_NOTE`);
       metricsLine: "FIXTURE_METRICS_LINE",
       existingNote: undefined,
     };
-    expect(buildDailyRecapPrompt(input)).toBe(`Write a session recap for 2026-09-15 in first person ("I"), 120-200 words, markdown with a
+    expect(buildDailyRecapPrompt(input))
+      .toBe(`Write a session recap for 2026-09-15 in first person ("I"), 120-200 words, markdown with a
 short "**Keep**" and "**Fix**" list at the end.
 
 FIXTURE_SCOPE_CONTEXT
@@ -106,7 +110,8 @@ describe("buildTradeCritiquePrompt", () => {
       },
       fills: ["2026-09-15T09:00:00Z buy 1 @ 100", "2026-09-15T10:00:00Z sell 1 @ 112"],
     };
-    expect(buildTradeCritiquePrompt(input)).toBe(`Critique this single trade in under 150 words. Focus on execution quality visible in the
+    expect(buildTradeCritiquePrompt(input))
+      .toBe(`Critique this single trade in under 150 words. Focus on execution quality visible in the
 fills (entry clustering, scaling, exit discipline), risk (stop honored or not, R multiple),
 and the trader's own tags/mistakes. End with one concrete instruction for the next
 occurrence of this setup.

@@ -8,7 +8,11 @@ import { insertExecutions } from "../src/server/executions";
 import { setSetting } from "../src/server/settings";
 import { queryTrades } from "../src/server/trades-query";
 import { runAi } from "../src/server/ai";
-import { askJournalContext, dailyRecapContext, tradeCritiqueContext } from "../src/server/ai-capabilities";
+import {
+  askJournalContext,
+  dailyRecapContext,
+  tradeCritiqueContext,
+} from "../src/server/ai-capabilities";
 import { deepFreeze, readAiRequest } from "../src/server/ai-scope";
 import type { FrozenApprovedScope } from "../src/server/ai-scope";
 
@@ -121,11 +125,14 @@ it("readAiRequest returns a deeply frozen scope", () => {
 
 it("askJournal returns error when no trades match filters", async () => {
   // Route (not capability) parses body and creates scope; capability only reads it
-  const scope = readAiRequest({
-    question: "How did I do?",
-    filters: { symbol: "NOT_PRESENT" },
-    timeZone: "UTC",
-  }, "question");
+  const scope = readAiRequest(
+    {
+      question: "How did I do?",
+      filters: { symbol: "NOT_PRESENT" },
+      timeZone: "UTC",
+    },
+    "question",
+  );
   const result = await askJournalContext(scope);
   expect(result).toEqual({ error: "No trades match the selected accounts and filters" });
   // Capability does not call runAi — that is the route's responsibility
@@ -134,7 +141,10 @@ it("askJournal returns error when no trades match filters", async () => {
 
 it("askJournal returns answer and frozen scope when trades exist", async () => {
   // Capability returns read-only context + scope; route owns the AI call
-  const scope = readAiRequest({ question: "How did I do?", filters: {}, timeZone: "UTC" }, "question");
+  const scope = readAiRequest(
+    { question: "How did I do?", filters: {}, timeZone: "UTC" },
+    "question",
+  );
   const result = await askJournalContext(scope);
   expect(result).toHaveProperty("context");
   expect(result).toHaveProperty("scope");
@@ -148,13 +158,56 @@ it("askJournal returns answer and frozen scope when trades exist", async () => {
 
 it("askJournal scope label reflects selected accounts", async () => {
   // Route creates scope via readAiRequest; capability receives pre-validated scope
-  const scope = readAiRequest({ question: "How did I do?", filters: { accounts: "a" }, timeZone: "UTC" }, "question");
+  const scope = readAiRequest(
+    { question: "How did I do?", filters: { accounts: "a" }, timeZone: "UTC" },
+    "question",
+  );
   const result = await askJournalContext(scope);
   expect(result).toHaveProperty("context");
   const { scope: resolvedScope } = result as { scope: FrozenApprovedScope };
   expect(resolvedScope.scope.label).toContain("Account A");
   expect(resolvedScope.scope.label).not.toContain("Account B");
   expect(runAi).not.toHaveBeenCalled();
+});
+
+it("keeps the initial Ask aggregate in the approved timezone after journal settings change", async () => {
+  insertExecutions(
+    "a",
+    [
+      {
+        symbol: "UTC_SCOPE",
+        side: "buy",
+        quantity: 1,
+        price: 100,
+        fee: 0,
+        executedAt: "2026-09-15T01:00:00Z",
+      },
+      {
+        symbol: "UTC_SCOPE",
+        side: "sell",
+        quantity: 1,
+        price: 110,
+        fee: 0,
+        executedAt: "2026-09-15T02:00:00Z",
+      },
+    ],
+    "manual",
+  );
+  const approvedScope = readAiRequest(
+    {
+      question: "How did I do?",
+      filters: { accounts: "a", from: "2026-09-15", to: "2026-09-15" },
+      timeZone: "UTC",
+    },
+    "question",
+  );
+  setSetting("timeZone", "America/New_York");
+
+  const result = await askJournalContext(approvedScope);
+
+  expect("context" in result).toBe(true);
+  if (!("context" in result)) return;
+  expect(result.context).toContain("UTC_SCOPE");
 });
 
 // --- dailyRecapContext capability ---
