@@ -1,19 +1,37 @@
 import Database from "better-sqlite3";
 import { drizzle } from "drizzle-orm/better-sqlite3";
-import { mkdirSync } from "node:fs";
+import { existsSync, mkdirSync, unlinkSync } from "node:fs";
 import { join } from "node:path";
 import * as schema from "./schema";
 import { BOOTSTRAP_SQL } from "./bootstrap";
 
 export const dataDir = (): string => process.env.JOURNAL_DATA_DIR ?? join(process.cwd(), "data");
 
+/** Track the directory used to open the current connection so we can detect a changed test environment. */
+let currentDataDir: string | undefined;
+
 const globalForDb = globalThis as unknown as { __journalDb?: ReturnType<typeof createDb> };
+
+/** Remove any WAL and shared-memory files left by a previous connection. */
+const cleanWalFiles = (dbPath: string) => {
+  for (const ext of ["-wal", "-shm"]) {
+    const f = dbPath + ext;
+    try {
+      if (existsSync(f)) unlinkSync(f);
+    } catch {
+      // ignore
+    }
+  }
+};
 
 const createDb = () => {
   const dir = dataDir();
   mkdirSync(dir, { recursive: true });
-  const sqlite = new Database(join(dir, "journal.db"));
+  const dbPath = join(dir, "journal.db");
+  cleanWalFiles(dbPath);
+  const sqlite = new Database(dbPath);
   sqlite.pragma("journal_mode = WAL");
+  sqlite.pragma("busy_timeout = 5000");
   sqlite.pragma("foreign_keys = ON");
   sqlite.exec(BOOTSTRAP_SQL);
   const folderColumns = sqlite.pragma("table_info(folders)") as { name: string }[];
@@ -50,7 +68,28 @@ const createDb = () => {
   return drizzle(sqlite, { schema });
 };
 
-/** Singleton across Next dev hot reloads. */
-export const db = globalForDb.__journalDb ?? (globalForDb.__journalDb = createDb());
+/**
+ * Singleton across Next.js dev hot reloads.
+ *
+ * When `JOURNAL_DATA_DIR` changes (e.g. between Vitest forks that set it before
+ * importing this module) the old connection is closed and a fresh one is opened
+ * against the new directory so each test fork gets isolated storage.
+ */
+export const db = (() => {
+  const dir = dataDir();
+  if (globalForDb.__journalDb && currentDataDir !== dir) {
+    const sqlite = globalForDb.__journalDb.$client;
+    try {
+      sqlite.pragma("wal_checkpoint(TRUNCATE)");
+    } catch {
+      // ignore
+    }
+    sqlite.close();
+    cleanWalFiles(join(currentDataDir!, "journal.db"));
+    globalForDb.__journalDb = undefined;
+  }
+  currentDataDir = dir;
+  return (globalForDb.__journalDb ??= createDb());
+})();
 
 export * from "./schema";
