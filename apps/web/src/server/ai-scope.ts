@@ -20,6 +20,10 @@ export function deepFreeze<T>(value: T): T {
   return value;
 }
 
+/** Narrow data-source selector for typed read-only capabilities. */
+export type DataSource =
+  "trades" | "trades+playbooks" | "trades+missed" | "trades+notes" | "trades+progress";
+
 /** Deep-frozen snapshot of the validated AI request scope. */
 export type FrozenApprovedScope = Readonly<{
   filters: Readonly<Record<string, string>>;
@@ -29,6 +33,8 @@ export type FrozenApprovedScope = Readonly<{
   date: string | undefined;
   scope: Readonly<{ label: string; timeZone: string }>;
   context: string;
+  dataSource: DataSource;
+  tradeCritiqueKey: string | undefined;
 }>;
 
 export function isDay(value: unknown): value is string {
@@ -44,10 +50,35 @@ export function isDay(value: unknown): value is string {
 export function readAiRequest(value: unknown, field: "question" | "date") {
   requireValue(value && typeof value === "object" && !Array.isArray(value), "Invalid AI request");
   const body = value as Record<string, unknown>;
+  const allowedFields = [field, "filters", "timeZone", "dataSource", "tradeCritiqueKey"] as const;
   requireValue(
-    Object.keys(body).every((key) => [field, "filters", "timeZone"].includes(key)),
+    Object.keys(body).every((key) => allowedFields.includes(key as (typeof allowedFields)[number])),
     "Unknown AI request field",
   );
+
+  // Validate and normalise dataSource
+  const rawDataSource = body.dataSource as string | undefined;
+  requireValue(
+    rawDataSource === undefined ||
+      (typeof rawDataSource === "string" &&
+        ["trades", "trades+playbooks", "trades+missed", "trades+notes", "trades+progress"].includes(
+          rawDataSource,
+        )),
+    "dataSource must be one of: trades, trades+playbooks, trades+missed, trades+notes, trades+progress",
+  );
+  const dataSource = (rawDataSource ?? "trades") as DataSource;
+
+  // tradeCritiqueKey is only valid alongside trades+playbooks
+  const rawCritiqueKey = body.tradeCritiqueKey as string | undefined;
+  requireValue(
+    rawCritiqueKey === undefined ||
+      (dataSource === "trades+playbooks" && typeof rawCritiqueKey === "string"),
+    "tradeCritiqueKey requires dataSource trades+playbooks",
+  );
+  const tradeCritiqueKey =
+    dataSource === "trades+playbooks" && typeof rawCritiqueKey === "string"
+      ? rawCritiqueKey
+      : undefined;
   requireValue(
     body.filters && typeof body.filters === "object" && !Array.isArray(body.filters),
     "filters is required (use {} for all trades)",
@@ -145,6 +176,8 @@ export function readAiRequest(value: unknown, field: "question" | "date") {
     date: date as string | undefined,
     scope: { label: label(true), timeZone },
     context: `Journal scope: ${label(false)}. Only the filtered data below is available. Do not infer results for excluded accounts or dates.`,
+    dataSource,
+    tradeCritiqueKey,
   });
 }
 

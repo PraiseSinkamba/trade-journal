@@ -11,7 +11,9 @@ import { queryTrades } from "../src/server/trades-query";
 import { runAi, runAskJournalAi } from "../src/server/ai";
 import { POST as ask } from "../src/app/api/ai/ask/route";
 import { POST as recap } from "../src/app/api/ai/recap/route";
+import { POST as critique } from "../src/app/api/ai/critique/route";
 import { GET as day } from "../src/app/api/journal/[date]/route";
+import { readAiRequest } from "../src/server/ai-scope";
 
 const { mockAskJournalAi, mockReportsAgentAi, mockRunAi } = vi.hoisted(() => ({
   mockAskJournalAi: vi.fn(async () => "Controlled AI response"),
@@ -352,10 +354,75 @@ it("rejects invalid request bodies, dates and legacy account fields instead of s
 });
 
 it("keeps single-trade critique scoped to its key", async () => {
-  const { POST: critique } = await import("../src/app/api/ai/critique/route");
   expect(
     (await critique(request({ key: queryTrades({ accounts: "a" }).trades[0]!.key }))).status,
   ).toBe(200);
   expect(prompt()).toContain("ONLY_A");
   expect(prompt()).not.toContain("ONLY_B");
+});
+
+// --- dataSource extension ---
+
+it("rejects unknown dataSource values", async () => {
+  for (const ds of ["trades+unknown", "TRADES", "playbooks", 1, null]) {
+    const response = await ask(
+      request({ question: "How did I do?", filters: {}, dataSource: ds, timeZone: "UTC" }),
+    );
+    expect(response.status, `dataSource=${JSON.stringify(ds)}`).toBe(400);
+  }
+  expect(runAi).not.toHaveBeenCalled();
+});
+
+it("rejects tradeCritiqueKey without trades+playbooks dataSource", async () => {
+  const response = await ask(
+    request({
+      question: "How did I do?",
+      filters: {},
+      dataSource: "trades",
+      tradeCritiqueKey: "some-key",
+      timeZone: "UTC",
+    }),
+  );
+  expect(response.status).toBe(400);
+  expect(runAi).not.toHaveBeenCalled();
+});
+
+it("readAiRequest accepts valid dataSource and passes it through deep-frozen", async () => {
+  for (const ds of [
+    "trades",
+    "trades+playbooks",
+    "trades+missed",
+    "trades+notes",
+    "trades+progress",
+  ] as const) {
+    const scope = readAiRequest(
+      { question: "How?", filters: {}, dataSource: ds, timeZone: "UTC" },
+      "question",
+    );
+    expect(scope.dataSource).toBe(ds);
+    expect(Object.isFrozen(scope)).toBe(true);
+    expect(Object.isFrozen(scope.filters)).toBe(true);
+  }
+});
+
+it("readAiRequest defaults dataSource to trades when absent", async () => {
+  const scope = readAiRequest({ question: "How?", filters: {}, timeZone: "UTC" }, "question");
+  expect(scope.dataSource).toBe("trades");
+});
+
+it("readAiRequest accepts tradeCritiqueKey only when dataSource is trades+playbooks", async () => {
+  // Invalid: tradeCritiqueKey with trades
+  expect(() =>
+    readAiRequest(
+      { question: "How?", filters: {}, dataSource: "trades", tradeCritiqueKey: "k" },
+      "question",
+    ),
+  ).toThrow();
+  // Valid: tradeCritiqueKey with trades+playbooks
+  const scope = readAiRequest(
+    { question: "How?", filters: {}, dataSource: "trades+playbooks", tradeCritiqueKey: "k" },
+    "question",
+  );
+  expect(scope.tradeCritiqueKey).toBe("k");
+  expect(Object.isFrozen(scope)).toBe(true);
 });

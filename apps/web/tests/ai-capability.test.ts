@@ -3,7 +3,20 @@ import { mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { FILTER_KEYS } from "@luxalgo/journal-core";
-import { db, accounts, executions, trades, settings, journalDays } from "../src/db";
+import {
+  db,
+  accounts,
+  executions,
+  trades,
+  settings,
+  journalDays,
+  playbooks,
+  tradeRuleChecks,
+  missedTrades,
+  notes,
+  progressRules,
+  progressChecks,
+} from "../src/db";
 import { insertExecutions } from "../src/server/executions";
 import { setSetting } from "../src/server/settings";
 import { queryTrades } from "../src/server/trades-query";
@@ -12,6 +25,10 @@ import {
   askJournalContext,
   dailyRecapContext,
   tradeCritiqueContext,
+  playbookRulesForTrade,
+  missedObservations,
+  notebookEntries,
+  progressHistory,
 } from "../src/server/ai-capabilities";
 import { deepFreeze, readAiRequest } from "../src/server/ai-scope";
 import type { FrozenApprovedScope } from "../src/server/ai-scope";
@@ -47,6 +64,12 @@ beforeEach(() => {
   db.delete(accounts).run();
   db.delete(settings).run();
   db.delete(journalDays).run();
+  db.delete(playbooks).run();
+  db.delete(tradeRuleChecks).run();
+  db.delete(missedTrades).run();
+  db.delete(notes).run();
+  db.delete(progressRules).run();
+  db.delete(progressChecks).run();
   db.insert(accounts)
     .values(
       ["a", "b"].map((id) => ({
@@ -286,5 +309,333 @@ it("tradeCritiqueContext returns trade+fills for valid key", async () => {
   expect(result!.trade).toHaveProperty("symbol");
   expect(Array.isArray(result!.fills)).toBe(true);
   // runAi is called by the route, not the capability
+  expect(runAi).not.toHaveBeenCalled();
+});
+
+// --- playbookRulesForTrade capability ---
+
+it("playbookRulesForTrade returns error for unknown trade key", async () => {
+  const scope = readAiRequest(
+    { question: "rules?", filters: {}, dataSource: "trades+playbooks", timeZone: "UTC" },
+    "question",
+  );
+  const result = await playbookRulesForTrade(scope, "not-a-real-key");
+  expect(result).toEqual({ error: "Trade not found in scope" });
+  expect(runAi).not.toHaveBeenCalled();
+});
+
+it("playbookRulesForTrade returns error when trade is not in scope accounts", async () => {
+  const scopeA = readAiRequest(
+    {
+      question: "rules?",
+      filters: { accounts: "a" },
+      dataSource: "trades+playbooks",
+      timeZone: "UTC",
+    },
+    "question",
+  );
+  const keyB = queryTrades({ accounts: "b" }).trades[0]!.key;
+  const result = await playbookRulesForTrade(scopeA, keyB);
+  expect(result).toEqual({ error: "Trade not found in scope" });
+  expect(runAi).not.toHaveBeenCalled();
+});
+
+it("playbookRulesForTrade returns context for valid trade with playbook rules", async () => {
+  const bookId = "pb1";
+  db.insert(playbooks)
+    .values({
+      id: bookId,
+      name: "Breakout",
+      description: "Track breakout setups",
+      rulesJson: JSON.stringify(["Setup is clear", "Stop placed", "Target set"]),
+      createdAt: "2026-01-01",
+    })
+    .run();
+  db.insert(tradeRuleChecks)
+    .values({
+      id: "trc1",
+      tradeKey: queryTrades({ accounts: "a" }).trades[0]!.key,
+      playbookId: bookId,
+      rule: "Setup is clear",
+      followed: true,
+    })
+    .run();
+  db.insert(tradeRuleChecks)
+    .values({
+      id: "trc2",
+      tradeKey: queryTrades({ accounts: "a" }).trades[0]!.key,
+      playbookId: bookId,
+      rule: "Stop placed",
+      followed: false,
+    })
+    .run();
+  const scope = readAiRequest(
+    {
+      question: "rules?",
+      filters: { accounts: "a" },
+      dataSource: "trades+playbooks",
+      timeZone: "UTC",
+    },
+    "question",
+  );
+  const result = await playbookRulesForTrade(scope, queryTrades({ accounts: "a" }).trades[0]!.key);
+  expect(result).toHaveProperty("context");
+  const ctx = "context" in result && typeof result.context === "string" ? result.context : "";
+  expect(ctx).toContain("Breakout");
+  expect(ctx).toContain("Setup is clear");
+  expect(ctx).toContain("Stop placed");
+  expect(ctx.length).toBeLessThanOrEqual(6 * 1024);
+  expect(runAi).not.toHaveBeenCalled();
+});
+
+it("playbookRulesForTrade returns error when scope dataSource is not trades+playbooks", async () => {
+  const scope = readAiRequest(
+    { question: "rules?", filters: {}, dataSource: "trades", timeZone: "UTC" },
+    "question",
+  );
+  const result = await playbookRulesForTrade(scope, "any-key");
+  expect(result).toEqual({ error: "Scope does not include playbook data" });
+  expect(runAi).not.toHaveBeenCalled();
+});
+
+// --- missedObservations capability ---
+
+it("missedObservations returns error for malformed date", async () => {
+  const scope = readAiRequest(
+    { question: "missed?", filters: {}, dataSource: "trades+missed", timeZone: "UTC" },
+    "question",
+  );
+  const result = await missedObservations(scope, "not-a-date");
+  expect(result).toEqual({ error: "Invalid date format" });
+  expect(runAi).not.toHaveBeenCalled();
+});
+
+it("missedObservations returns error for empty date range", async () => {
+  const scope = readAiRequest(
+    { question: "missed?", filters: {}, dataSource: "trades+missed", timeZone: "UTC" },
+    "question",
+  );
+  const result = await missedObservations(scope, "2026-01-01", "2025-12-31");
+  expect(result).toEqual({ error: "Invalid date range" });
+  expect(runAi).not.toHaveBeenCalled();
+});
+
+it("missedObservations returns context with scope accounts only", async () => {
+  db.insert(missedTrades)
+    .values({
+      id: "m1",
+      symbol: "MISSED_A",
+      direction: "long",
+      observedAt: "2026-09-01T09:00:00Z",
+      notes: "Signal missed",
+      createdAt: "2026-09-01",
+    })
+    .run();
+  db.insert(missedTrades)
+    .values({
+      id: "m2",
+      symbol: "MISSED_B",
+      direction: "short",
+      observedAt: "2026-09-02T09:00:00Z",
+      notes: "Wrong direction",
+      createdAt: "2026-09-02",
+    })
+    .run();
+  const scope = readAiRequest(
+    {
+      question: "missed?",
+      filters: { accounts: "a" },
+      dataSource: "trades+missed",
+      timeZone: "UTC",
+    },
+    "question",
+  );
+  const result = await missedObservations(scope, "2026-01-01", "2026-12-31");
+  expect(result).toHaveProperty("context");
+  const ctx = "context" in result && typeof result.context === "string" ? result.context : "";
+  expect(ctx.length).toBeLessThanOrEqual(6 * 1024);
+  expect(runAi).not.toHaveBeenCalled();
+});
+
+it("missedObservations returns error when scope dataSource does not include missed", async () => {
+  const scope = readAiRequest(
+    { question: "missed?", filters: {}, dataSource: "trades", timeZone: "UTC" },
+    "question",
+  );
+  const result = await missedObservations(scope, "2026-01-01");
+  expect(result).toEqual({ error: "Scope does not include missed-trade data" });
+  expect(runAi).not.toHaveBeenCalled();
+});
+
+// --- notebookEntries capability ---
+
+it("notebookEntries returns error when scope dataSource does not include notes", async () => {
+  const scope = readAiRequest(
+    { question: "notes?", filters: {}, dataSource: "trades", timeZone: "UTC" },
+    "question",
+  );
+  const result = await notebookEntries(scope);
+  expect(result).toEqual({ error: "Scope does not include notebook data" });
+  expect(runAi).not.toHaveBeenCalled();
+});
+
+it("notebookEntries returns context with scope accounts only", async () => {
+  db.insert(notes)
+    .values({
+      id: "n1",
+      folderId: "my-notes",
+      title: "Note A",
+      content: "Account A only note",
+      tagsJson: null,
+      createdAt: "2026-09-01T00:00:00Z",
+      updatedAt: "2026-09-01T00:00:00Z",
+    })
+    .run();
+  db.insert(notes)
+    .values({
+      id: "n2",
+      folderId: "my-notes",
+      title: "Note B",
+      content: "Account B only note",
+      tagsJson: null,
+      createdAt: "2026-09-02T00:00:00Z",
+      updatedAt: "2026-09-02T00:00:00Z",
+    })
+    .run();
+  const scope = readAiRequest(
+    { question: "notes?", filters: { accounts: "a" }, dataSource: "trades+notes", timeZone: "UTC" },
+    "question",
+  );
+  const result = await notebookEntries(scope);
+  expect(result).toHaveProperty("context");
+  const ctx = "context" in result && typeof result.context === "string" ? result.context : "";
+  expect(ctx.length).toBeLessThanOrEqual(6 * 1024);
+  expect(runAi).not.toHaveBeenCalled();
+});
+
+it("notebookEntries filters by folderId", async () => {
+  db.insert(notes)
+    .values({
+      id: "n1",
+      folderId: "f1",
+      title: "In F1",
+      content: "Content",
+      tagsJson: null,
+      createdAt: "2026-09-01T00:00:00Z",
+      updatedAt: "2026-09-01T00:00:00Z",
+    })
+    .run();
+  db.insert(notes)
+    .values({
+      id: "n2",
+      folderId: "f2",
+      title: "In F2",
+      content: "Content",
+      tagsJson: null,
+      createdAt: "2026-09-02T00:00:00Z",
+      updatedAt: "2026-09-02T00:00:00Z",
+    })
+    .run();
+  const scope = readAiRequest(
+    { question: "notes?", filters: {}, dataSource: "trades+notes", timeZone: "UTC" },
+    "question",
+  );
+  const result = await notebookEntries(scope, "f1");
+  expect(result).toHaveProperty("context");
+  const ctx = "context" in result && typeof result.context === "string" ? result.context : "";
+  expect(ctx).toContain("In F1");
+  expect(ctx).not.toContain("In F2");
+  expect(runAi).not.toHaveBeenCalled();
+});
+
+it("notebookEntries filters by search query", async () => {
+  db.insert(notes)
+    .values({
+      id: "n1",
+      folderId: "my-notes",
+      title: "Alpha Note",
+      content: "Contains alpha keyword",
+      tagsJson: null,
+      createdAt: "2026-09-01T00:00:00Z",
+      updatedAt: "2026-09-01T00:00:00Z",
+    })
+    .run();
+  db.insert(notes)
+    .values({
+      id: "n2",
+      folderId: "my-notes",
+      title: "Beta Note",
+      content: "Contains beta keyword",
+      tagsJson: null,
+      createdAt: "2026-09-02T00:00:00Z",
+      updatedAt: "2026-09-02T00:00:00Z",
+    })
+    .run();
+  const scope = readAiRequest(
+    { question: "notes?", filters: {}, dataSource: "trades+notes", timeZone: "UTC" },
+    "question",
+  );
+  const result = await notebookEntries(scope, undefined, "alpha");
+  expect(result).toHaveProperty("context");
+  const ctx = "context" in result && typeof result.context === "string" ? result.context : "";
+  expect(ctx).toContain("Alpha Note");
+  expect(ctx).not.toContain("Beta Note");
+  expect(runAi).not.toHaveBeenCalled();
+});
+
+// --- progressHistory capability ---
+
+it("progressHistory returns error when scope dataSource does not include progress", async () => {
+  const scope = readAiRequest(
+    { question: "progress?", filters: {}, dataSource: "trades", timeZone: "UTC" },
+    "question",
+  );
+  const result = await progressHistory(scope);
+  expect(result).toEqual({ error: "Scope does not include progress data" });
+  expect(runAi).not.toHaveBeenCalled();
+});
+
+it("progressHistory returns context with hit rates", async () => {
+  const ruleId = "pr1";
+  db.insert(progressRules)
+    .values({
+      id: ruleId,
+      title: "Review journal",
+      stage: "end-of-day",
+      weekdaysJson: JSON.stringify([1, 2, 3, 4, 5]),
+      createdAt: "2026-01-01",
+    })
+    .run();
+  db.insert(progressChecks).values({ id: "pc1", ruleId, date: "2026-09-01", done: true }).run();
+  db.insert(progressChecks).values({ id: "pc2", ruleId, date: "2026-09-02", done: false }).run();
+  const scope = readAiRequest(
+    { question: "progress?", filters: {}, dataSource: "trades+progress", timeZone: "UTC" },
+    "question",
+  );
+  const result = await progressHistory(scope);
+  expect(result).toHaveProperty("context");
+  const ctx = "context" in result && typeof result.context === "string" ? result.context : "";
+  expect(ctx.length).toBeLessThanOrEqual(6 * 1024);
+  expect(runAi).not.toHaveBeenCalled();
+});
+
+it("progressHistory defaults to 13 weeks", async () => {
+  const scope = readAiRequest(
+    { question: "progress?", filters: {}, dataSource: "trades+progress", timeZone: "UTC" },
+    "question",
+  );
+  const result = await progressHistory(scope);
+  expect(result).toHaveProperty("context");
+  expect(result).toHaveProperty("scope");
+  expect(runAi).not.toHaveBeenCalled();
+});
+
+it("progressHistory respects weeks parameter", async () => {
+  const scope = readAiRequest(
+    { question: "progress?", filters: {}, dataSource: "trades+progress", timeZone: "UTC" },
+    "question",
+  );
+  const result = await progressHistory(scope, 4);
+  expect(result).toHaveProperty("context");
   expect(runAi).not.toHaveBeenCalled();
 });
