@@ -12,6 +12,7 @@ import { afterAll } from "vitest";
 import { mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import { close } from "../src/db";
 
 // Set before any other import can run
 const testDataDir = mkdtempSync(join(tmpdir(), "journal-test-"));
@@ -20,13 +21,18 @@ process.env.JOURNAL_DATA_DIR = testDataDir;
 // Remove the temp directory after all tests close their database connections.
 // Retry a few times on Windows where delayed handle release can cause EPERM.
 afterAll(async () => {
+  // Close the DB connection before removing the directory so the handle
+  // is released — avoids EPERM on Windows where delayed handle release can
+  // cause remove to fail even after pragma wal_checkpoint.
+  close();
   for (let i = 0; i < 5; i++) {
     try {
       rmSync(testDataDir, { recursive: true, force: true });
       return;
     } catch {
-      // eslint-disable-next-line ts-promise-with-resolvers -- one-shot cleanup, Promise.withResolvers more verbose here
-      await new Promise((r) => setTimeout(r, 100)).catch(() => {});
+      const { promise, resolve } = Promise.withResolvers<void>();
+      setTimeout(resolve, 100);
+      await promise;
     }
   }
 });

@@ -10,6 +10,13 @@ export const dataDir = (): string => process.env.JOURNAL_DATA_DIR ?? join(proces
 /** Track the directory used to open the current connection so we can detect a changed test environment. */
 let currentDataDir: string | undefined;
 
+/**
+ * Track the first directory this module opened a connection to.
+ * Used by tests to ensure the initial fork-level DB is closed before
+ * removing the temp directory, even after JOURNAL_DATA_DIR changes.
+ */
+let __initialDataDir: string | undefined;
+
 const globalForDb = globalThis as unknown as { __journalDb?: ReturnType<typeof createDb> };
 
 /** Remove any WAL and shared-memory files left by a previous connection. */
@@ -22,6 +29,32 @@ const cleanWalFiles = (dbPath: string) => {
       // ignore
     }
   }
+};
+
+/**
+ * Checkpoint, close, and reset the DB singleton.
+ *
+ * When called from vitest-setup.ts afterAll this ensures the fork-level
+ * connection (opened against the initial JOURNAL_DATA_DIR) is closed before
+ * rmSync removes the temp directory — preventing EPERM on Windows.
+ *
+ * Idempotent: closing an already-closed connection is a no-op.
+ */
+export const close = () => {
+  if (globalForDb.__journalDb) {
+    const sqlite = globalForDb.__journalDb.$client;
+    try {
+      sqlite.pragma("wal_checkpoint(TRUNCATE)");
+    } catch {
+      // ignore
+    }
+    sqlite.close();
+    if (currentDataDir) cleanWalFiles(join(currentDataDir, "journal.db"));
+    globalForDb.__journalDb = undefined;
+  }
+  // Reset both so the next db() call re-detects on its own.
+  currentDataDir = undefined;
+  __initialDataDir = undefined;
 };
 
 const createDb = () => {
@@ -88,6 +121,7 @@ export const db = (() => {
     globalForDb.__journalDb = undefined;
   }
   currentDataDir = dir;
+  if (__initialDataDir === undefined) __initialDataDir = dir;
   return (globalForDb.__journalDb ??= createDb());
 })();
 
