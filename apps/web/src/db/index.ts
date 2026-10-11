@@ -28,7 +28,6 @@ const createDb = () => {
   const dir = dataDir();
   mkdirSync(dir, { recursive: true });
   const dbPath = join(dir, "journal.db");
-  cleanWalFiles(dbPath);
   const sqlite = new Database(dbPath);
   sqlite.pragma("journal_mode = WAL");
   sqlite.pragma("busy_timeout = 5000");
