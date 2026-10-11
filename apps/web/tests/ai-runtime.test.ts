@@ -1,6 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { APICallError, LoadAPIKeyError, RetryError } from "ai";
-import { runAskAgentAi, runTextAi, runObjectAi } from "../src/server/ai-runtime";
+import { runAskAgentAi, runReportsAgentAi, runTextAi, runObjectAi } from "../src/server/ai-runtime";
 import { AiRuntimeError } from "../src/server/ai-contracts";
 import { AI_FEATURE_POLICIES, AI_PROMPT_VERSIONS } from "../src/server/ai-contracts";
 import { resolveAiConfiguration } from "../src/server/settings";
@@ -68,9 +68,15 @@ afterEach(() => {
 });
 
 describe("AI feature policies", () => {
-  it("keeps reflection bounded, Ask agent finite, and statement import non-retrying", () => {
+  it("keeps reflection bounded, Ask agent finite, reports agent identical, and statement import non-retrying", () => {
     expect(AI_FEATURE_POLICIES.reflection.maxOutputTokens).toBe(1200);
     expect(AI_FEATURE_POLICIES.askJournalAgent).toMatchObject({
+      maxOutputTokens: 1200,
+      timeoutMs: 30_000,
+      maxSteps: 4,
+      maxToolCalls: 4,
+    });
+    expect(AI_FEATURE_POLICIES.reportsAgent).toMatchObject({
       maxOutputTokens: 1200,
       timeoutMs: 30_000,
       maxSteps: 4,
@@ -83,6 +89,7 @@ describe("AI feature policies", () => {
   it("versions every current feature prompt", () => {
     expect(AI_PROMPT_VERSIONS.reflection).toMatch(/^reflection-v\d+$/);
     expect(AI_PROMPT_VERSIONS.askJournalAgent).toMatch(/^ask-journal-agent-v\d+$/);
+    expect(AI_PROMPT_VERSIONS.reportsAgent).toMatch(/^reports-agent-v\d+$/);
     expect(AI_PROMPT_VERSIONS.statementImport).toMatch(/^statement-import-v\d+$/);
   });
 });
@@ -215,6 +222,77 @@ describe("runAskAgentAi provider boundary", () => {
       feature: "askJournalAgent",
       configuration: openAiConfig,
       promptVersion: "ask-journal-agent-v1",
+      system: "system",
+      prompt: "task",
+      createTools,
+    });
+
+    expect(reserveToolCall).toBeDefined();
+    if (reserveToolCall === undefined) throw new Error("Runtime did not supply a tool budget.");
+    expect([
+      reserveToolCall(),
+      reserveToolCall(),
+      reserveToolCall(),
+      reserveToolCall(),
+      reserveToolCall(),
+    ]).toEqual([true, true, true, true, false]);
+  });
+});
+
+describe("runReportsAgentAi provider boundary", () => {
+  it("makes one bounded SDK tool-loop invocation and records agent execution metadata", async () => {
+    mockGenerateText.mockResolvedValue({
+      text: "answer",
+      finishReason: "stop",
+      usage: { inputTokens: 12, outputTokens: 7 },
+      steps: [],
+    });
+    const createTools = vi.fn(() => ({}));
+
+    const result = await runReportsAgentAi({
+      feature: "reportsAgent",
+      configuration: openAiConfig,
+      promptVersion: "reports-agent-v1",
+      system: "system",
+      prompt: "task",
+      createTools,
+    });
+
+    expect(createTools).toHaveBeenCalledTimes(1);
+    expect(mockGenerateText).toHaveBeenCalledTimes(1);
+    expect(mockGenerateText).toHaveBeenCalledWith(
+      expect.objectContaining({
+        model: openAiModel,
+        maxRetries: 2,
+        maxOutputTokens: 300,
+        providerOptions: { openai: { store: false } },
+        stopWhen: expect.any(Function),
+      }),
+    );
+    const call = mockGenerateText.mock.calls[0]![0] as {
+      stopWhen: (options: { steps: unknown[] }) => boolean;
+    };
+    expect(call.stopWhen({ steps: [{}, {}, {}] })).toBe(false);
+    expect(call.stopWhen({ steps: [{}, {}, {}, {}] })).toBe(true);
+    expect(result.meta).toMatchObject({
+      feature: "reportsAgent",
+      promptVersion: "reports-agent-v1",
+      stepCount: 0,
+      toolCallCount: 0,
+    });
+  });
+
+  it("allows four runtime-supplied tool reservations and denies the fifth", async () => {
+    let reserveToolCall: (() => boolean) | undefined;
+    const createTools = (reserve: () => boolean) => {
+      reserveToolCall = reserve;
+      return {};
+    };
+
+    await runReportsAgentAi({
+      feature: "reportsAgent",
+      configuration: openAiConfig,
+      promptVersion: "reports-agent-v1",
       system: "system",
       prompt: "task",
       createTools,

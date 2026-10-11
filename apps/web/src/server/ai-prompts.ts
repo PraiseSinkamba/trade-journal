@@ -9,6 +9,11 @@ export interface AskJournalPromptInput {
   context: string;
 }
 
+export interface ReportsAgentPromptInput {
+  question: string;
+  context: string;
+}
+
 export interface DailyRecapPromptInput {
   date: string;
   scopeContext: string;
@@ -93,3 +98,18 @@ Notes: ${input.trade.notes ?? "none"}
 
 Fills:
 ${input.fills.join("\n")}`;
+
+/**
+ * Build the Reports agent prompt. The model sees the aggregate context and can
+ * call switch_report_mode to drill into specific report modes before answering.
+ */
+export const buildReportsAgentPrompt = (input: ReportsAgentPromptInput): string =>
+  `Answer the trader's analytical question using the journal aggregate context and the switch_report_mode tool.
+Call switch_report_mode to get the relevant report-mode data before answering.
+If the data can't answer the question, say exactly what's missing.
+Cite the numbers you used. Under 200 words. Do not infer results for excluded accounts or dates.
+
+Initial aggregate context:
+${input.context}
+
+Question: ${input.question}`;

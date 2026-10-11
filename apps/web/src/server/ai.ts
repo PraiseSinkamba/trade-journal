@@ -1,13 +1,22 @@
 import type { AnnotatedTrade } from "@luxalgo/journal-core";
-import { jsonSchema, tool } from "ai";
+import { jsonSchema, tool, type ToolSet } from "ai";
 import { AI_PROVIDER_NAMES } from "@/lib/ai-settings";
 import { listExecutions } from "./executions";
 import { AI_PROMPT_VERSIONS, AiRuntimeError } from "./ai-contracts";
-import { buildAskJournalPrompt, REFLECTION_SYSTEM_PROMPT } from "./ai-prompts";
-import { runAskAgentAi, runTextAi } from "./ai-runtime";
+import {
+  buildAskJournalPrompt,
+  buildReportsAgentPrompt,
+  REFLECTION_SYSTEM_PROMPT,
+} from "./ai-prompts";
+import {
+  runAskAgentAi,
+  runReportsAgentAi as runReportsAgentAiRuntime,
+  runTextAi,
+} from "./ai-runtime";
 import type { FrozenApprovedScope } from "./ai-scope";
 import { getAiKey, getAiProvider, resolveAiConfiguration } from "./settings";
 import { queryTrades } from "./trades-query";
+import { reportContext, type ReportMode } from "./ai-report-context";
 
 type FindTradesInput = Readonly<{
   symbol?: string;
@@ -16,6 +25,12 @@ type FindTradesInput = Readonly<{
 }>;
 
 type TradeDetailInput = Readonly<{ key: string }>;
+
+type SwitchReportModeInput = Readonly<{
+  mode: ReportMode;
+  primary?: string;
+  secondary?: string;
+}>;
 
 const toolLimitError = { error: "AI tool limit reached." } as const;
 const invalidToolArguments = { error: "Invalid tool arguments." } as const;
@@ -53,6 +68,10 @@ const isTradeDetailInput = (value: unknown): value is TradeDetailInput =>
   value.key.length > 0 &&
   value.key.length <= 300;
 
+/** Validate switch_report_mode tool input — mode is required, no scope-widening fields allowed. */
+const isSwitchReportModeInput = (value: unknown): value is SwitchReportModeInput =>
+  hasOnlyKeys(value, ["mode", "primary", "secondary"]) && typeof value.mode === "string";
+
 /** Return a bounded trade projection rather than user notes or arbitrary annotations. */
 const summarizeTrade = (trade: AnnotatedTrade) => ({
   key: trade.key,
@@ -68,14 +87,17 @@ const summarizeTrade = (trade: AnnotatedTrade) => ({
 
 /**
  * Create the Ask-only read tools over one route-created frozen scope.
+ * When feature is "reports", includes the switch_report_mode tool for report-mode queries.
  * Returns no operation capable of widening the account, filter, or timezone.
  */
-export const createAskJournalTools = (
+export function createAskJournalTools(
   scope: FrozenApprovedScope,
   context: string,
   reserveToolCall?: () => boolean,
-) => {
+  feature?: "reports",
+) {
   const withinToolBudget = () => reserveToolCall === undefined || reserveToolCall();
+
   return {
     get_journal_summary: tool({
       description:
@@ -177,8 +199,47 @@ export const createAskJournalTools = (
         return { trade: summarizeTrade(trade), fills };
       },
     }),
+    switch_report_mode: tool({
+      description:
+        "Switch the active report mode and return its bounded context summary. " +
+        "Modes: overview, trends, explorer, breakdown, compare. " +
+        "compare mode requires a primary key (symbol). " +
+        "Never pass account, date, filter, or timezone — the tool operates within the frozen journal scope.",
+      inputSchema: jsonSchema<SwitchReportModeInput>(
+        {
+          type: "object",
+          additionalProperties: false,
+          properties: {
+            mode: {
+              type: "string",
+              enum: ["overview", "trends", "explorer", "breakdown", "compare"],
+            },
+            primary: { type: "string", minLength: 1, maxLength: 64 },
+            secondary: { type: "string", minLength: 1, maxLength: 64 },
+          },
+          required: ["mode"],
+        },
+        {
+          validate: (value) =>
+            isSwitchReportModeInput(value)
+              ? { success: true, value }
+              : { success: false, error: new Error("Invalid tool arguments.") },
+        },
+      ),
+      execute: async (input) => {
+        if (!withinToolBudget()) return toolLimitError;
+        if (!isSwitchReportModeInput(input)) return invalidToolArguments;
+        if (feature !== "reports") return { error: "Report mode is not enabled for this request." };
+        const result = await reportContext(scope, input.mode, {
+          primary: input.primary,
+          secondary: input.secondary,
+        });
+        if ("error" in result) return result;
+        return { ...result, mode: input.mode };
+      },
+    }),
   };
-};
+}
 
 /**
  * BYO-key AI. Self-hosted means YOUR key on YOUR box: the key is read from the
@@ -235,7 +296,37 @@ export const runAskJournalAi = async (scope: FrozenApprovedScope, context: strin
       promptVersion: AI_PROMPT_VERSIONS.askJournalAgent,
       system: REFLECTION_SYSTEM_PROMPT,
       prompt: buildAskJournalPrompt({ question: scope.question, context }),
-      createTools: (reserveToolCall) => createAskJournalTools(scope, context, reserveToolCall),
+      createTools: (reserveToolCall) =>
+        createAskJournalTools(scope, context, reserveToolCall) as unknown as ToolSet,
+    });
+    return result.output;
+  } catch (error) {
+    if (error instanceof AiRuntimeError) throw new Error(error.message);
+    throw error;
+  }
+};
+
+/** Run the Reports agent: bounded tool loop with switch_report_mode available. */
+export const runReportsAgentAi = async (scope: FrozenApprovedScope, context: string) => {
+  const configuration = resolveAiConfiguration();
+  if (!configuration.apiKey) {
+    throw new Error(
+      `AI is not configured — add your ${AI_PROVIDER_NAMES[configuration.provider]} API key in Settings.`,
+    );
+  }
+  try {
+    const result = await runReportsAgentAiRuntime({
+      feature: "reportsAgent",
+      configuration: {
+        provider: configuration.provider,
+        modelId: configuration.modelId,
+        apiKey: configuration.apiKey,
+      },
+      promptVersion: AI_PROMPT_VERSIONS.reportsAgent,
+      system: REFLECTION_SYSTEM_PROMPT,
+      prompt: buildReportsAgentPrompt({ question: scope.question, context }),
+      createTools: (reserveToolCall) =>
+        createAskJournalTools(scope, context, reserveToolCall, "reports") as unknown as ToolSet,
     });
     return result.output;
   } catch (error) {

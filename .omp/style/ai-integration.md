@@ -29,7 +29,7 @@ OpenAI `store: false` and any other provider-specific options live in `apps/web/
 
 ### Feature policy and prompt versions
 
-Every feature declares its policy in `AI_FEATURE_POLICIES` and its prompt version in `AI_PROMPT_VERSIONS` (in `ai-contracts.ts`). The runtime applies `maxOutputTokens`, `maxRetries`, and `timeoutMs`; `statementImport` is `maxRetries: 0` and time-bounded at 120 seconds. Ask Journal is the sole tool-using flow: it fixes four model steps and four scope-bound read-only tool calls. New features must add a typed entry to both maps before any code calls the runtime.
+Every feature declares its policy in `AI_FEATURE_POLICIES` and its prompt version in `AI_PROMPT_VERSIONS` (in `ai-contracts.ts`). The runtime applies `maxOutputTokens`, `maxRetries`, and `timeoutMs`; `statementImport` is `maxRetries: 0` and time-bounded at 120 seconds. Ask Journal and the Reports agent are the two tool-using flows: each fixes four model steps and four scope-bound read-only tool calls. New features must add a typed entry to both maps before any code calls the runtime.
 
 ### Prompt location
 
@@ -130,9 +130,10 @@ logger.info("AI request", {
 ## Cite
 
 - `apps/web/src/server/ai-contracts.ts` — `AiFeature`, `AiExecutionPolicy`, `AI_FEATURE_POLICIES`, `AI_PROMPT_VERSIONS`, `AiExecutionMeta`, `AiRuntimeError`
-- `apps/web/src/server/ai-runtime.ts` — `runTextAi`, `runObjectAi`, provider isolation, `store: false`, error mapping
-- `apps/web/src/server/ai-prompts.ts` — `REFLECTION_SYSTEM_PROMPT`, `buildAskJournalPrompt`, `buildDailyRecapPrompt`, `buildTradeCritiquePrompt`
-- `apps/web/src/server/ai.ts` — reflection facade delegating to the runtime
+- `apps/web/src/server/ai-runtime.ts` — `runTextAi`, `runObjectAi`, `runReportsAgentAi`, provider isolation, `store: false`, error mapping
+- `apps/web/src/server/ai-prompts.ts` — `REFLECTION_SYSTEM_PROMPT`, `buildAskJournalPrompt`, `buildReportsAgentPrompt`, `buildDailyRecapPrompt`, `buildTradeCritiquePrompt`
+- `apps/web/src/server/ai.ts` — reflection and Reports agent facades delegating to the runtime
+- `apps/web/src/server/ai-report-context.ts` — `reportContext`, `ReportMode`, read-only report-mode query capability
 - `apps/web/src/server/ai-import.ts` — statement-import adapter delegating to `runObjectAi`
 - `apps/web/src/server/settings.ts` — `resolveAiConfiguration`, encrypted key storage
 - `docs/superpowers/specs/2026-10-08-contextual-ai-workspace-design.md` — future assistant/UI/tool design (not the current foundation)

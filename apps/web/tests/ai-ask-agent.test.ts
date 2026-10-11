@@ -1,4 +1,5 @@
-import { afterAll, beforeEach, expect, it } from "vitest";
+import { afterAll, beforeEach, describe, expect, it } from "vitest";
+import type { ToolSet } from "ai";
 import { mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -170,4 +171,78 @@ it("uses the frozen timezone when the journal setting changes after scope approv
   const result = await tools.find_trades.execute({ symbol: "UTC_SCOPE" }, toolOptions);
 
   expect(JSON.stringify(result)).toContain("UTC_SCOPE");
+});
+
+describe("switch_report_mode tool", () => {
+  it("returns report context for a valid mode", async () => {
+    const tools = createAskJournalTools(scope(), "Context", undefined, "reports");
+    const result = await tools.switch_report_mode.execute({ mode: "overview" }, toolOptions);
+    expect(result).toHaveProperty("context");
+    expect(result).toHaveProperty("mode", "overview");
+  });
+
+  it("returns { error } for an unknown mode", async () => {
+    const tools = createAskJournalTools(scope(), "Context", undefined, "reports");
+    const result = await tools.switch_report_mode.execute(
+      { mode: "invalid" } as never,
+      toolOptions,
+    );
+    expect(result).toHaveProperty("error");
+  });
+
+  it("returns { error } when primary key is required but missing (compare mode)", async () => {
+    const tools = createAskJournalTools(scope(), "Context", undefined, "reports");
+    const result = await tools.switch_report_mode.execute({ mode: "compare" }, toolOptions);
+    expect(result).toHaveProperty("error");
+    expect((result as { error: string }).error).toContain("required");
+  });
+
+  it("accepts primary and secondary keys in compare mode", async () => {
+    const tools = createAskJournalTools(scope(), "Context", undefined, "reports");
+    const result = await tools.switch_report_mode.execute(
+      { mode: "compare", primary: "ONLY_A" },
+      toolOptions,
+    );
+    // Should not be a "required" error; context or error is fine
+    if ("error" in result) {
+      expect(result.error).not.toContain("required");
+    } else {
+      expect(result).toHaveProperty("context");
+    }
+  });
+
+  it("rejects primary key longer than 64 chars", async () => {
+    const tools = createAskJournalTools(scope(), "Context", undefined, "reports");
+    const result = await tools.switch_report_mode.execute(
+      { mode: "overview", primary: "x".repeat(65) },
+      toolOptions,
+    );
+    expect(result).toHaveProperty("error");
+    expect((result as { error: string }).error).toContain("64");
+  });
+
+  it("returns no journal data when tool budget is exhausted", async () => {
+    const tools = createAskJournalTools(scope(), "Context", () => false, "reports");
+    const result = await tools.switch_report_mode.execute({ mode: "overview" }, toolOptions);
+    expect(result).toEqual({ error: "AI tool limit reached." });
+  });
+
+  it("does not accept account, date, filter, or timezone arguments", async () => {
+    const tools = createAskJournalTools(scope(), "Context", undefined, "reports");
+    const r1 = await tools.switch_report_mode.execute(
+      { mode: "overview", account: "a" } as never,
+      toolOptions,
+    );
+    const r2 = await tools.switch_report_mode.execute(
+      { mode: "overview", from: "2026-01-01" } as never,
+      toolOptions,
+    );
+    const r3 = await tools.switch_report_mode.execute(
+      { mode: "overview", timezone: "UTC" } as never,
+      toolOptions,
+    );
+    expect(r1).toEqual({ error: "Invalid tool arguments." });
+    expect(r2).toEqual({ error: "Invalid tool arguments." });
+    expect(r3).toEqual({ error: "Invalid tool arguments." });
+  });
 });

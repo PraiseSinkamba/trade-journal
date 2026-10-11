@@ -17,14 +17,22 @@ The current AI surface in this repository is the **server-only execution foundat
 - `AI_FEATURE_POLICIES` fixes the per-feature `maxOutputTokens`,
   `maxRetries`, and optional `timeoutMs`. `statementImport` is
   `maxRetries: 0` and time-bounded at 120 seconds; `reflection` is
-  bounded for `maxOutputTokens`; `askJournalAgent` is time-bounded and
-  additionally fixes four model steps and four tool calls. The closed
-  `AiFeature` union prevents unreviewed features from inheriting unsafe defaults.
+  bounded for `maxOutputTokens`; `askJournalAgent` and `reportsAgent` are
+  time-bounded and additionally fix four model steps and four tool calls.
+  The closed `AiFeature` union prevents unreviewed features from inheriting
+  unsafe defaults.
 - Ask Journal runs one provider-neutral, read-only tool loop over the immutable
   route-created account/filter/timezone scope. It starts with the aggregate
   context, then can request that same summary, up to five scoped trade summaries,
   or one verified scoped trade with up to fifty fills. Tool inputs cannot choose
   accounts, filters, dates, timezone, provider, model, or settings.
+- The Reports agent extends the Ask Journal tool loop with a fourth tool
+  `switch_report_mode(mode, primary?, secondary?)` that calls `reportContext`
+  to return bounded report-mode summaries (overview, trends, explorer, breakdown,
+  compare). The tool is only exposed when the Ask route receives
+  `feature: "reports"`; the existing Ask Journal tool set is used otherwise.
+  The Reports agent uses an identical policy envelope: 1,200 tokens, 4 steps,
+  4 tool calls, 30 s, 2 retries.
 - Errors are normalized to `AiRuntimeError` with safe, user-facing
   categories (`missing_key`, `authentication`, `billing`, `rate_limited`,
   `model_unavailable`, `timeout`, `provider`). Raw provider response text

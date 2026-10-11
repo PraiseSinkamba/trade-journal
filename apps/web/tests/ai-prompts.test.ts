@@ -3,9 +3,11 @@ import {
   REFLECTION_SYSTEM_PROMPT,
   buildAskJournalPrompt,
   buildDailyRecapPrompt,
+  buildReportsAgentPrompt,
   buildTradeCritiquePrompt,
   type AskJournalPromptInput,
   type DailyRecapPromptInput,
+  type ReportsAgentPromptInput,
   type TradeCritiquePromptInput,
 } from "../src/server/ai-prompts";
 
@@ -126,5 +128,25 @@ Notes: Looked clean
 Fills:
 2026-09-15T09:00:00Z buy 1 @ 100
 2026-09-15T10:00:00Z sell 1 @ 112`);
+  });
+});
+
+describe("buildReportsAgentPrompt", () => {
+  it("includes switch_report_mode guidance and the initial context", () => {
+    const input: ReportsAgentPromptInput = {
+      question: "Why am I losing on Tuesdays?",
+      context: "10 trades, net -$50, win rate 40%",
+    };
+    expect(buildReportsAgentPrompt(input)).toBe(
+      `Answer the trader's analytical question using the journal aggregate context and the switch_report_mode tool.
+Call switch_report_mode to get the relevant report-mode data before answering.
+If the data can't answer the question, say exactly what's missing.
+Cite the numbers you used. Under 200 words. Do not infer results for excluded accounts or dates.
+
+Initial aggregate context:
+10 trades, net -$50, win rate 40%
+
+Question: Why am I losing on Tuesdays?`,
+    );
   });
 });

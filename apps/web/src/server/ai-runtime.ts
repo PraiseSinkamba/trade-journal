@@ -33,6 +33,15 @@ export interface AskAgentAiRequest {
   createTools: (reserveToolCall: () => boolean) => ToolSet;
 }
 
+export interface ReportsAgentAiRequest {
+  feature: Extract<AiFeature, "reportsAgent">;
+  configuration: AiRuntimeConfiguration;
+  promptVersion: string;
+  system: string;
+  prompt: string;
+  createTools: (reserveToolCall: () => boolean) => ToolSet;
+}
+
 export interface ObjectAiRequest {
   feature: Extract<AiFeature, "statementImport">;
   configuration: AiRuntimeConfiguration;
@@ -99,7 +108,7 @@ export const mapAiRuntimeError = (error: unknown): AiRuntimeError => {
 };
 
 const buildMeta = (
-  request: TextAiRequest | ObjectAiRequest | AskAgentAiRequest,
+  request: TextAiRequest | ObjectAiRequest | AskAgentAiRequest | ReportsAgentAiRequest,
   policy: { maxRetries: number },
   result: { finishReason?: string; usage?: { inputTokens?: number; outputTokens?: number } },
   startedAt: number,
@@ -151,6 +160,69 @@ export const runTextAi = async (request: TextAiRequest): Promise<AiRunResult<str
  * divides the total policy cap across steps before any per-step usage exists.
  */
 export const runAskAgentAi = async (request: AskAgentAiRequest) => {
+  const policy = AI_FEATURE_POLICIES[request.feature];
+  const { provider, modelId, apiKey } = request.configuration;
+  const maxSteps = policy.maxSteps;
+  const maxToolCalls = policy.maxToolCalls;
+  if (maxSteps === undefined || maxToolCalls === undefined) {
+    throw new AiRuntimeError(
+      "provider",
+      "AI request failed. Check your provider settings or try again shortly.",
+    );
+  }
+
+  let toolCallCount = 0;
+  let toolBudgetExceeded = false;
+  const reserveToolCall = () => {
+    if (toolCallCount >= maxToolCalls) {
+      toolBudgetExceeded = true;
+      return false;
+    }
+    toolCallCount += 1;
+    return true;
+  };
+  const model =
+    provider === "openai"
+      ? createOpenAI({ apiKey }).responses(modelId)
+      : createAnthropic({ apiKey })(modelId);
+  const startedAt = performance.now();
+  try {
+    const result = await generateText({
+      model,
+      system: request.system,
+      prompt: request.prompt,
+      tools: request.createTools(reserveToolCall),
+      stopWhen: isStepCount(maxSteps),
+      maxOutputTokens: Math.floor(policy.maxOutputTokens / maxSteps),
+      maxRetries: policy.maxRetries,
+      abortSignal: AbortSignal.timeout(policy.timeoutMs ?? 30_000),
+      ...(provider === "openai" ? { providerOptions: { openai: { store: false } } } : {}),
+    });
+    const stepCount = result.steps.length;
+    if (
+      toolBudgetExceeded ||
+      (stepCount >= maxSteps && result.finishReason === "tool-calls") ||
+      !result.text.trim()
+    ) {
+      throw new AiRuntimeError(
+        "provider",
+        "AI request could not complete within the journal context limit. Please try a more specific question.",
+      );
+    }
+    return {
+      output: result.text,
+      meta: buildMeta(request, policy, result, startedAt, { stepCount, toolCallCount }),
+    };
+  } catch (error) {
+    throw error instanceof AiRuntimeError ? error : mapAiRuntimeError(error);
+  }
+};
+
+/**
+ * Run one provider-neutral, bounded tool loop for the Reports agent.
+ * Same envelope as Ask Journal: 4 steps × 4 tool calls, 30 s, 2 retries.
+ */
+export const runReportsAgentAi = async (request: ReportsAgentAiRequest) => {
   const policy = AI_FEATURE_POLICIES[request.feature];
   const { provider, modelId, apiKey } = request.configuration;
   const maxSteps = policy.maxSteps;

@@ -13,11 +13,16 @@ import { POST as ask } from "../src/app/api/ai/ask/route";
 import { POST as recap } from "../src/app/api/ai/recap/route";
 import { GET as day } from "../src/app/api/journal/[date]/route";
 
-const { mockAskJournalAi, mockRunAi } = vi.hoisted(() => ({
+const { mockAskJournalAi, mockReportsAgentAi, mockRunAi } = vi.hoisted(() => ({
   mockAskJournalAi: vi.fn(async () => "Controlled AI response"),
+  mockReportsAgentAi: vi.fn(async () => "Controlled Reports response"),
   mockRunAi: vi.fn(async () => "Controlled AI response"),
 }));
-vi.mock("@/server/ai", () => ({ runAi: mockRunAi, runAskJournalAi: mockAskJournalAi }));
+vi.mock("@/server/ai", () => ({
+  runAi: mockRunAi,
+  runAskJournalAi: mockAskJournalAi,
+  runReportsAgentAi: mockReportsAgentAi,
+}));
 const originalDir = process.env.JOURNAL_DATA_DIR;
 const scratch = mkdtempSync(join(tmpdir(), "journal-ai-scope-"));
 process.env.JOURNAL_DATA_DIR = scratch;

@@ -1,4 +1,4 @@
-export type AiFeature = "reflection" | "askJournalAgent" | "statementImport";
+export type AiFeature = "reflection" | "askJournalAgent" | "reportsAgent" | "statementImport";
 
 export type AiExecutionPolicy = Readonly<{
   maxOutputTokens: number;
@@ -47,11 +47,19 @@ export const AI_FEATURE_POLICIES: Readonly<Record<AiFeature, AiExecutionPolicy>>
     maxSteps: 4,
     maxToolCalls: 4,
   },
+  reportsAgent: {
+    maxOutputTokens: 1200,
+    maxRetries: 2,
+    timeoutMs: 30_000,
+    maxSteps: 4,
+    maxToolCalls: 4,
+  },
   statementImport: { maxOutputTokens: 32_000, maxRetries: 0, timeoutMs: 120_000 },
 };
 
 export const AI_PROMPT_VERSIONS: Readonly<Record<AiFeature, string>> = {
   reflection: "reflection-v1",
   askJournalAgent: "ask-journal-agent-v1",
+  reportsAgent: "reports-agent-v1",
   statementImport: "statement-import-v1",
 };
