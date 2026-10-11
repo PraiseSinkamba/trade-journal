@@ -5,7 +5,7 @@ import { join } from "node:path";
 import * as schema from "./schema";
 import { BOOTSTRAP_SQL } from "./bootstrap";
 
-export const dataDir = (): string => process.env.JOURNAL_DATA_DIR ?? join(process.cwd(), "data");
+export const dataDir = (): string => process.env.JOURNAL_DATA_DIR ?? "/data/trade-journal";
 
 export type JournalDb = BetterSQLite3Database<typeof schema> & {
   $client: Database.Database;
