@@ -1,11 +1,13 @@
 # Task 1.1 Review Package
 
 ## Commit
+
 - Range: `491cfd1..5a1f0c7`
 - Subject: `feat(importers): surface per-row skip reasons on ParsedImport`
 - Author: Malumbo <malumbo@chrilantech.com>
 
 ## Stat
+
 ```
  packages/importers/src/types.ts | 9 +++++++++
  1 file changed, 9 insertions(+)
@@ -47,12 +49,13 @@ index 938b5d1..d2d6676 100644
 ### Task 1.1: Add `SkippedReason` to `ParsedImport`
 
 **Files:**
+
 - Modify: `packages/importers/src/types.ts:49`
 
 **Produces:**
 export interface SkippedReason {
-  row: number | null;
-  reason: string;
+row: number | null;
+reason: string;
 }
 
 - [ ] **Step 1: Add the type and field**
@@ -64,7 +67,7 @@ Add SkippedReason above ParsedImport, add skippedReasons: SkippedReason[] to Par
 detect.ts has no ParsedImport literals; no edits there.
 
 - [ ] **Step 3: Commit**
-git commit -m "feat(importers): surface per-row skip reasons on ParsedImport"
+      git commit -m "feat(importers): surface per-row skip reasons on ParsedImport"
 ```
 
 ## Implementer report path

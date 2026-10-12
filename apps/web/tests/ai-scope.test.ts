@@ -4,19 +4,30 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { eq } from "drizzle-orm";
 import { FILTER_KEYS } from "@luxalgo/journal-core";
+import { db, accounts, executions, trades, settings, journalDays } from "../src/db";
+import { insertExecutions } from "../src/server/executions";
+import { setSetting } from "../src/server/settings";
+import { queryTrades } from "../src/server/trades-query";
+import { runAi, runAskJournalAi } from "../src/server/ai";
+import { POST as ask } from "../src/app/api/ai/ask/route";
+import { POST as recap } from "../src/app/api/ai/recap/route";
+import { POST as critique } from "../src/app/api/ai/critique/route";
+import { GET as day } from "../src/app/api/journal/[date]/route";
+import { readAiRequest } from "../src/server/ai-scope";
 
-vi.mock("@/server/ai", () => ({ runAi: vi.fn(async () => "Controlled AI response") }));
+const { mockAskJournalAi, mockReportsAgentAi, mockRunAi } = vi.hoisted(() => ({
+  mockAskJournalAi: vi.fn(async () => "Controlled AI response"),
+  mockReportsAgentAi: vi.fn(async () => "Controlled Reports response"),
+  mockRunAi: vi.fn(async () => "Controlled AI response"),
+}));
+vi.mock("@/server/ai", () => ({
+  runAi: mockRunAi,
+  runAskJournalAi: mockAskJournalAi,
+  runReportsAgentAi: mockReportsAgentAi,
+}));
 const originalDir = process.env.JOURNAL_DATA_DIR;
 const scratch = mkdtempSync(join(tmpdir(), "journal-ai-scope-"));
 process.env.JOURNAL_DATA_DIR = scratch;
-const { db, accounts, executions, trades, settings, journalDays } = await import("../src/db");
-const { insertExecutions } = await import("../src/server/executions");
-const { setSetting } = await import("../src/server/settings");
-const { queryTrades } = await import("../src/server/trades-query");
-const { runAi } = await import("../src/server/ai");
-const { POST: ask } = await import("../src/app/api/ai/ask/route");
-const { POST: recap } = await import("../src/app/api/ai/recap/route");
-const { GET: day } = await import("../src/app/api/journal/[date]/route");
 const request = (body: unknown) =>
   new Request("http://localhost/api/ai/test", {
     method: "POST",
@@ -41,7 +52,13 @@ const fills = (symbol: string, exit: number, date = "2026-09-15") => [
     executedAt: date + "T10:00:00Z",
   },
 ];
-const prompt = () => vi.mocked(runAi).mock.calls.at(-1)![0];
+const prompt = () => {
+  const directCall = vi.mocked(runAi).mock;
+  const agentCall = vi.mocked(runAskJournalAi).mock;
+  const directOrder = directCall.invocationCallOrder.at(-1) ?? 0;
+  const agentOrder = agentCall.invocationCallOrder.at(-1) ?? 0;
+  return directOrder > agentOrder ? directCall.calls.at(-1)![0] : agentCall.calls.at(-1)![1];
+};
 beforeEach(() => {
   vi.stubEnv("JOURNAL_PASSWORD", "");
   db.delete(trades).run();
@@ -63,6 +80,7 @@ beforeEach(() => {
   insertExecutions("b", fills("ONLY_B", 50), "manual");
   setSetting("timeZone", "UTC");
   vi.mocked(runAi).mockClear();
+  vi.mocked(runAskJournalAi).mockClear();
 });
 afterAll(() => {
   db.$client.close();
@@ -83,6 +101,20 @@ it.each([
   expect(prompt()).not.toContain("ONLY_B");
   expect(prompt()).not.toContain("-40.00");
   expect((await response.json()).scope.label).toContain("Account A");
+});
+
+it("runs exactly one Ask agent execution and preserves the Ask response shape", async () => {
+  const response = await ask(
+    request({ question: "How did I do?", filters: { accounts: "a" }, timeZone: "UTC" }),
+  );
+
+  expect(response.status).toBe(200);
+  expect(await response.json()).toEqual({
+    answer: "Controlled AI response",
+    scope: expect.objectContaining({ timeZone: "UTC" }),
+  });
+  expect(runAskJournalAi).toHaveBeenCalledTimes(1);
+  expect(runAi).not.toHaveBeenCalled();
 });
 
 it.each(["ask", "recap"])(
@@ -322,10 +354,75 @@ it("rejects invalid request bodies, dates and legacy account fields instead of s
 });
 
 it("keeps single-trade critique scoped to its key", async () => {
-  const { POST: critique } = await import("../src/app/api/ai/critique/route");
   expect(
     (await critique(request({ key: queryTrades({ accounts: "a" }).trades[0]!.key }))).status,
   ).toBe(200);
   expect(prompt()).toContain("ONLY_A");
   expect(prompt()).not.toContain("ONLY_B");
+});
+
+// --- dataSource extension ---
+
+it("rejects unknown dataSource values", async () => {
+  for (const ds of ["trades+unknown", "TRADES", "playbooks", 1, null]) {
+    const response = await ask(
+      request({ question: "How did I do?", filters: {}, dataSource: ds, timeZone: "UTC" }),
+    );
+    expect(response.status, `dataSource=${JSON.stringify(ds)}`).toBe(400);
+  }
+  expect(runAi).not.toHaveBeenCalled();
+});
+
+it("rejects tradeCritiqueKey without trades+playbooks dataSource", async () => {
+  const response = await ask(
+    request({
+      question: "How did I do?",
+      filters: {},
+      dataSource: "trades",
+      tradeCritiqueKey: "some-key",
+      timeZone: "UTC",
+    }),
+  );
+  expect(response.status).toBe(400);
+  expect(runAi).not.toHaveBeenCalled();
+});
+
+it("readAiRequest accepts valid dataSource and passes it through deep-frozen", async () => {
+  for (const ds of [
+    "trades",
+    "trades+playbooks",
+    "trades+missed",
+    "trades+notes",
+    "trades+progress",
+  ] as const) {
+    const scope = readAiRequest(
+      { question: "How?", filters: {}, dataSource: ds, timeZone: "UTC" },
+      "question",
+    );
+    expect(scope.dataSource).toBe(ds);
+    expect(Object.isFrozen(scope)).toBe(true);
+    expect(Object.isFrozen(scope.filters)).toBe(true);
+  }
+});
+
+it("readAiRequest defaults dataSource to trades when absent", async () => {
+  const scope = readAiRequest({ question: "How?", filters: {}, timeZone: "UTC" }, "question");
+  expect(scope.dataSource).toBe("trades");
+});
+
+it("readAiRequest accepts tradeCritiqueKey only when dataSource is trades+playbooks", async () => {
+  // Invalid: tradeCritiqueKey with trades
+  expect(() =>
+    readAiRequest(
+      { question: "How?", filters: {}, dataSource: "trades", tradeCritiqueKey: "k" },
+      "question",
+    ),
+  ).toThrow();
+  // Valid: tradeCritiqueKey with trades+playbooks
+  const scope = readAiRequest(
+    { question: "How?", filters: {}, dataSource: "trades+playbooks", tradeCritiqueKey: "k" },
+    "question",
+  );
+  expect(scope.tradeCritiqueKey).toBe("k");
+  expect(Object.isFrozen(scope)).toBe(true);
 });

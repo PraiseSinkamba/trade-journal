@@ -1,19 +1,40 @@
 import Database from "better-sqlite3";
-import { drizzle } from "drizzle-orm/better-sqlite3";
-import { mkdirSync } from "node:fs";
+import { drizzle, type BetterSQLite3Database } from "drizzle-orm/better-sqlite3";
+import { existsSync, mkdirSync, unlinkSync } from "node:fs";
 import { join } from "node:path";
 import * as schema from "./schema";
 import { BOOTSTRAP_SQL } from "./bootstrap";
 
-export const dataDir = (): string => process.env.JOURNAL_DATA_DIR ?? join(process.cwd(), "data");
+export const dataDir = (): string => process.env.JOURNAL_DATA_DIR ?? "/data/trade-journal";
 
-const globalForDb = globalThis as unknown as { __journalDb?: ReturnType<typeof createDb> };
+export type JournalDb = BetterSQLite3Database<typeof schema> & {
+  $client: Database.Database;
+};
+
+const globalForDb = globalThis as unknown as { __journalDb?: JournalDb };
+
+/** Track the directory used to open the current connection so we can detect a changed test environment. */
+let currentDataDir: string | undefined;
+
+/** Remove any WAL and shared-memory files left by a previous connection. */
+const cleanWalFiles = (dbPath: string) => {
+  for (const ext of ["-wal", "-shm"]) {
+    const f = dbPath + ext;
+    try {
+      if (existsSync(f)) unlinkSync(f);
+    } catch {
+      // ignore
+    }
+  }
+};
 
 const createDb = () => {
   const dir = dataDir();
   mkdirSync(dir, { recursive: true });
-  const sqlite = new Database(join(dir, "journal.db"));
+  const dbPath = join(dir, "journal.db");
+  const sqlite = new Database(dbPath);
   sqlite.pragma("journal_mode = WAL");
+  sqlite.pragma("busy_timeout = 5000");
   sqlite.pragma("foreign_keys = ON");
   sqlite.exec(BOOTSTRAP_SQL);
   const folderColumns = sqlite.pragma("table_info(folders)") as { name: string }[];
@@ -50,7 +71,69 @@ const createDb = () => {
   return drizzle(sqlite, { schema });
 };
 
-/** Singleton across Next dev hot reloads. */
-export const db = globalForDb.__journalDb ?? (globalForDb.__journalDb = createDb());
+/**
+ * Singleton across Next.js dev hot reloads.
+ *
+ * When `JOURNAL_DATA_DIR` changes (e.g. between Vitest forks that set it before
+ * importing this module) the old connection is closed and a fresh one is opened
+ * against the new directory so each test fork gets isolated storage.
+ */
+export const db = (() => {
+  const dir = dataDir();
+  if (globalForDb.__journalDb && currentDataDir !== dir) {
+    const sqlite = globalForDb.__journalDb.$client;
+    try {
+      sqlite.pragma("wal_checkpoint(TRUNCATE)");
+    } catch {
+      // ignore
+    }
+    sqlite.close();
+    cleanWalFiles(join(currentDataDir!, "journal.db"));
+    globalForDb.__journalDb = undefined;
+  }
+  currentDataDir = dir;
+  const existing = globalForDb.__journalDb;
+  if (existing) return existing;
+  const sqlite = new Database(join(dir, "journal.db"));
+  sqlite.pragma("journal_mode = WAL");
+  sqlite.pragma("busy_timeout = 5000");
+  sqlite.pragma("foreign_keys = ON");
+  sqlite.exec(BOOTSTRAP_SQL);
+  // Mirror the upgrade queries from createDb so the singleton path stays
+  // equivalent to the legacy initialization sequence.
+  const folderColumns = sqlite.pragma("table_info(folders)") as { name: string }[];
+  if (!folderColumns.some((column) => column.name === "deleted_at")) {
+    sqlite.exec("ALTER TABLE folders ADD COLUMN deleted_at TEXT");
+  }
+  sqlite
+    .transaction(() => {
+      const columns = sqlite.pragma("table_info(accounts)") as { name: string }[];
+      if (!columns.some((column) => column.name === "ibkr_sync_time_zone")) {
+        sqlite.exec("ALTER TABLE accounts ADD COLUMN ibkr_sync_time_zone TEXT");
+      }
+    })
+    .immediate();
+  const executionColumns = sqlite.pragma("table_info(executions)") as { name: string }[];
+  if (!executionColumns.some((column) => column.name === "import_metadata_json")) {
+    sqlite.exec("ALTER TABLE executions ADD COLUMN import_metadata_json TEXT");
+  }
+  const csvColumns = sqlite.pragma("table_info(market_csv_datasets)") as { name: string }[];
+  sqlite.transaction(() => {
+    for (const name of ["bar_count", "first_time", "last_time"]) {
+      if (!csvColumns.some((column) => column.name === name))
+        sqlite.exec(
+          `ALTER TABLE market_csv_datasets ADD COLUMN ${name} INTEGER NOT NULL DEFAULT 0`,
+        );
+    }
+    sqlite.exec(`UPDATE market_csv_datasets SET
+      bar_count = json_array_length(bars_json),
+      first_time = json_extract(bars_json, '$[0].time'),
+      last_time = json_extract(bars_json, '$[#-1].time') WHERE bar_count = 0`);
+  })();
+  const journal = drizzle(sqlite, { schema }) as JournalDb;
+  journal.$client = sqlite;
+  globalForDb.__journalDb = journal;
+  return journal;
+})();
 
 export * from "./schema";

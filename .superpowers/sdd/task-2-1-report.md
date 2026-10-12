@@ -3,27 +3,31 @@
 ## Files modified
 
 ### `apps/web/src/app/import/page.tsx`
+
 - Added `showManualMapper` state (line 150)
 - Gate totals block: `{!showManualMapper && preview && !preview.needsMapping && preview.totals && (` — hides the detected-format summary when user clicks refute
 - Gate mapper block: `{preview && (showManualMapper || preview.needsMapping) && preview.headers && (` — shows mapper when user clicks refute OR when auto-detect needs mapping
 - Refute link inserted after the format `Badge`:
   ```tsx
-  {preview.detected !== "ninjatrader" && !preview.aiPreviewToken && (
-    <button
-      className="text-xs text-muted-foreground underline hover:text-foreground"
-      onClick={() => {
-        setShowManualMapper(true);
-        setMappingApplied(false);
-        setError(null);
-      }}
-    >
-      Wrong format? Map columns manually
-    </button>
-  )}
+  {
+    preview.detected !== "ninjatrader" && !preview.aiPreviewToken && (
+      <button
+        className="text-xs text-muted-foreground underline hover:text-foreground"
+        onClick={() => {
+          setShowManualMapper(true);
+          setMappingApplied(false);
+          setError(null);
+        }}
+      >
+        Wrong format? Map columns manually
+      </button>
+    );
+  }
   ```
 - `showManualMapper` reset in `onFile()` (new file selection) and `invalidateAiPreview()` (AI settings change)
 
 ### `apps/web/tests/import/import-page-preview.test.tsx`
+
 - New test file (impractical to run — see below)
 
 ## Component test: impractical

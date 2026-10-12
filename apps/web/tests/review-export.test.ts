@@ -1,5 +1,9 @@
-import { it, expect } from "vitest";
+import { it, expect, vi } from "vitest";
 import { readFileSync, writeFileSync } from "node:fs";
+
+// Fork pool overhead: when this file runs 4th in the suite the accumulated
+// startup cost pushes the PDF build close to 5 s; give it headroom.
+vi.setConfig({ testTimeout: 8000 });
 import { PDFDocument } from "pdf-lib";
 import { buildReviewPdf } from "../src/lib/export-review";
 const font = readFileSync(new URL("../public/fonts/NotoSans-Regular.ttf", import.meta.url));

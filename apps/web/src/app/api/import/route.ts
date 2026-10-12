@@ -12,7 +12,6 @@ import { getImportTimeZone } from "@/server/settings";
 import { isTimeZone } from "@/lib/timezone";
 import type { ImportReviewOptions } from "@/lib/import-review";
 import { previewNinjaTraderImport, commitNinjaTraderImport } from "@/server/ninjatrader-import";
-import type { AiImportOptions } from "@/lib/ai-import";
 import {
   createAiImportPreview,
   parseStatementWithAi,
@@ -29,7 +28,11 @@ interface ImportBody {
   fileName?: string;
   symbol?: string;
   review?: ImportReviewOptions;
-  ai?: AiImportOptions;
+  /**
+   * AI-preview intent. The browser supplies only a boolean; provider,
+   * model, and key are resolved on the server from Settings.
+   */
+  ai?: boolean;
   encoding?: "text" | "pdf";
   headers?: string[];
   aiPreviewToken?: string;
@@ -56,6 +59,7 @@ export const POST = handler(async (request: Request) => {
     body.encoding === undefined || body.encoding === "text" || body.encoding === "pdf",
     "Unsupported file encoding.",
   );
+  requireValue(body.ai === undefined || body.ai === true, "AI parsing flag must be a boolean.");
   requireValue(body.encoding !== "pdf" || body.ai, "Enable AI parsing to upload PDF statements.");
   requireValue(!body.ai || !body.mapping, "Choose AI parsing or column mapping, not both.");
   const statement = {
@@ -73,7 +77,7 @@ export const POST = handler(async (request: Request) => {
 
   const parsed = body.ai
     ? body.mode === "preview"
-      ? await parseStatementWithAi(statement, body.ai, request.signal)
+      ? await parseStatementWithAi(statement, request.signal)
       : readAiImportPreview(statement, body.aiPreviewToken!)
     : body.mapping
       ? parseWithMapping(body.content, body.mapping, { timeZone })

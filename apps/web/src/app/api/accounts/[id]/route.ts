@@ -3,6 +3,7 @@ import { accounts, db, executions, trades } from "@/db";
 import { bad, handler, ok, requireValue } from "@/server/api";
 import { rebuildAccount } from "@/server/rebuild";
 import { hasSyncedExecutions, isIbkrSyncAccount } from "@/server/ibkr-sync-timezone";
+import { getCurrentAccountId, setCurrentAccountId } from "@/server/settings";
 
 type Params = { params: Promise<{ id: string }> };
 
@@ -62,6 +63,10 @@ export const DELETE = handler(async (_request: Request, { params }: Params) => {
     tx.delete(trades).where(eq(trades.accountId, id)).run();
     tx.delete(executions).where(eq(executions.accountId, id)).run();
     tx.delete(accounts).where(eq(accounts.id, id)).run();
+    // Clear the persisted default if it pointed at the deleted account so the
+    // next picker's auto-fill falls back to the single-account rule instead of
+    // a stale id.
+    if (getCurrentAccountId() === id) setCurrentAccountId(null);
   });
   return ok({ deleted: true });
 });

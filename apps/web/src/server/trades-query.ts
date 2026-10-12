@@ -77,6 +77,7 @@ export const rowToTrade = (row: TradeRow, config = context()): AnnotatedTrade =>
  */
 export const queryTrades = (
   filters: TradeFilters = {},
+  timeZone = getTimeZone(),
 ): { rows: TradeRow[]; trades: AnnotatedTrade[] } => {
   const effective = { ...filters, accounts: filters.accounts ?? filters.accountIds?.join(",") };
   const accountIds = effective.accounts
@@ -98,7 +99,6 @@ export const queryTrades = (
     )
     .orderBy(asc(trades.openedAt))
     .all();
-  const timeZone = getTimeZone();
   const config = context();
   const pairs = all
     .map((row) => ({ row, trade: rowToTrade(row, config) }))

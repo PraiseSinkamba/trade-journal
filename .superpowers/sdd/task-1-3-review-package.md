@@ -1,6 +1,7 @@
 # Task 1.3 Review Package
 
 ## Commit
+
 - Range: `f0c08a6..8497a92`
 - Subject: `feat(importers): emit per-row reasons from legacy format parsers`
 - Stat: 3 files, +30/-6

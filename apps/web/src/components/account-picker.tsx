@@ -1,6 +1,6 @@
 "use client";
 
-import { useId, useState } from "react";
+import { useEffect, useId, useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Label } from "@/components/ui/label";
 import {
@@ -25,10 +25,16 @@ export function AccountPicker({
   value,
   onChange,
   kind,
+  defaultId,
+  onAutoFill,
 }: {
   value: string;
   onChange: (id: string) => void;
   kind: "import" | "manual";
+  /** Resolved last-used/default id from `useAccountDefault`. */
+  defaultId?: string | null;
+  /** Fires once when the picker auto-picks so parents can persist. */
+  onAutoFill?: (id: string) => void;
 }) {
   const {
     data,
@@ -43,6 +49,23 @@ export function AccountPicker({
     ...(data?.accounts ?? []),
     ...created.filter((item) => !data?.accounts.some((row) => row.id === item.id)),
   ].filter((account) => !account.archivedAt);
+
+  // Single-account or remembered default: pick once, do not override user choice.
+  useEffect(() => {
+    if (value) return;
+    if (!accounts.length) return;
+    if (accounts.length === 1) {
+      const only = accounts[0]!;
+      onChange(only.id);
+      onAutoFill?.(only.id);
+      return;
+    }
+    if (defaultId && accounts.some((account) => account.id === defaultId)) {
+      onChange(defaultId);
+      onAutoFill?.(defaultId);
+    }
+  }, [value, accounts, defaultId, onChange, onAutoFill]);
+
   return (
     <div className="flex min-w-0 flex-wrap items-end gap-2">
       <div className="min-w-0 flex-[1_1_180px]">

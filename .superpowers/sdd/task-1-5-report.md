@@ -79,6 +79,7 @@ describe("skipped-reasons", () => {
 ## Fixture adjustments
 
 **Third test originally used:**
+
 ```csv
 Trade #,Symbol,Entry Time,Entry Price,Exit Time,Exit Price,Qty,Direction
 1,ES,not-a-time,4500,2024-01-02T11:00:00Z,4510,1,Long
@@ -87,9 +88,11 @@ Trade #,Symbol,Entry Time,Entry Price,Exit Time,Exit Price,Qty,Direction
 **Problem:** `parseHistory` returns `null` for this CSV because the generic adapter's `recognizable()` check fails (no `entryTime`/`entryPrice`/`quantity` columns map, and the adapter can't parse the rows). The `recognizable` guard is correct behavior — it's the right way to reject unreadable history files.
 
 **Adjusted to (MT5 fixture):**
+
 ```csv
 Time,Position,Symbol,Type,Volume,Price,S / L,T / P,Time,Price,Commission,Swap,Profit
 2026.01.05 09:00,1001,EURUSD,buy,0.1,1.1,1.09,1.13,2026.01.05 10:00,1.102,-2,0.5,20
 2026.01.05 09:00,1002,GBPJPY,sell,0.1,,1.09,1.13,2026.01.05 10:00,,-2,0.5,20
 ```
+
 Row 2 has empty entry/exit prices → `parseHistory` returns non-null with `skippedRows=1`, `skippedReasons.length=1`. Verified via `eval` that this returns a proper result and the cardinality invariant holds.

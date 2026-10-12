@@ -33,9 +33,11 @@ return { records, skipped, skippedReasons };
 ```
 
 If 50 rows are cancelled/rejected/expired, `skipped` = 50 but `skippedReasons` = `[{ row: null, reason: "…cancelled-row-ignored…"}]` (length 1). **Confidence: 1.0. Severity: Critical.** The aggregate at the bottom of `parseHistory` then incorporates this mismatch:
+
 ```ts
-skippedReasons: [...history.stats.skippedReasons, ...skippedReasons]
+skippedReasons: [...history.stats.skippedReasons, ...skippedReasons];
 ```
+
 and the API surface checks `skippedReasons.length` to display "N detailed". A user sees "50 rows skipped — 1 detailed" and "and 0 more" — broken UI.
 
 ### KNOWN ACCEPTABLE — Cascading conditions (no violation)
@@ -54,20 +56,20 @@ When `needsSymbol` is true (user must choose symbol), `skippedReasons` accumulat
 
 ## 2. Spec Coverage
 
-| Acceptance Criterion | Implementation | Covered |
-|---|---|---|
-| **Spec §1**: Per-row reasons surfaced in disclosure panel | `route.ts` exposes `skippedReasons[:50]` + `skippedReasonsTruncated`; UI renders `<details>` with first 5 + "and N more" + truncation note | ✅ |
-| **Spec §1**: `skippedRows` count preserved | `route.ts` still returns `parsed.skippedRows` unchanged | ✅ |
-| **Spec §2**: "Wrong format? Map columns manually" link | `page.tsx` adds link, hidden for `ninjatrader` and when `aiPreviewToken` set | ✅ |
-| **Spec §2**: Link click collapses totals, shows mapper | `!showManualMapper && preview && !preview.needsMapping && preview.totals` guards the totals block | ✅ |
-| **Spec §2**: `showManualMapper` resets on new file | `onFile` calls `setShowManualMapper(false)` | ✅ |
-| **Spec §3**: `maxOutputTokens` 16000 → 32000 | `ai-import.ts` `maxOutputTokens: 32000` | ✅ |
-| **Spec §3**: Header block in user message | `headers` field added to `AiStatement`; user message prepends `Detected columns (first row of file):\n  0: Ticket…` | ✅ |
-| **Spec §3**: Non-trade inventory concrete list | SYSTEM prompt extended with full row-type list (deposits, withdrawals, transfers, balance rows, dividends, interest, fees-as-line-items, cancellations, expired orders, working orders, status lines, equity/margin totals, summary totals, account info rows) | ✅ |
-| **Spec §3**: Tighter `complete` semantics | SYSTEM prompt: "Prefer returning the rows you are sure about with complete: true over returning everything with complete: false" | ✅ |
-| **Spec §3**: `validateAiExtraction` returns `skippedReasons: []` | Line: `return { format: "AI-assisted", executions, sources, skippedRows: 0, skippedReasons: [], warnings }` | ✅ |
-| **Spec §4**: No HTTP in `packages/importers` | grepped; no fetch/axios/http imports added | ✅ |
-| **Spec §4**: No new dependencies | stat confirms no new deps | ✅ |
+| Acceptance Criterion                                             | Implementation                                                                                                                                                                                                                                                 | Covered |
+| ---------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------- |
+| **Spec §1**: Per-row reasons surfaced in disclosure panel        | `route.ts` exposes `skippedReasons[:50]` + `skippedReasonsTruncated`; UI renders `<details>` with first 5 + "and N more" + truncation note                                                                                                                     | ✅      |
+| **Spec §1**: `skippedRows` count preserved                       | `route.ts` still returns `parsed.skippedRows` unchanged                                                                                                                                                                                                        | ✅      |
+| **Spec §2**: "Wrong format? Map columns manually" link           | `page.tsx` adds link, hidden for `ninjatrader` and when `aiPreviewToken` set                                                                                                                                                                                   | ✅      |
+| **Spec §2**: Link click collapses totals, shows mapper           | `!showManualMapper && preview && !preview.needsMapping && preview.totals` guards the totals block                                                                                                                                                              | ✅      |
+| **Spec §2**: `showManualMapper` resets on new file               | `onFile` calls `setShowManualMapper(false)`                                                                                                                                                                                                                    | ✅      |
+| **Spec §3**: `maxOutputTokens` 16000 → 32000                     | `ai-import.ts` `maxOutputTokens: 32000`                                                                                                                                                                                                                        | ✅      |
+| **Spec §3**: Header block in user message                        | `headers` field added to `AiStatement`; user message prepends `Detected columns (first row of file):\n  0: Ticket…`                                                                                                                                            | ✅      |
+| **Spec §3**: Non-trade inventory concrete list                   | SYSTEM prompt extended with full row-type list (deposits, withdrawals, transfers, balance rows, dividends, interest, fees-as-line-items, cancellations, expired orders, working orders, status lines, equity/margin totals, summary totals, account info rows) | ✅      |
+| **Spec §3**: Tighter `complete` semantics                        | SYSTEM prompt: "Prefer returning the rows you are sure about with complete: true over returning everything with complete: false"                                                                                                                               | ✅      |
+| **Spec §3**: `validateAiExtraction` returns `skippedReasons: []` | Line: `return { format: "AI-assisted", executions, sources, skippedRows: 0, skippedReasons: [], warnings }`                                                                                                                                                    | ✅      |
+| **Spec §4**: No HTTP in `packages/importers`                     | grepped; no fetch/axios/http imports added                                                                                                                                                                                                                     | ✅      |
+| **Spec §4**: No new dependencies                                 | stat confirms no new deps                                                                                                                                                                                                                                      | ✅      |
 
 **Uncovered items:** None. All acceptance criteria are addressed.
 
@@ -90,15 +92,15 @@ All reason strings are human-facing. No column names (e.g. "symbol", "side", "qu
 
 The test file `skipped-reasons.test.ts` has **3 cases** (tradezella, parseWithMapping, parseHistory) and the UI test `import-page-preview.test.tsx` has **4 cases** (refute link visible, refute link hidden for ninjatrader, refute click shows mapper, refute click hides totals). Several gaps:
 
-| Edge case | Risk | Covered? |
-|---|---|---|
-| `filterByStatus` with 2+ cancelled rows | Wrong reason count in UI | **NO** — the bug itself means there's no test for it |
-| `skippedReasonsTruncated: true` path | UI shows "showing first 50 of N" message | **NO** — mock data has `skippedReasons: []`, never tests truncation |
-| `needsSymbol` path in `parseHistory` | No reasons accumulated, error returned | **NO** |
-| `historyFormat.parse` fallback (no executions, no history) | Returns `skippedReasons: []` | **NO** |
-| UI when `skippedReasons.length === 0` but `skippedRows > 0` (the `filterByStatus` bug in production) | Disclosure shows "0 detailed" | **NO** |
-| `"Wrong format?"` link when `preview.detected` is null | Would render in unexpected state | **NO** |
-| `aiPreviewToken` path — link correctly hidden | Covered by test condition `!preview.aiPreviewToken` | ✅ |
+| Edge case                                                                                            | Risk                                                | Covered?                                                            |
+| ---------------------------------------------------------------------------------------------------- | --------------------------------------------------- | ------------------------------------------------------------------- |
+| `filterByStatus` with 2+ cancelled rows                                                              | Wrong reason count in UI                            | **NO** — the bug itself means there's no test for it                |
+| `skippedReasonsTruncated: true` path                                                                 | UI shows "showing first 50 of N" message            | **NO** — mock data has `skippedReasons: []`, never tests truncation |
+| `needsSymbol` path in `parseHistory`                                                                 | No reasons accumulated, error returned              | **NO**                                                              |
+| `historyFormat.parse` fallback (no executions, no history)                                           | Returns `skippedReasons: []`                        | **NO**                                                              |
+| UI when `skippedReasons.length === 0` but `skippedRows > 0` (the `filterByStatus` bug in production) | Disclosure shows "0 detailed"                       | **NO**                                                              |
+| `"Wrong format?"` link when `preview.detected` is null                                               | Would render in unexpected state                    | **NO**                                                              |
+| `aiPreviewToken` path — link correctly hidden                                                        | Covered by test condition `!preview.aiPreviewToken` | ✅                                                                  |
 
 ### 3d. Tests that don't test what they claim
 
@@ -121,6 +123,7 @@ This test passes if `skippedRows >= 1` and the invariant holds. But it doesn't t
 ## 4. Risk Register
 
 ### Risk 1: `filterByStatus` broken invariant (Critical)
+
 - **What:** One `skippedReasons` entry for N filtered rows in generic adapter.
 - **Impact:** User sees "N rows skipped — 1 detailed" and "and 0 more" when many rows are filtered. UI is misleading.
 - **Likely environment:** Files with a "Status" column where many rows are cancelled/working/expired orders — common in TradeVue/generic CSV exports.
@@ -128,26 +131,31 @@ This test passes if `skippedRows >= 1` and the invariant holds. But it doesn't t
 - **Missed by reviewers:** The per-task reviewers tested individual parsers with single skip rows; the aggregate `filterByStatus` path with multiple skipped rows was not exercised.
 
 ### Risk 2: `needsSymbol` path returns early with partial `skippedReasons` (Minor)
+
 - **What:** `parseHistory` can return with `skippedReasons` accumulated only from fill/trade skip sites, before reaching the `needsSymbol` check. The `needsSymbol` error is surfaced via `errors`, not `skippedReasons`, so rows that were skipped for any reason before the symbol check are correctly recorded, but the `needsSymbol` itself contributes no per-row reason.
 - **Impact:** User sees an error "Choose the symbol" and the skip reasons from prior rows. The symbol-missing rows don't appear in `skippedReasons`.
 - **Severity:** Minor — this is a pre-existing design choice; the spec doesn't mandate a per-row reason for `needsSymbol`.
 
 ### Risk 3: No AI-path skip reasons surfaced to UI (Minor)
+
 - **What:** `validateAiExtraction` returns `skippedReasons: []` always (AI parser doesn't produce per-row reasons). The API route only surfaces `skippedReasons` from the non-AI parse path.
 - **Impact:** If a user uploads a file and AI parsing drops rows (hypothetically), no reason is shown. In practice, AI parsing either succeeds with `skippedRows: 0` or fails with `complete=false` — it doesn't produce skip reasons.
 - **Severity:** Minor — by design. AI parsing has its own error model (`complete`, `warnings`, `errors`).
 
 ### Risk 4: Cascade condition divergence in UI "and N more" (Minor)
+
 - **What:** The UI displays `skippedReasons.length - 5` as "and N more". With cascading skip conditions (e.g., a row with both missing symbol and unparseable timestamp — which can't happen due to `if/else if`), `skippedReasons.length` would be less than `skippedRows`. The "and N more" would show the wrong number.
 - **Impact:** Cosmetic — "and N more" could undercount. Since cascading conditions are exclusive, in practice `skippedReasons.length === skippedRows`.
 - **Severity:** Minor — latent, only visible if a future code change introduces a non-cascading double-skip.
 
 ### Risk 5: `readHeaders` imported from `@luxalgo/journal-importers` in web component (Minor)
+
 - **What:** `apps/web/src/app/import/page.tsx` now imports `readHeaders` from the importers package for the AI preview path.
 - **Impact:** This is the correct design (importers package is a dependency of web). No functional risk.
 - **Note:** This was in the plan; no deviation.
 
 ### Risk 6: `packages/importers` purity maintained (Confirmed clean)
+
 - Confirmed: no `fetch`, `axios`, `http`, or `apps/web` imports in any modified `packages/importers` file.
 
 ---
@@ -158,25 +166,25 @@ This test passes if `skippedRows >= 1` and the invariant holds. But it doesn't t
 
 ### Critical (blocks merge)
 
-| # | File | Finding | Confidence |
-|---|---|---|---|
-| C1 | `packages/importers/src/history/adapters/generic.ts` — `filterByStatus` | `skippedReasons.push` called once after the loop for all N filtered rows; `skipped` counts per-row. Violates `skippedReasons.length === skippedRows` invariant. User sees "N rows skipped — 1 detailed" in UI. | 1.0 |
+| #   | File                                                                    | Finding                                                                                                                                                                                                        | Confidence |
+| --- | ----------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ---------- |
+| C1  | `packages/importers/src/history/adapters/generic.ts` — `filterByStatus` | `skippedReasons.push` called once after the loop for all N filtered rows; `skipped` counts per-row. Violates `skippedReasons.length === skippedRows` invariant. User sees "N rows skipped — 1 detailed" in UI. | 1.0        |
 
 ### Important (should fix before merge)
 
-| # | File | Finding | Confidence |
-|---|---|---|---|
-| I1 | `apps/web/tests/import/import-page-preview.test.tsx` | Mock data has `skippedReasons: []`; the skip-reasons disclosure panel is never asserted. The plan promised disclosure panel coverage; it is not tested. | 0.9 |
-| I2 | `packages/importers/src/history/adapters/generic.ts` — `filterByStatus` | The `if (skipped > 0)` block that pushes the aggregated reason fires only when `skipped > 0` — but `skippedReasons` is returned even when `skipped === 0` (returns `[]`). This is correct but fragile; the next developer might "optimize" it away. A comment or a dedicated return path would clarify intent. | 0.8 |
+| #   | File                                                                    | Finding                                                                                                                                                                                                                                                                                                        | Confidence |
+| --- | ----------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ---------- |
+| I1  | `apps/web/tests/import/import-page-preview.test.tsx`                    | Mock data has `skippedReasons: []`; the skip-reasons disclosure panel is never asserted. The plan promised disclosure panel coverage; it is not tested.                                                                                                                                                        | 0.9        |
+| I2  | `packages/importers/src/history/adapters/generic.ts` — `filterByStatus` | The `if (skipped > 0)` block that pushes the aggregated reason fires only when `skipped > 0` — but `skippedReasons` is returned even when `skipped === 0` (returns `[]`). This is correct but fragile; the next developer might "optimize" it away. A comment or a dedicated return path would clarify intent. | 0.8        |
 
 ### Minor (non-blocking)
 
-| # | File | Finding | Confidence |
-|---|---|---|---|
-| M1 | `packages/importers/src/formats/ibkr.ts` | Reason string `"row was not an Order fill (skipped discriminator)"` uses internal term "discriminator" — user-facing text would be clearer as `"row was not a filled order"`. No spec violation; just suboptimal copy. | 0.9 |
-| M2 | `apps/web/tests/import/import-page-preview.test.tsx` | `skippedReasonsTruncated: true` path never tested; no test exercises the "showing first 50 of N" truncation message in the UI. | 0.85 |
-| M3 | `packages/importers/tests/skipped-reasons.test.ts` | `parseHistory` test uses a specific MT5 fixture whose skip-triggering properties aren't explicitly documented or asserted — could silently stop exercising the intended path if fixture format changes. | 0.8 |
-| M4 | `packages/importers/src/formats/history.ts` | `needsSymbol` error path surfaces via `errors` array, not `skippedReasons`. Rows skipped before the `needsSymbol` check are recorded correctly, but the `needsSymbol` condition itself contributes no per-row reason. Spec doesn't require this; minor latent. | 0.9 |
+| #   | File                                                 | Finding                                                                                                                                                                                                                                                        | Confidence |
+| --- | ---------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ---------- |
+| M1  | `packages/importers/src/formats/ibkr.ts`             | Reason string `"row was not an Order fill (skipped discriminator)"` uses internal term "discriminator" — user-facing text would be clearer as `"row was not a filled order"`. No spec violation; just suboptimal copy.                                         | 0.9        |
+| M2  | `apps/web/tests/import/import-page-preview.test.tsx` | `skippedReasonsTruncated: true` path never tested; no test exercises the "showing first 50 of N" truncation message in the UI.                                                                                                                                 | 0.85       |
+| M3  | `packages/importers/tests/skipped-reasons.test.ts`   | `parseHistory` test uses a specific MT5 fixture whose skip-triggering properties aren't explicitly documented or asserted — could silently stop exercising the intended path if fixture format changes.                                                        | 0.8        |
+| M4  | `packages/importers/src/formats/history.ts`          | `needsSymbol` error path surfaces via `errors` array, not `skippedReasons`. Rows skipped before the `needsSymbol` check are recorded correctly, but the `needsSymbol` condition itself contributes no per-row reason. Spec doesn't require this; minor latent. | 0.9        |
 
 ---
 

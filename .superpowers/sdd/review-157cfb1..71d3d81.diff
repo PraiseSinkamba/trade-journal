@@ -1,0 +1,781 @@
+71d3d81 Add task 3 completion report
+4037892 Move reflection prompts behind AI feature boundaries
+
+## Files changed
+ .superpowers/sdd/task-3-report.md         | 191 ++++++++++++++++++++++++++++++
+ apps/web/src/app/api/ai/ask/route.ts      |  11 +-
+ apps/web/src/app/api/ai/critique/route.ts |  39 +++---
+ apps/web/src/app/api/ai/recap/route.ts    |  25 ++--
+ apps/web/src/server/ai-prompts.ts         |  90 ++++++++++++++
+ apps/web/src/server/ai.ts                 |  68 +++--------
+ apps/web/tests/ai-prompts.test.ts         | 125 +++++++++++++++++++
+ apps/web/tests/ai-settings.test.ts        |  14 ++-
+ 8 files changed, 471 insertions(+), 92 deletions(-)
+
+## Diff
+diff --git a/.superpowers/sdd/task-3-report.md b/.superpowers/sdd/task-3-report.md
+new file mode 100644
+index 0000000..55fa4f4
+--- /dev/null
++++ b/.superpowers/sdd/task-3-report.md
+@@ -0,0 +1,191 @@
++# Task 3 Report: Extract reflection prompts and migrate existing reflection calls
++
++## Status: COMPLETE
++
++## Commits
++
++- `4037892` — "Move reflection prompts behind AI feature boundaries"
++
++## Files Changed
++
++### Created
++- `apps/web/src/server/ai-prompts.ts` — exports `REFLECTION_SYSTEM_PROMPT`,
++  `buildAskJournalPrompt`, `buildDailyRecapPrompt`,
++  `buildTradeCritiquePrompt` plus typed input interfaces
++  (`AskJournalPromptInput`, `DailyRecapPromptInput`,
++  `TradeCritiquePromptInput`).
++- `apps/web/tests/ai-prompts.test.ts` — exact prompt-parity tests
++  using fixed fixtures.
++
++### Modified
++- `apps/web/src/server/ai.ts` — `runAi(prompt: string): Promise<string>`
++  delegates to `runTextAi` with `configuration:
++  resolveAiConfiguration()`, `system: REFLECTION_SYSTEM_PROMPT`,
++  `feature: "reflection"`, `promptVersion:
++  AI_PROMPT_VERSIONS.reflection`. Legacy `maxOutputTokens`
++  parameter removed. The `AI_PROVIDER_NAMES` "missing key" message
++  is preserved at the facade so existing error responses remain
++  byte-for-byte compatible.
++- `apps/web/src/app/api/ai/ask/route.ts` — replaces the route-local
++  template literal with `buildAskJournalPrompt({ question, context })`.
++- `apps/web/src/app/api/ai/recap/route.ts` — replaces the route-local
++  template literal with `buildDailyRecapPrompt({ date, scopeContext,
++  accountContext, metricsLine, tradeLines, existingNote })`.
++- `apps/web/src/app/api/ai/critique/route.ts` — replaces the route-local
++  template literal with `buildTradeCritiquePrompt({ trade, fills })`.
++- `apps/web/tests/ai-settings.test.ts` — both provider-adapter tests
++  call `runAi("Fixture journal question")` with one argument, with
++  reflection policy ceiling asserted (`max_output_tokens: 1200` for
++  OpenAI; `max_tokens: 1200` for Anthropic). Anthropic body now
++  asserts `messages: [{ role: "user", content: [{ type: "text",
++  text: "Fixture journal question" }] }]` to match the real SDK
++  serialization shape.
++
++## RED → GREEN Evidence
++
++### RED (prompt-parity tests fail before module exists)
++
++```
++$ npx vitest run apps/web/tests/ai-prompts.test.ts
++ FAIL  apps/web/tests/ai-prompts.test.ts
++ Error: Cannot find module '../src/server/ai-prompts'
++   imported from '.../apps/web/tests/ai-prompts.test.ts'
++ Test Files  1 failed (1)
++```
++
++### GREEN (after creating `ai-prompts.ts`)
++
++```
++$ npx vitest run apps/web/tests/ai-prompts.test.ts apps/web/tests/ai-scope.test.ts apps/web/tests/ai-ui.test.ts apps/web/tests/ai-settings.test.ts
++ ✓ apps/web/tests/ai-prompts.test.ts (5 tests) 12ms
++ ✓ apps/web/tests/ai-settings.test.ts (16 tests) 1209ms
++ ✓ apps/web/tests/ai-ui.test.ts (10 tests) 814ms
++ ✓ apps/web/tests/ai-scope.test.ts (32 tests) 1797ms
++ Test Files  4 passed (4)
++ Tests  63 passed (63)
++```
++
++## Exact Fixtures (from `ai-prompts.test.ts`)
++
++### `REFLECTION_SYSTEM_PROMPT`
++
++```
++You are the reflection layer of a trader's journal.
++You see only the trader's own recorded data — trades, stats, and notes. Ground every
++statement in those numbers; never invent trades, prices, or market context you weren't given.
++Be direct and specific like a good trading coach: name the behavior, cite the numbers,
++say what to keep and what to fix. No platitudes, no disclaimers about trading being risky —
++the trader knows. Keep it tight.
++```
++
++Verbatim match against the original `SYSTEM` constant moved out of
++`apps/web/src/server/ai.ts`.
++
++### `buildAskJournalPrompt({ question, context })`
++
++```
++Answer the trader's question using ONLY these aggregates from their journal. If the data
++can't answer it, say exactly what's missing (e.g. "tag your trades' stops to get R stats").
++Cite the numbers you used. Under 200 words.
++
++{context}
++
++Question: {question}
++```
++
++Two fixtures asserted, both passing with `toBe(expected)` equality.
++
++### `buildDailyRecapPrompt({ date, scopeContext, accountContext, metricsLine, tradeLines, existingNote })`
++
++```
++Write a session recap for {date} in first person ("I"), 120-200 words, markdown with a
++short "**Keep**" and "**Fix**" list at the end.
++
++{scopeContext}
++{accountContext}
++
++Day stats: {metricsLine}
++
++Trades:
++{tradeLines}
++
++The trader's own note so far (respect it, build on it):
++{existingNote}
++```
++
++Two fixtures asserted (with and without notes). The trailing note
++block is only appended when `existingNote` is defined; the
++intermediate blank line is preserved.
++
++### `buildTradeCritiquePrompt({ trade, fills })`
++
++```
++Critique this single trade in under 150 words. Focus on execution quality visible in the
++fills (entry clustering, scaling, exit discipline), risk (stop honored or not, R multiple),
++and the trader's own tags/mistakes. End with one concrete instruction for the next
++occurrence of this setup.
++
++Trade: {symbol} {direction}, status {status}
++Net P&L: {netPnl.toFixed(2)} (gross {grossPnl.toFixed(2)}, fees {fees.toFixed(2)})
++Avg entry {avgEntry} → avg exit {avgExit ?? "still open"}
++Planned stop: {stopLoss ?? "none recorded"} | target: {profitTarget ?? "none recorded"}
++Rating: {rating ?? "unrated"} | tags: {tags.join(", ") || "none"} | mistakes: {mistakes.join(", ") || "none"}
++Notes: {notes ?? "none"}
++
++Fills:
++{fills.join("\n")}
++```
++
++One fixture asserted.
++
++## Acceptance
++
++- ✅ `apps/web/src/server/ai-prompts.ts` exports `REFLECTION_SYSTEM_PROMPT`,
++  `buildAskJournalPrompt`, `buildDailyRecapPrompt`,
++  `buildTradeCritiquePrompt`, and typed inputs.
++- ✅ `SYSTEM_PROMPT` from `apps/web/src/server/ai.ts` moved verbatim.
++- ✅ Route-local template strings moved verbatim into builders.
++- ✅ `runAi(prompt: string)` delegates to `runTextAi` with
++  `configuration: resolveAiConfiguration()`; `maxOutputTokens`
++  parameter removed (LSP confirms no production caller).
++- ✅ Reflection routes updated; status codes, validation, response
++  shapes unchanged.
++- ✅ `ai-settings.test.ts`: both provider tests now call
++  `runAi("Fixture journal question")` and assert
++  `max_output_tokens: 1200` / `max_tokens: 1200`.
++- ✅ Prompt-parity tests use exact `toBe()` equality, not
++  substring assertions.
++- ✅ Existing invalid-scope/no-AI-call assertion in
++  `ai-scope.test.ts` preserved.
++- ✅ Reflection regression suite passes (63/63).
++
++## Constraints Honored
++
++- No new dependencies.
++- No telemetry.
++- No raw provider errors (runtime `mapAiRuntimeError` still
++  categorizes; facade re-throws `AiRuntimeError.message` only).
++- No browser access.
++- Reflection policy ceiling remains `maxOutputTokens: 1200`; no
++  other ceiling introduced.
++- `parseStatementWithAi` not modified (Task 4 scope).
++- Import paths unchanged.
++
++## Concerns
++
++- `runAi` re-throws `AiRuntimeError` as a plain `Error` to preserve
++  the legacy `error.message` substring contract used by existing
++  routes and tests (e.g., the sanitization tests in
++  `ai-settings.test.ts`). Execution metadata is therefore not
++  surfaced to callers at this facade — appropriate, since
++  Task 4 is responsible for surfacing metadata in routes.
++- The `runAi` facade boundary still constructs the "missing key"
++  message itself rather than relying on `LoadAPIKeyError`, to
++  preserve the per-provider name (`AI_PROVIDER_NAMES[provider]`)
++  used by the legacy UX. The runtime's `missing_key` path remains
++  in place for `runObjectAi` and other consumers.
++- Pre-existing failures in `review-export.test.ts`,
++  `market-data-connections.test.ts`, and `ai-import-ui.test.ts`
++  were confirmed via `git stash` to exist on the baseline before
++  this task; they are unrelated to the reflection feature and
++  out of scope.
+\ No newline at end of file
+diff --git a/apps/web/src/app/api/ai/ask/route.ts b/apps/web/src/app/api/ai/ask/route.ts
+index 2ea1d36..85675cd 100644
+--- a/apps/web/src/app/api/ai/ask/route.ts
++++ b/apps/web/src/app/api/ai/ask/route.ts
+@@ -4,20 +4,21 @@ import {
+   byMistake,
+   byPlaybook,
+   bySymbol,
+   byTag,
+   byWeekday,
+   computeMetrics,
+   type BucketStats,
+ } from "@luxalgo/journal-core";
+ import { bad, handler, ok } from "@/server/api";
+ import { runAi } from "@/server/ai";
++import { buildAskJournalPrompt } from "@/server/ai-prompts";
+ import { queryTrades } from "@/server/trades-query";
+ import { accountContext, readAiRequest } from "@/server/ai-scope";
+ 
+ const bucketBlock = (title: string, buckets: BucketStats[]): string =>
+   buckets.length === 0
+     ? ""
+     : `${title}:\n${buckets
+         .map(
+           (b) =>
+             `  ${b.key}: ${b.trades} trades, net ${b.netPnl.toFixed(2)}, win ${b.winRate === null ? "n/a" : `${(b.winRate * 100).toFixed(0)}%`}`,
+@@ -43,21 +44,15 @@ export const POST = handler(async (request: Request) => {
+     bucketBlock("By symbol (top 12)", bySymbol(trades).slice(0, 12)),
+     bucketBlock("By weekday", byWeekday(trades, timeZone)),
+     bucketBlock("By hour of open", byHour(trades, timeZone)),
+     bucketBlock("By holding time", byDuration(trades)),
+     bucketBlock("By tag", byTag(trades).slice(0, 12)),
+     bucketBlock("By mistake", byMistake(trades).slice(0, 12)),
+     bucketBlock("By playbook", byPlaybook(trades)),
+   ].join("\n");
+ 
+   const answer = await runAi(
+-    `Answer the trader's question using ONLY these aggregates from their journal. If the data
+-can't answer it, say exactly what's missing (e.g. "tag your trades' stops to get R stats").
+-Cite the numbers you used. Under 200 words.
+-
+-${context}
+-
+-Question: ${question}`,
++    buildAskJournalPrompt({ question, context }),
+   );
+ 
+   return ok({ answer, scope: scope.scope });
+-});
++});
+\ No newline at end of file
+diff --git a/apps/web/src/app/api/ai/critique/route.ts b/apps/web/src/app/api/ai/critique/route.ts
+index e53ca54..77b71b9 100644
+--- a/apps/web/src/app/api/ai/critique/route.ts
++++ b/apps/web/src/app/api/ai/critique/route.ts
+@@ -1,35 +1,44 @@
+ import { bad, handler, ok } from "@/server/api";
+ import { runAi } from "@/server/ai";
++import { buildTradeCritiquePrompt } from "@/server/ai-prompts";
+ import { listExecutions } from "@/server/executions";
+ import { getTradeByKey, rowToTrade } from "@/server/trades-query";
+ 
+ /** Critique one trade: entries, exits, sizing, and the trader's own annotations. */
+ export const POST = handler(async (request: Request) => {
+   const { key } = (await request.json()) as { key?: string };
+   if (!key) return bad("key is required");
+   const row = getTradeByKey(key);
+   if (!row) return bad("Trade not found", 404);
+   const trade = rowToTrade(row);
+   const fills = listExecutions(row.accountId, trade.executionIds).sort((a, b) =>
+     a.executedAt.localeCompare(b.executedAt),
+   );
+ 
+   const critique = await runAi(
+-    `Critique this single trade in under 150 words. Focus on execution quality visible in the
+-fills (entry clustering, scaling, exit discipline), risk (stop honored or not, R multiple),
+-and the trader's own tags/mistakes. End with one concrete instruction for the next
+-occurrence of this setup.
+-
+-Trade: ${trade.symbol} ${trade.direction}, status ${trade.status}
+-Net P&L: ${trade.netPnl.toFixed(2)} (gross ${trade.grossPnl.toFixed(2)}, fees ${trade.fees.toFixed(2)})
+-Avg entry ${trade.avgEntry} → avg exit ${trade.avgExit ?? "still open"}
+-Planned stop: ${row.stopLoss ?? "none recorded"} | target: ${row.profitTarget ?? "none recorded"}
+-Rating: ${row.rating ?? "unrated"} | tags: ${(trade.annotations?.tags ?? []).join(", ") || "none"} | mistakes: ${(trade.annotations?.mistakes ?? []).join(", ") || "none"}
+-Notes: ${row.notes ?? "none"}
+-
+-Fills:
+-${fills.map((fill) => `${fill.executedAt} ${fill.side} ${fill.quantity} @ ${fill.price}${fill.fee ? ` fee ${fill.fee}` : ""}`).join("\n")}`,
++    buildTradeCritiquePrompt({
++      trade: {
++        symbol: trade.symbol,
++        direction: trade.direction,
++        status: trade.status,
++        netPnl: trade.netPnl,
++        grossPnl: trade.grossPnl,
++        fees: trade.fees,
++        avgEntry: trade.avgEntry,
++        avgExit: trade.avgExit,
++        stopLoss: row.stopLoss,
++        profitTarget: row.profitTarget,
++        rating: row.rating,
++        tags: trade.annotations?.tags ?? [],
++        mistakes: trade.annotations?.mistakes ?? [],
++        notes: row.notes,
++      },
++      fills: fills.map(
++        (fill) =>
++          `${fill.executedAt} ${fill.side} ${fill.quantity} @ ${fill.price}${fill.fee ? ` fee ${fill.fee}` : ""}`,
++      ),
++    }),
+   );
+ 
+   return ok({ critique });
+-});
++});
+\ No newline at end of file
+diff --git a/apps/web/src/app/api/ai/recap/route.ts b/apps/web/src/app/api/ai/recap/route.ts
+index 9c887cc..bf5b197 100644
+--- a/apps/web/src/app/api/ai/recap/route.ts
++++ b/apps/web/src/app/api/ai/recap/route.ts
+@@ -1,15 +1,16 @@
+ import { eq } from "drizzle-orm";
+ import { computeMetrics, dayKeyOf } from "@luxalgo/journal-core";
+ import { db, journalDays } from "@/db";
+ import { bad, handler, ok } from "@/server/api";
+ import { runAi } from "@/server/ai";
++import { buildDailyRecapPrompt } from "@/server/ai-prompts";
+ import { queryTrades } from "@/server/trades-query";
+ import { accountContext, readAiRequest } from "@/server/ai-scope";
+ 
+ /** Generate a session recap for one trading day from the day's actual trades. */
+ export const POST = handler(async (request: Request) => {
+   const scope = readAiRequest(await request.json(), "date");
+   const { timeZone, filters } = scope;
+   const date = scope.date!;
+ 
+   const { trades } = queryTrades(filters);
+@@ -31,28 +32,24 @@ export const POST = handler(async (request: Request) => {
+       (trade) =>
+         `${JSON.stringify(scope.accounts.find((a) => a.id === trade.accountId)?.name)} | ${trade.symbol} ${trade.direction} qty ${trade.quantity} | entry ${trade.avgEntry} → exit ${trade.avgExit} | net ${trade.netPnl.toFixed(2)} | held ${Math.round((trade.durationMs ?? 0) / 60_000)}m` +
+         (trade.annotations?.tags?.length ? ` | tags: ${trade.annotations.tags.join(", ")}` : "") +
+         (trade.annotations?.mistakes?.length
+           ? ` | mistakes: ${trade.annotations.mistakes.join(", ")}`
+           : ""),
+     )
+     .join("\n");
+ 
+   const recap = await runAi(
+-    `Write a session recap for ${date} in first person ("I"), 120-200 words, markdown with a
+-short "**Keep**" and "**Fix**" list at the end.
+-
+-${scope.context}
+-${accountContext(dayTrades, scope)}
+-
+-Day stats: net P&L ${metrics.netPnl.toFixed(2)}, ${metrics.closedTrades} trades,
++    buildDailyRecapPrompt({
++      date,
++      scopeContext: scope.context,
++      accountContext: accountContext(dayTrades, scope),
++      metricsLine: `net P&L ${metrics.netPnl.toFixed(2)}, ${metrics.closedTrades} trades,
+ win rate ${metrics.winRate === null ? "n/a" : (metrics.winRate * 100).toFixed(0)}%,
+-fees ${metrics.fees.toFixed(2)}.
+-
+-Trades:
+-${tradeLines}
+-
+-${existingNote ? `The trader's own note so far (respect it, build on it):\n${existingNote}` : ""}`,
++fees ${metrics.fees.toFixed(2)}.`,
++      tradeLines,
++      existingNote,
++    }),
+   );
+ 
+   return ok({ recap, scope: scope.scope });
+-});
++});
+\ No newline at end of file
+diff --git a/apps/web/src/server/ai-prompts.ts b/apps/web/src/server/ai-prompts.ts
+new file mode 100644
+index 0000000..0a50cf4
+--- /dev/null
++++ b/apps/web/src/server/ai-prompts.ts
+@@ -0,0 +1,90 @@
++/**
++ * Reflection prompt construction. Builders receive typed route-derived data only;
++ * they do not query the database, read settings, or widen scope. Provider selection,
++ * key handling, policy application, and execution live in the AI runtime.
++ */
++
++export interface AskJournalPromptInput {
++  question: string;
++  context: string;
++}
++
++export interface DailyRecapPromptInput {
++  date: string;
++  scopeContext: string;
++  accountContext: string;
++  metricsLine: string;
++  tradeLines: string;
++  existingNote: string | undefined;
++}
++
++export interface TradeCritiquePromptInput {
++  trade: {
++    symbol: string;
++    direction: string;
++    status: string;
++    netPnl: number;
++    grossPnl: number;
++    fees: number;
++    avgEntry: number;
++    avgExit: number | null;
++    stopLoss: number | null;
++    profitTarget: number | null;
++    rating: number | null;
++    tags: string[];
++    mistakes: string[];
++    notes: string | null;
++  };
++  fills: string[];
++}
++
++export const REFLECTION_SYSTEM_PROMPT = `You are the reflection layer of a trader's journal.
++You see only the trader's own recorded data — trades, stats, and notes. Ground every
++statement in those numbers; never invent trades, prices, or market context you weren't given.
++Be direct and specific like a good trading coach: name the behavior, cite the numbers,
++say what to keep and what to fix. No platitudes, no disclaimers about trading being risky —
++the trader knows. Keep it tight.`;
++
++export const buildAskJournalPrompt = (input: AskJournalPromptInput): string =>
++  `Answer the trader's question using ONLY these aggregates from their journal. If the data
++can't answer it, say exactly what's missing (e.g. "tag your trades' stops to get R stats").
++Cite the numbers you used. Under 200 words.
++
++${input.context}
++
++Question: ${input.question}`;
++
++export const buildDailyRecapPrompt = (input: DailyRecapPromptInput): string =>
++  `Write a session recap for ${input.date} in first person ("I"), 120-200 words, markdown with a
++short "**Keep**" and "**Fix**" list at the end.
++
++${input.scopeContext}
++${input.accountContext}
++
++Day stats: ${input.metricsLine}
++
++Trades:
++${input.tradeLines}${
++    input.existingNote
++      ? `
++
++The trader's own note so far (respect it, build on it):
++${input.existingNote}`
++      : ""
++  }`;
++
++export const buildTradeCritiquePrompt = (input: TradeCritiquePromptInput): string =>
++  `Critique this single trade in under 150 words. Focus on execution quality visible in the
++fills (entry clustering, scaling, exit discipline), risk (stop honored or not, R multiple),
++and the trader's own tags/mistakes. End with one concrete instruction for the next
++occurrence of this setup.
++
++Trade: ${input.trade.symbol} ${input.trade.direction}, status ${input.trade.status}
++Net P&L: ${input.trade.netPnl.toFixed(2)} (gross ${input.trade.grossPnl.toFixed(2)}, fees ${input.trade.fees.toFixed(2)})
++Avg entry ${input.trade.avgEntry} → avg exit ${input.trade.avgExit ?? "still open"}
++Planned stop: ${input.trade.stopLoss ?? "none recorded"} | target: ${input.trade.profitTarget ?? "none recorded"}
++Rating: ${input.trade.rating ?? "unrated"} | tags: ${input.trade.tags.join(", ") || "none"} | mistakes: ${input.trade.mistakes.join(", ") || "none"}
++Notes: ${input.trade.notes ?? "none"}
++
++Fills:
++${input.fills.join("\n")}`;
+\ No newline at end of file
+diff --git a/apps/web/src/server/ai.ts b/apps/web/src/server/ai.ts
+index 0bd5565..815facb 100644
+--- a/apps/web/src/server/ai.ts
++++ b/apps/web/src/server/ai.ts
+@@ -1,67 +1,35 @@
+-import { createAnthropic } from "@ai-sdk/anthropic";
+-import { createOpenAI } from "@ai-sdk/openai";
+-import { APICallError, RetryError, generateText } from "ai";
+-import { getAiKey, getAiModel, getAiProvider } from "./settings";
+ import { AI_PROVIDER_NAMES } from "@/lib/ai-settings";
++import { getAiKey, getAiProvider, resolveAiConfiguration } from "./settings";
++import { AI_PROMPT_VERSIONS, AiRuntimeError } from "./ai-contracts";
++import { runTextAi } from "./ai-runtime";
++import { REFLECTION_SYSTEM_PROMPT } from "./ai-prompts";
+ 
+ /**
+  * BYO-key AI. Self-hosted means YOUR key on YOUR box: the key is read from the
+  * encrypted settings store (or the selected provider's environment variable).
+  * Requests go straight from this server to the selected provider.
+  */
+ export const aiConfigured = (): boolean => getAiKey(getAiProvider()) !== null;
+ 
+-const SYSTEM = `You are the reflection layer of a trader's journal.
+-You see only the trader's own recorded data — trades, stats, and notes. Ground every
+-statement in those numbers; never invent trades, prices, or market context you weren't given.
+-Be direct and specific like a good trading coach: name the behavior, cite the numbers,
+-say what to keep and what to fix. No platitudes, no disclaimers about trading being risky —
+-the trader knows. Keep it tight.`;
+-
+-export const runAi = async (prompt: string, maxOutputTokens = 1200): Promise<string> => {
+-  const provider = getAiProvider();
+-  const apiKey = getAiKey(provider);
+-  if (!apiKey) {
++export const runAi = async (prompt: string): Promise<string> => {
++  const configuration = resolveAiConfiguration();
++  if (!configuration.apiKey) {
+     throw new Error(
+-      `AI is not configured — add your ${AI_PROVIDER_NAMES[provider]} API key in Settings.`,
++      `AI is not configured — add your ${AI_PROVIDER_NAMES[configuration.provider]} API key in Settings.`,
+     );
+   }
+-  const model = getAiModel(provider);
+   try {
+-    const result = await generateText({
+-      model:
+-        provider === "openai"
+-          ? createOpenAI({ apiKey }).responses(model)
+-          : createAnthropic({ apiKey })(model),
+-      ...(provider === "openai" ? { providerOptions: { openai: { store: false } } } : {}),
+-      system: SYSTEM,
++    const result = await runTextAi({
++      feature: "reflection",
++      configuration: { provider: configuration.provider, modelId: configuration.modelId, apiKey: configuration.apiKey },
++      promptVersion: AI_PROMPT_VERSIONS.reflection,
++      system: REFLECTION_SYSTEM_PROMPT,
+       prompt,
+-      maxOutputTokens,
+     });
+-    if (!result.text.trim()) throw new Error("AI returned no text. Check the model or try again.");
+-    return result.text;
++    if (!result.output.trim()) throw new Error("AI returned no text. Check the model or try again.");
++    return result.output;
+   } catch (error) {
+-    if (RetryError.isInstance(error)) error = error.lastError;
+-    // Provider error messages can contain key fragments or request data. Never relay them.
+-    if (APICallError.isInstance(error)) {
+-      if (error.statusCode === 401 || error.statusCode === 403)
+-        throw new Error(
+-          "AI authentication_error: check your provider key and permissions in Settings.",
+-        );
+-      if (
+-        /credit balance|billing|insufficient_quota|exceeded your current quota/i.test(error.message)
+-      )
+-        throw new Error("AI billing: check your provider account's credits and quota.");
+-      if (error.statusCode === 429 || error.statusCode === 529)
+-        throw new Error("AI rate limit: please try again shortly.");
+-      if (
+-        error.statusCode === 404 ||
+-        /model.*(?:not found|does not exist|access)/i.test(error.message)
+-      )
+-        throw new Error(
+-          "AI model unavailable: check the model ID and your provider access in Settings.",
+-        );
+-    }
+-    throw new Error("AI request failed. Check your provider settings or try again shortly.");
++    if (error instanceof AiRuntimeError) throw new Error(error.message);
++    throw error;
+   }
+-};
++};
+\ No newline at end of file
+diff --git a/apps/web/tests/ai-prompts.test.ts b/apps/web/tests/ai-prompts.test.ts
+new file mode 100644
+index 0000000..cadbc3d
+--- /dev/null
++++ b/apps/web/tests/ai-prompts.test.ts
+@@ -0,0 +1,125 @@
++import { describe, expect, it } from "vitest";
++import {
++  REFLECTION_SYSTEM_PROMPT,
++  buildAskJournalPrompt,
++  buildDailyRecapPrompt,
++  buildTradeCritiquePrompt,
++  type AskJournalPromptInput,
++  type DailyRecapPromptInput,
++  type TradeCritiquePromptInput,
++} from "../src/server/ai-prompts";
++
++describe("REFLECTION_SYSTEM_PROMPT", () => {
++  it("matches the verbatim system instruction moved from ai.ts", () => {
++    expect(REFLECTION_SYSTEM_PROMPT).toBe(`You are the reflection layer of a trader's journal.
++You see only the trader's own recorded data — trades, stats, and notes. Ground every
++statement in those numbers; never invent trades, prices, or market context you weren't given.
++Be direct and specific like a good trading coach: name the behavior, cite the numbers,
++say what to keep and what to fix. No platitudes, no disclaimers about trading being risky —
++the trader knows. Keep it tight.`);
++  });
++});
++
++describe("buildAskJournalPrompt", () => {
++  it("matches the verbatim ask template (question + context block)", () => {
++    const input: AskJournalPromptInput = {
++      question: "What is my edge?",
++      context: "FIXTURE_CONTEXT_BLOCK",
++    };
++    expect(buildAskJournalPrompt(input)).toBe(`Answer the trader's question using ONLY these aggregates from their journal. If the data
++can't answer it, say exactly what's missing (e.g. "tag your trades' stops to get R stats").
++Cite the numbers you used. Under 200 words.
++
++FIXTURE_CONTEXT_BLOCK
++
++Question: What is my edge?`);
++  });
++});
++
++describe("buildDailyRecapPrompt", () => {
++  it("matches the verbatim recap template with notes", () => {
++    const input: DailyRecapPromptInput = {
++      date: "2026-09-15",
++      scopeContext: "FIXTURE_SCOPE_CONTEXT",
++      accountContext: "FIXTURE_ACCOUNT_CONTEXT",
++      tradeLines: "FIXTURE_TRADE_LINE_1\nFIXTURE_TRADE_LINE_2",
++      metricsLine: "FIXTURE_METRICS_LINE",
++      existingNote: "FIXTURE_NOTE",
++    };
++    expect(buildDailyRecapPrompt(input)).toBe(`Write a session recap for 2026-09-15 in first person ("I"), 120-200 words, markdown with a
++short "**Keep**" and "**Fix**" list at the end.
++
++FIXTURE_SCOPE_CONTEXT
++FIXTURE_ACCOUNT_CONTEXT
++
++Day stats: FIXTURE_METRICS_LINE
++
++Trades:
++FIXTURE_TRADE_LINE_1
++FIXTURE_TRADE_LINE_2
++
++The trader's own note so far (respect it, build on it):
++FIXTURE_NOTE`);
++  });
++
++  it("matches the verbatim recap template without notes", () => {
++    const input: DailyRecapPromptInput = {
++      date: "2026-09-15",
++      scopeContext: "FIXTURE_SCOPE_CONTEXT",
++      accountContext: "FIXTURE_ACCOUNT_CONTEXT",
++      tradeLines: "FIXTURE_TRADE_LINE_1\nFIXTURE_TRADE_LINE_2",
++      metricsLine: "FIXTURE_METRICS_LINE",
++      existingNote: undefined,
++    };
++    expect(buildDailyRecapPrompt(input)).toBe(`Write a session recap for 2026-09-15 in first person ("I"), 120-200 words, markdown with a
++short "**Keep**" and "**Fix**" list at the end.
++
++FIXTURE_SCOPE_CONTEXT
++FIXTURE_ACCOUNT_CONTEXT
++
++Day stats: FIXTURE_METRICS_LINE
++
++Trades:
++FIXTURE_TRADE_LINE_1
++FIXTURE_TRADE_LINE_2`);
++  });
++});
++
++describe("buildTradeCritiquePrompt", () => {
++  it("matches the verbatim critique template", () => {
++    const input: TradeCritiquePromptInput = {
++      trade: {
++        symbol: "AAPL",
++        direction: "long",
++        status: "closed",
++        netPnl: 12.5,
++        grossPnl: 14.0,
++        fees: 1.5,
++        avgEntry: 100,
++        avgExit: 112,
++        stopLoss: 95,
++        profitTarget: 120,
++        rating: 4,
++        tags: ["setup"],
++        mistakes: ["early"],
++        notes: "Looked clean",
++      },
++      fills: ["2026-09-15T09:00:00Z buy 1 @ 100", "2026-09-15T10:00:00Z sell 1 @ 112"],
++    };
++    expect(buildTradeCritiquePrompt(input)).toBe(`Critique this single trade in under 150 words. Focus on execution quality visible in the
++fills (entry clustering, scaling, exit discipline), risk (stop honored or not, R multiple),
++and the trader's own tags/mistakes. End with one concrete instruction for the next
++occurrence of this setup.
++
++Trade: AAPL long, status closed
++Net P&L: 12.50 (gross 14.00, fees 1.50)
++Avg entry 100 → avg exit 112
++Planned stop: 95 | target: 120
++Rating: 4 | tags: setup | mistakes: early
++Notes: Looked clean
++
++Fills:
++2026-09-15T09:00:00Z buy 1 @ 100
++2026-09-15T10:00:00Z sell 1 @ 112`);
++  });
++});
+\ No newline at end of file
+diff --git a/apps/web/tests/ai-settings.test.ts b/apps/web/tests/ai-settings.test.ts
+index 3390106..b8f1bdc 100644
+--- a/apps/web/tests/ai-settings.test.ts
++++ b/apps/web/tests/ai-settings.test.ts
+@@ -189,27 +189,27 @@ describe("AI provider requests through the real SDK adapters", () => {
+             type: "message",
+             id: "msg_fixture",
+             role: "assistant",
+             content: [{ type: "output_text", text: "Fixture reflection", annotations: [] }],
+           },
+         ],
+         usage: { input_tokens: 10, output_tokens: 5, total_tokens: 15 },
+       }),
+     );
+     vi.stubGlobal("fetch", fetcher);
+-    expect(await runAi("Fixture journal question", 700)).toBe("Fixture reflection");
++    expect(await runAi("Fixture journal question")).toBe("Fixture reflection");
+     const [url, init] = (fetcher.mock.calls as unknown as [string, RequestInit][])[0]!;
+     expect(url).toBe("https://api.openai.com/v1/responses");
+     expect(new Headers(init.headers).get("Authorization")).toBe("Bearer fixture-openai");
+     expect(JSON.stringify(init)).not.toContain("fixture-anthropic");
+     const body = JSON.parse(init.body as string);
+-    expect(body).toMatchObject({ model: "gpt-4.1-mini", max_output_tokens: 700, store: false });
++    expect(body).toMatchObject({ model: "gpt-4.1-mini", max_output_tokens: 1200, store: false });
+     expect(JSON.stringify(body.input)).toContain("Fixture journal question");
+   });
+ 
+   it("keeps Anthropic requests using their own key, model, and endpoint", async () => {
+     await save({
+       anthropicKey: "fixture-anthropic",
+       openaiKey: "fixture-openai",
+       aiProvider: "anthropic",
+       aiModel: "claude-custom",
+     });
+@@ -219,29 +219,33 @@ describe("AI provider requests through the real SDK adapters", () => {
+         type: "message",
+         role: "assistant",
+         model: "claude-custom",
+         content: [{ type: "text", text: "Anthropic fixture" }],
+         stop_reason: "end_turn",
+         stop_sequence: null,
+         usage: { input_tokens: 10, output_tokens: 5 },
+       }),
+     );
+     vi.stubGlobal("fetch", fetcher);
+-    expect(await runAi("Fixture prompt", 800)).toBe("Anthropic fixture");
++    expect(await runAi("Fixture journal question")).toBe("Anthropic fixture");
+     const [url, init] = (fetcher.mock.calls as unknown as [string, RequestInit][])[0]!;
+     expect(url).toBe("https://api.anthropic.com/v1/messages");
+     expect(new Headers(init.headers).get("x-api-key")).toBe("fixture-anthropic");
+     expect(JSON.stringify(init)).not.toContain("fixture-openai");
+-    expect(JSON.parse(init.body as string)).toMatchObject({
++    const anthropicBody = JSON.parse(init.body as string);
++    expect(anthropicBody).toMatchObject({
+       model: "claude-custom",
+-      max_tokens: 800,
++      max_tokens: 1200,
+     });
++    expect(anthropicBody.messages).toEqual([
++      { role: "user", content: [{ type: "text", text: "Fixture journal question" }] },
++    ]);
+   });
+ 
+   it.each([
+     [401, "Incorrect API key provided: fixture-private", "authentication_error"],
+     [400, "You exceeded your current quota: fixture-private", "AI billing"],
+     [404, "Model does not exist: fixture-private", "AI model unavailable"],
+   ])("sanitizes provider errors (%s)", async (status, message, expected) => {
+     await save({ aiProvider: "openai", openaiKey: "fixture-openai" });
+     vi.stubGlobal(
+       "fetch",

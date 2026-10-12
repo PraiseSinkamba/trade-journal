@@ -14,6 +14,7 @@ import {
 } from "@/components/ui/select";
 import { postJson } from "@/lib/use-api";
 
+import { useAccountDefault } from "@/lib/use-account-default";
 import { AccountPicker } from "./account-picker";
 import { fmtNumber } from "@/lib/utils";
 
@@ -26,7 +27,8 @@ interface ManualLeg {
 }
 
 export function ManualTradeEntry({ onSaved }: { onSaved: () => void }) {
-  const [accountId, setAccountId] = useState("");
+  const { defaultId, setDefault } = useAccountDefault();
+  const [accountId, setAccountId] = useState(defaultId ?? "");
   const [symbol, setSymbol] = useState("");
   const [notes, setNotes] = useState("");
   const [legs, setLegs] = useState<ManualLeg[]>([
@@ -74,7 +76,13 @@ export function ManualTradeEntry({ onSaved }: { onSaved: () => void }) {
 
   return (
     <fieldset disabled={busy} className="min-w-0 space-y-3">
-      <AccountPicker value={accountId} onChange={setAccountId} kind="manual" />
+      <AccountPicker
+        value={accountId}
+        onChange={setAccountId}
+        kind="manual"
+        defaultId={defaultId}
+        onAutoFill={setDefault}
+      />
       <div>
         <Label htmlFor={`${fieldId}-symbol`} className="mb-1 block text-xs text-muted-foreground">
           Symbol

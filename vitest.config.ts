@@ -6,5 +6,7 @@ export default defineConfig({
   resolve: { alias: { "@": fileURLToPath(new URL("./apps/web/src", import.meta.url)) } },
   test: {
     include: ["packages/*/tests/**/*.test.ts", "apps/*/tests/**/*.test.ts"],
+    setupFiles: ["./apps/web/tests/vitest-setup.ts"],
+    pool: "forks",
   },
 });

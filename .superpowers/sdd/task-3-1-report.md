@@ -5,6 +5,7 @@
 ### 1. `apps/web/src/server/ai-import.ts`
 
 **Diff — `AiStatement` interface (line 30):**
+
 ```diff
  export interface AiStatement {
    content: string;
@@ -16,6 +17,7 @@
 ```
 
 **Diff — `SYSTEM` prompt (line 79):**
+
 - Replaced the vague "Ignore headers, totals, deposits, transfers…" sentence with an explicit enumerated block:
   ```
   Do NOT emit executions for any of these row types — deposits, withdrawals,
@@ -34,6 +36,7 @@
   ```
 
 **Diff — `parseStatementWithAi` user message (line 221):**
+
 ```diff
 -              text: "Extract this statement for review...",
 +              text: `${
@@ -46,6 +49,7 @@
 ```
 
 **Diff — token bump:**
+
 ```diff
 -      maxOutputTokens: 16000,
 +      maxOutputTokens: 32000,
@@ -54,6 +58,7 @@
 ### 2. `apps/web/src/lib/ai-import.ts`
 
 Added `AiStatement` interface for API consumers:
+
 ```ts
 /** Statement passed to the AI parser. */
 export interface AiStatement {
@@ -69,12 +74,14 @@ export interface AiStatement {
 ### 3. `apps/web/src/app/import/page.tsx`
 
 **Import added:**
+
 ```diff
 - import type { SkippedReason } from "@luxalgo/journal-importers";
 + import { readHeaders, type SkippedReason } from "@luxalgo/journal-importers";
 ```
 
 **`previewFile` — headers passed on AI text requests:**
+
 ```diff
            ...(aiEnabled ? { ai: aiOptions } : {}),
 +          ...(aiEnabled && encoding !== "pdf" ? { headers: readHeaders(content) } : {}),
@@ -83,6 +90,7 @@ export interface AiStatement {
 ### 4. `apps/web/src/app/api/import/route.ts`
 
 **`ImportBody` interface:**
+
 ```diff
    ai?: AiImportOptions;
    encoding?: "text" | "pdf";
@@ -91,6 +99,7 @@ export interface AiStatement {
 ```
 
 **Statement construction:**
+
 ```diff
    const statement = {
      content: body.content,

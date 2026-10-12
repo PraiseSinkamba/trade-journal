@@ -1,6 +1,7 @@
 # Final Review Fix Report
 
 ## C1 (CRITICAL) — `filterByStatus` invariant violation
+
 **Status:** ✅ FIXED
 **File:** `packages/importers/src/history/adapters/generic.ts`
 **Commit:** `filterByStatus: push one skippedReason per filtered row`
@@ -19,6 +20,7 @@ signal) but no longer duplicates reasons into the array.
 +      });
 +      continue;
 ```
+
 ```diff
 -  if (skipped > 0) {
 -    issues.push(issue(...));
@@ -32,10 +34,12 @@ signal) but no longer duplicates reasons into the array.
 ---
 
 ## I2 (IMPORTANT) — `filterByStatus` fragility
+
 **Status:** ✅ FIXED (same commit as C1)
 **File:** `packages/importers/src/history/adapters/generic.ts`
 
 Added JSDoc on `filterByStatus`:
+
 ```ts
 /**
  * Drop rows whose status column marks them as never-filled.
@@ -46,6 +50,7 @@ Added JSDoc on `filterByStatus`:
 ---
 
 ## M1 (MINOR) — IBKR discriminator wording
+
 **Status:** ✅ FIXED
 **File:** `packages/importers/src/formats/ibkr.ts`
 **Commit:** `ibkr: improve skipped-row reason text`
@@ -58,6 +63,7 @@ Added JSDoc on `filterByStatus`:
 ---
 
 ## I1 (IMPORTANT) — Test coverage gap
+
 **Status:** ⚠️ DEFERRED
 **File:** `apps/web/tests/import/import-page-preview.test.tsx`
 

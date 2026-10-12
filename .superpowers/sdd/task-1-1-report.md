@@ -33,6 +33,7 @@ pnpm -F journal-importers typecheck
 ```
 
 **Expected failures** in OTHER files (to be fixed in Tasks 1.2–1.4):
+
 - `fills.ts:110` — `skippedReasons` missing in return literal
 - `generic.ts:42` — same
 - `history.ts:271,286` — same

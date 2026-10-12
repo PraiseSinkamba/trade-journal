@@ -114,3 +114,26 @@ export const getAiSettings = (): AiSettingsPayload => {
     aiConnections,
   };
 };
+
+/** Server-only resolver for the runtime: returns the active provider, model, and key. */
+export const resolveAiConfiguration = (): {
+  provider: AiProvider;
+  modelId: string;
+  apiKey: string | null;
+} => {
+  const provider = getAiProvider();
+  return {
+    provider,
+    modelId: getAiModel(provider),
+    apiKey: getAiKey(provider),
+  };
+};
+
+/** Persisted single-account default; survives reloads and devices. */
+export const getCurrentAccountId = (): string | null => getSetting("currentAccountId");
+
+/** Write the persisted default. `null` clears it. */
+export const setCurrentAccountId = (id: string | null): void => {
+  if (id === null) deleteSetting("currentAccountId");
+  else setSetting("currentAccountId", id);
+};

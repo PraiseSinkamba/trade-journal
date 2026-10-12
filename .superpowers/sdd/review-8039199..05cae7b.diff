@@ -1,0 +1,479 @@
+05cae7b Document the AI execution foundation
+
+## Files changed
+ .omp/style/ai-integration.md                       | 214 +++++++++------------
+ docs/ai-scope.md                                   |  41 ++++
+ .../2026-10-08-contextual-ai-workspace-design.md   |  23 +++
+ 3 files changed, 156 insertions(+), 122 deletions(-)
+
+## Diff
+diff --git a/.omp/style/ai-integration.md b/.omp/style/ai-integration.md
+index 6fe6daf..b974f47 100644
+--- a/.omp/style/ai-integration.md
++++ b/.omp/style/ai-integration.md
+@@ -1,184 +1,154 @@
+ # AI Integration Style Guide
+ 
+-Authoring AI features in `apps/web/src/server/ai*.ts`. Self-hosted BYO-key model — keys are encrypted at rest, never committed to source.
++Authoring AI features in `apps/web/src/server/ai*.ts`. Self-hosted BYO-key model — keys are encrypted at rest, never committed to source. The current AI surface in this repository is the **server-only execution foundation** shipped by `docs/superpowers/plans/2026-10-08-ai-foundation-refactor.md`; assistant sessions, tools, draft cards, and side-sheet UI are intentionally out of scope and are described in `## Future assistant/UI/tool architecture` below. Treat that section as a design preview, not as code that exists today.
+ 
+ ---
+ 
+-## Key Management — BYO-key
++## Current requirements (enforced by the foundation)
+ 
+-AI provider keys live encrypted in the user settings store. The system supports `ANTHROPIC_API_KEY` and `OPENAI_API_KEY` env vars as overrides for development — **env vars are never persisted** to the settings store.
++These items are implemented by `apps/web/src/server/ai-runtime.ts`, `ai-contracts.ts`, `ai-prompts.ts`, and `settings.ts`. They must remain true for every new AI feature.
+ 
+-```ts
+-// apps/web/src/server/settings.ts pattern
+-export function getEffectiveApiKey(provider: 'anthropic' | 'openai'): string | null {
+-  // Env var override (dev/test) — not stored
+-  if (process.env[`${provider.toUpperCase()}_API_KEY`]) {
+-    return process.env[`${provider.toUpperCase()}_API_KEY`];
+-  }
+-  // Encrypted key from settings store
+-  return decryptSetting(`ai_${provider}_key`);
+-}
+-```
++### Key Management — server-only BYO-key
+ 
+-**Never log** the key value, a key fragment, or the decrypted key. Log the provider name and a hash of the key if needed for debugging.
++Provider keys are resolved **only** on the server through `resolveAiConfiguration()` in `apps/web/src/server/settings.ts`. The runtime never accepts a key, model, or provider from the client. Encrypted-at-rest storage and `ANTHROPIC_API_KEY` / `OPENAI_API_KEY` env overrides are preserved. Env vars are never persisted.
+ 
+----
+-
+-## Error Translation — `APICallError`
++```ts
++// apps/web/src/server/settings.ts — server-only resolver
++export const resolveAiConfiguration = (): {
++  provider: AiProvider;
++  modelId: string;
++  apiKey: string | null;
++} => { … };
++```
+ 
+-`runAi` in `apps/web/src/server/ai.ts` maps provider errors into plain-language categories via `APICallError`. **Never propagate raw provider payloads to the client.**
++Never log the key, a key fragment, or the decrypted key. Log the provider name and a hash of the key if needed for debugging.
+ 
+-```ts
+-// apps/web/src/server/ai.ts — error mapping
+-export class APICallError extends Error {
+-  constructor(
+-    message: string,
+-    public readonly category: 'auth' | 'quota' | 'rate_limit' | 'upstream' | 'unknown',
+-  ) { super(message); }
+-}
++### Provider isolation at the adapter boundary
+ 
+-// Client receives only category + message
+-const feedback = mapToUserFacing(result); // → { notice: string; severity: 'info' | 'warn' }
+-```
++OpenAI `store: false` and any other provider-specific options live in `apps/web/src/server/ai-runtime.ts`. Feature routes and prompt builders stay provider-neutral. The closed `AiFeature` union in `apps/web/src/server/ai-contracts.ts` prevents unreviewed features from inheriting unsafe defaults.
+ 
+-Categories map to UI-facing notices. The client does not receive `status: 429` or `error.type: 'rate_limit_error'` — it receives `notice: "AI critique is temporarily unavailable"` with `severity: 'warn'`.
++### Feature policy and prompt versions
+ 
+----
++Every feature declares its policy in `AI_FEATURE_POLICIES` and its prompt version in `AI_PROMPT_VERSIONS` (in `ai-contracts.ts`). The runtime applies `maxOutputTokens`, `maxRetries`, and `timeoutMs`; `statementImport` is `maxRetries: 0` and time-bounded at 120 seconds. New features must add a typed entry to both maps before any code calls the runtime.
+ 
+-## Prompt Location
++### Prompt location
+ 
+-Prompts are authored in `apps/web/src/server/ai-scope.ts` (or a dedicated `ai-*.ts` file per feature). **Do not embed prompts in route handlers.**
++Prompts are authored in `apps/web/src/server/ai-prompts.ts` (or a dedicated `ai-<feature>.ts` file per feature). The reflection system prompt is exported as `REFLECTION_SYSTEM_PROMPT`; feature-specific builders (`buildAskJournalPrompt`, `buildDailyRecapPrompt`, `buildTradeCritiquePrompt`) consume only typed route-derived data and never query the database or read settings. **Do not embed prompts in route handlers.**
+ 
+ ```ts
+-// ai-scope.ts
+-export const TRADE_CRITIQUE_PROMPT = `...` as const;
+-export const SESSION_RECAP_PROMPT = `...` as const;
+-
++// apps/web/src/server/ai-prompts.ts — typed builders
++export const REFLECTION_SYSTEM_PROMPT = `…` as const;
++export const buildAskJournalPrompt = (input: AskJournalPromptInput): string => `…`;
+ // ai.ts — consume the prompt
+-const result = await runAi({
+-  prompt: TRADE_CRITIQUE_PROMPT,
+-  model: 'claude-sonnet',
+-  maxTokens: 1024,
++const { output, meta } = await runTextAi({
++  feature: "reflection",
++  configuration: resolveAiConfiguration(),
++  promptVersion: AI_PROMPT_VERSIONS.reflection,
++  system: REFLECTION_SYSTEM_PROMPT,
++  prompt: buildAskJournalPrompt({ question, context }),
+ });
+ ```
+ 
+-This keeps prompts testable in isolation and versioned alongside the feature that uses them.
++### Runtime invocation shape
+ 
+----
++Routes and adapters call the runtime; they never call the Vercel AI SDK directly. `runTextAi` returns `{ output: string, meta: AiExecutionMeta }`; `runObjectAi` returns `{ output: T, meta: AiExecutionMeta }` for structured extraction. The runtime sets the provider options, policy, timeout, and error mapping. Pass `AbortSignal.timeout(...)` (composed with the request signal via `AbortSignal.any`) for bounded features.
+ 
+-## Output Schema — Typed Result with Confidence
++### Error Translation — `AiRuntimeError`
+ 
+-Every AI feature returns a typed result object. **Never return free-form text that the UI must parse.**
++The runtime maps provider errors into plain-language categories via `AiRuntimeError`. **Never propagate raw provider payloads to the client.** Categories map to UI-facing notices; the client does not see `status: 429` or `error.type: 'rate_limit_error'`.
+ 
+ ```ts
+-// ai-import.ts pattern
+-export interface ImportSuggestion {
+-  suggestedSymbol?: string;
+-  suggestedDirection?: 'buy' | 'sell';
+-  confidence: number;        // 0–1, absent if unavailable
+-  unavailable?: boolean;     // true → AI could not produce a useful result
+-  reason?: string;           // human-readable why, not a code
+-}
+-
+-export async function suggestFromHistory(...) : Promise<ImportSuggestion> {
+-  // ...
++// apps/web/src/server/ai-contracts.ts
++export class AiRuntimeError extends Error {
++  constructor(
++    public readonly kind:
++      | "missing_key"
++      | "authentication"
++      | "billing"
++      | "rate_limited"
++      | "model_unavailable"
++      | "timeout"
++      | "provider",
++    message: string,
++  ) {
++    super(message);
++  }
+ }
+ ```
+ 
+-UI components receive a typed `ImportSuggestion`. They do not inspect or parse raw model output.
+-
+----
+-
+-## Streaming
+-
+-When streaming is needed, use `ReadableStream` with proper backpressure and a cancellation check on each chunk. Abort the underlying request on client disconnect.
+-
+-```ts
+-// Pattern from ai.ts streaming response
+-const stream = new ReadableStream({
+-  async start(controller) {
+-    const encoder = new TextEncoder();
+-    for await (const chunk of stream_response) {
+-      if (controller.desiredSize <= 0) await controller.ready;
+-      controller.enqueue(encoder.encode(chunk));
+-    }
+-    controller.close();
+-  },
+-  cancel() {
+-    underlyingAbortController.abort();
+-  },
+-});
+-```
+-
+----
++### Output Schema — Typed Result
+ 
+-## Cost Guards
++Every AI feature returns a typed result object. **Never return free-form text that the UI must parse.** Structured extraction (e.g. statement import) uses `runObjectAi` with a `Output.object({ schema })` declaration; reflection returns the typed `string` from `runTextAi`.
+ 
+-Cap `maxTokens` per request and enforce a session-level token budget from settings. Both are read from the encrypted settings store.
++### Redacted execution metadata
+ 
+-```ts
+-const maxTokens = settings.aiMaxTokensPerRequest ?? 2048;
+-const sessionBudget = settings.aiMaxTokensPerSession ?? 8192;
++`AiExecutionMeta` is the only metadata surfaced to server callers: feature ID, provider, model ID, prompt version, duration, finish reason, input/output tokens, retry count. Prompt text, response text, and key material must never appear in metadata, logs, drafts, or traces.
+ 
+-if (sessionTokenCount + maxTokens > sessionBudget) {
+-  throw new APICallError('Session AI budget exhausted', 'quota');
+-}
+-```
++### Import safety
+ 
+-If the setting is absent, use the defaults above. **Never allow unlimited tokens** even when the setting is misconfigured.
++Import is the existing extraction → validation → human review → commit workflow. The import request body is now `{ ai: true }` only; the preview endpoint resolves credentials on the server, and the commit endpoint must not call a model. The 120-second `AbortSignal.timeout(...)` and zero-retry policy are preserved.
+ 
+ ---
+ 
+-## Caching
++## Future assistant/UI/tool architecture (not implemented)
+ 
+-Trade critiques and recaps cache by compound key:
++The contextual assistant, scoped sessions, action/draft cards, side-sheet UI, and bounded read-only tools in `docs/superpowers/specs/2026-10-08-contextual-ai-workspace-design.md` are a future design, not current code. They will land in a separate plan and must re-validate the current requirements above. Specifically, the future architecture will need:
+ 
+-```ts
+-// apps/web/src/server/ai.ts — cache key
+-const cacheKey = `${tradeKey}|${sessionId}|v${EDGE_SCORE_VERSION}`;
+-const cached = await aiCache.get(cacheKey);
+-if (cached) return cached;
+-```
++- **Streaming** responses with `ReadableStream`, backpressure, and per-chunk cancellation. Abort the underlying request on client disconnect.
++- **Per-request and session token budgets** read from the encrypted settings store (`maxTokens` per request, `sessionBudget` per session). Enforce a hard cap even when settings are misconfigured.
++- **Caching keyed by** the feature input hash and `EDGE_SCORE_VERSION` (defined in `packages/core/src/scoring.ts`). Soft-evict under memory pressure.
++- **Telemetry** as durable local operational events (feature ID, provider/model, prompt/agent version, duration, usage, retry count, finish reason, tool/step count) — never prompt/response content, never external analytics endpoints. Currently deferred.
++- **Assistant capability tools** that resolve server-side scope and emit typed draft proposals only. The browser must never grant the agent wider account or record access.
++- **Privacy-aware rendering** so assistant-rendered money, executions, fees, draft fields, and prose honor the journal privacy setting before DOM and accessibility-tree rendering, including clipboard actions.
+ 
+-Invalidate the cache when `EDGE_SCORE_VERSION` bumps (defined in `packages/core/src/scoring.ts`). Cache entries are soft — they may be evicted under memory pressure.
++These items are documented for design parity with the spec; do not introduce them until a follow-up plan adds the matching contracts, tests, and review.
+ 
+ ---
+ 
+ ## Logging
+ 
+ Log every AI call with:
+ 
+ ```ts
+-logger.info('AI request', {
+-  requestId,
+-  provider: 'anthropic',
+-  model: 'claude-sonnet',
+-  promptVersion: TRADE_CRITIQUE_VERSION,
+-  tokenCount: result.usage.total_tokens,
+-  durationMs: Date.now() - start,
++logger.info("AI request", {
++  feature: "reflection",
++  provider: "anthropic",
++  model: "claude-sonnet",
++  promptVersion: AI_PROMPT_VERSIONS.reflection,
++  durationMs: meta.durationMs,
++  finishReason: meta.finishReason,
++  inputTokens: meta.inputTokens,
++  outputTokens: meta.outputTokens,
++  maxRetries: meta.maxRetries,
+ });
+ ```
+ 
+-**Never log** the prompt text, the model response, or any key-derived value.
++**Never log** the prompt text, the model response, or any key-derived value. `AiExecutionMeta` is the only metadata that may be recorded.
+ 
+ ---
+ 
+ ## Cite
+ 
+-- `apps/web/src/server/ai.ts` — `runAi`, `APICallError`, caching, cost guards
+-- `apps/web/src/server/ai-import.ts` — typed output schema, import suggestion feature
+-- `apps/web/src/server/ai-scope.ts` — prompt constants, version constants
+-- `apps/web/src/server/settings.ts` — key management, `getEffectiveApiKey`
++- `apps/web/src/server/ai-contracts.ts` — `AiFeature`, `AiExecutionPolicy`, `AI_FEATURE_POLICIES`, `AI_PROMPT_VERSIONS`, `AiExecutionMeta`, `AiRuntimeError`
++- `apps/web/src/server/ai-runtime.ts` — `runTextAi`, `runObjectAi`, provider isolation, `store: false`, error mapping
++- `apps/web/src/server/ai-prompts.ts` — `REFLECTION_SYSTEM_PROMPT`, `buildAskJournalPrompt`, `buildDailyRecapPrompt`, `buildTradeCritiquePrompt`
++- `apps/web/src/server/ai.ts` — reflection facade delegating to the runtime
++- `apps/web/src/server/ai-import.ts` — statement-import adapter delegating to `runObjectAi`
++- `apps/web/src/server/settings.ts` — `resolveAiConfiguration`, encrypted key storage
++- `docs/superpowers/specs/2026-10-08-contextual-ai-workspace-design.md` — future assistant/UI/tool design (not the current foundation)
++- `docs/ai-scope.md` — account/filter scope and execution boundary
+ 
+ ---
+ 
+ ## Checklist before PR
+ 
+-- [ ] Keys are read via `getEffectiveApiKey`; no raw `process.env` access outside `settings.ts`
+-- [ ] All `APICallError` categories are mapped to UI notices; raw provider payload never reaches the client
+-- [ ] Prompts live in `ai-scope.ts` or a dedicated `ai-*.ts`; no embedded strings in route handlers
+-- [ ] Every AI feature returns a typed result with `confidence` or `unavailable`; no free-form text
+-- [ ] `maxTokens` cap enforced per request; session budget enforced per session
+-- [ ] Cache key includes `EDGE_SCORE_VERSION`; cache invalidates on version bump
+-- [ ] AI calls log `requestId + provider + model + token count + durationMs`; no prompt/response/key in logs
+-- [ ] Streaming responses handle client disconnect via `ReadableStream.cancel()` / `AbortController`
++- [ ] Keys are resolved only via `resolveAiConfiguration()`; no raw `process.env` access outside `settings.ts`; no key, model, or provider is read from the client
++- [ ] All provider errors map to `AiRuntimeError` categories with safe user-facing messages; raw provider payload never reaches the client
++- [ ] Prompts live in `ai-prompts.ts` or a dedicated `ai-<feature>.ts`; no embedded strings in route handlers
++- [ ] Every new feature adds a typed entry to `AI_FEATURE_POLICIES` and `AI_PROMPT_VERSIONS` before calling the runtime
++- [ ] Runtime invoked via `runTextAi` / `runObjectAi`; routes never call the Vercel AI SDK directly
++- [ ] `maxRetries`, `maxOutputTokens`, and (for bounded features) `timeoutMs` come from policy, not from caller-supplied values
++- [ ] Structured extraction uses `Output.object({ schema })`; reflection returns the typed `string` from `runTextAi`
++- [ ] No agent session, tool, draft persistence, or assistant UI is introduced under "current requirements"
++- [ ] AI calls log `feature + provider + model + promptVersion + durationMs + finishReason + tokens + retries`; no prompt/response/key in logs
++- [ ] Import request body is `{ ai: true }` only; commit does not call a model; preview enforces the 120-second timeout
+diff --git a/docs/ai-scope.md b/docs/ai-scope.md
+index 3625b48..d2ebd20 100644
+--- a/docs/ai-scope.md
++++ b/docs/ai-scope.md
+@@ -1,14 +1,55 @@
+ # AI account and filter scope
+ 
+ Ask your journal and daily recaps use the account selection and analysis filters shown on the page. The client sends the computed date range, rather than asking the server to reinterpret a relative range. The server validates that snapshot, then uses the same trade query and timezone as the journal before building any AI context.
+ 
++## Execution boundary (current foundation)
++
++The current AI surface in this repository is the **server-only execution foundation** shipped by the plan in `docs/superpowers/plans/2026-10-08-ai-foundation-refactor.md`:
++
++- Provider, model, and key resolution happen **only** inside
++  `apps/web/src/server/ai-runtime.ts` and `apps/web/src/server/settings.ts`
++  via `resolveAiConfiguration()`. Feature routes never receive a key, model
++  ID, or provider ID from the client and never read raw `process.env` values.
++- Every AI execution returns **redacted** `AiExecutionMeta` to the server
++  caller: feature ID, provider, model ID, prompt version, duration, finish
++  reason, input/output tokens, and retry count. Prompt text, response text,
++  and the resolved key never appear in metadata.
++- `AI_FEATURE_POLICIES` fixes the per-feature `maxOutputTokens`,
++  `maxRetries`, and optional `timeoutMs`. `statementImport` is
++  `maxRetries: 0` and time-bounded at 120 seconds; `reflection` is
++  bounded for `maxOutputTokens` and `maxRetries`. The closed `AiFeature`
++  union prevents unreviewed features from inheriting unsafe defaults.
++- Errors are normalized to `AiRuntimeError` with safe, user-facing
++  categories (`missing_key`, `authentication`, `billing`, `rate_limited`,
++  `model_unavailable`, `timeout`, `provider`). Raw provider response text
++  never reaches the client.
++- Prompt construction lives in `apps/web/src/server/ai-prompts.ts` with
++  explicit `AI_PROMPT_VERSIONS` per feature. Route handlers stay thin and
++  contain no embedded prompt text.
++- The import request body is now `{ ai: true }` only; the import
++  preview/commit endpoints resolve credentials on the server and the
++  commit step never calls a model.
++- Privacy boundary (the account/filter rules below) is unchanged. The
++  foundation adds a server-only execution boundary **on top of** that
++  privacy boundary; it does not relax it.
++
++## Future assistant/UI/tool work (not in this foundation)
++
++The contextual assistant, scoped sessions, draft cards, side-sheet UI, and
++bounded read-only tools described in
++`docs/superpowers/specs/2026-10-08-contextual-ai-workspace-design.md`
++remain intentionally out of scope. They will land in a later plan and must
++re-validate the foundation checklist rather than assume any of it.
++
++## Account and filter scope (privacy boundary)
++
+ - All accounts remains the default when no account filter is selected. An explicitly malformed or unknown account selection is rejected; it never falls back to all accounts.
+ - No matching trades produces a data-specific message without a provider call. A daily recap also requires closed trades on the requested local calendar day.
+ - Context includes the scope and per-account totals with account names and currencies. Mixed-currency sums are explicitly described as unconverted.
+ - Answers are labeled with their scope. Changing filters clears the answer and invalidates pending responses, including a switch away from and back to the same account. Leaving a page also invalidates pending responses.
+ - A daily note is still shared by date across accounts. Recaps for an account or other trade subset do not include that shared note in the provider context. An all-account, otherwise unfiltered day recap can still use the note. Date range filters alone do not narrow that day's trades further.
+ - A completed recap appends a labeled section to the latest draft, preserving edits made during generation. A response from an obsolete scope cannot append or save a recap.
+ - Single-trade critique continues to use the trade key and is unchanged.
+ 
+ ## API contract
+ 
+diff --git a/docs/superpowers/specs/2026-10-08-contextual-ai-workspace-design.md b/docs/superpowers/specs/2026-10-08-contextual-ai-workspace-design.md
+index 63c1f45..2c93b54 100644
+--- a/docs/superpowers/specs/2026-10-08-contextual-ai-workspace-design.md
++++ b/docs/superpowers/specs/2026-10-08-contextual-ai-workspace-design.md
+@@ -1,31 +1,35 @@
+ # Contextual AI Workspace Assistant
+ 
+ **Status:** Draft for user review
+ 
+ ## Goal
++
+ Make AI a native, conversational assistant within Trade Journal workspaces while preserving explicit user control over every persisted change.
+ 
+ ## Product boundary
++
+ The assistant works with every supported account and journal workflow: personal accounts, funded/evaluation accounts, broker-connected accounts, imported history, and manually entered data. It is not a prop-firm-only feature.
+ 
+ The assistant may reason over authorized journal context and prepare typed drafts. It does not persist financial or journal data directly. Existing validated forms and APIs remain the only mutation path.
+ 
+ ## Selected surface
++
+ Use the **focused side-sheet** interaction from `.planning/sketches/001-contextual-ai-assistant/index.html` variant B.
+ 
+ - The workspace remains primary.
+ - A contextual trigger opens the assistant over the current page rather than navigating to a separate AI product.
+ - The sheet can support a real multi-turn conversation without permanently consuming workspace width.
+ - A compact global **Recent AI work** entry point resumes active drafts and previous scoped threads. It is not unrestricted global chat.
+ 
+ ## Conversation scope
++
+ A conversation begins with explicit, server-derived context from the workspace currently being viewed.
+ 
+ Example header:
+ 
+ > Viewing: ES long · 8 Oct 2026  
+ > Context: trade record · executions · journal note
+ 
+ The assistant shows supplemental attached context as removable chips. The server-owned primary workspace record remains the thread's minimum validated scope; it cannot be removed from the thread.
+ 
+ ### Portable, scoped sessions
+@@ -33,50 +37,54 @@ The assistant shows supplemental attached context as removable chips. The server
+ - Navigation to a related record—such as a trade's journal note or linked playbook—can retain the conversation after announcing the added context.
+ - Navigation to an unrelated trade, notebook, account, or workspace starts a separate thread.
+ - The prior thread and all unsaved drafts remain resumable through Recent AI work.
+ - Any draft stays attached to the entity it changes. A conversation that spans a trade and a note produces separate review cards.
+ - Removing every supplemental chip returns the conversation to its primary record. To remove that record, the user ends the thread or explicitly starts a new one; no scope-less or all-accounts fallback exists.
+ - A “related” handoff is permitted only when the server resolves the target from a direct, account-scoped relationship of an already attached record. Resuming a thread revalidates every attached record against current account access; deleted or unauthorized records end the thread and make its pending drafts unavailable for application.
+ 
+ ## Interaction model
+ 
+ ### Conversation
++
+ Users describe intent naturally:
+ 
+ - “Add the scaling entry I missed.”
+ - “Turn this into a missed-trade record.”
+ - “Make this journal note clearer.”
+ - “Create a playbook from these notes.”
+ 
+ The assistant uses existing attached facts before asking questions. It asks focused follow-ups only for missing or ambiguous values and distinguishes confirmed, inferred, and unknown values.
+ 
+ ### Action cards
++
+ The assistant produces typed, visible draft cards instead of relying on prose alone:
+ 
+ - trade-create or trade-edit draft;
+ - missed-trade draft;
+ - journal note refinement;
+ - notebook draft or revision;
+ - playbook proposal or edit.
+ 
+ Every card has:
+ 
+ - a clear **Not saved** state;
+ - field-level proposed values and change summary;
+ - validation warnings and unresolved fields;
+ - source or confidence metadata where a value was inferred or extracted;
+ - **Refine**, **Discard**, and a destination-specific review action.
+ 
+ ### Review and persistence
++
+ AI does not become a second form system. A review action such as **Review in trade form**, **Open in notebook**, or **Review playbook** opens the existing editing surface with the typed draft prefilled. The user may correct, reject, or submit it there. Existing validation, authorization, and persistence behavior applies unchanged.
+ 
+ ## AI capability boundary
++
+ The assistant receives application capabilities through typed, permission-scoped server interfaces—not prose descriptions of database behavior and not raw database access.
+ 
+ Initial read-only capabilities should map to existing domain/query behavior:
+ 
+ - get current workspace identity and validated scope;
+ - get a selected trade with ordered executions;
+ - get bounded journal summaries, metrics, tags, and notes;
+ - get related notebook/playbook metadata;
+ - find permitted related records within the active scope.
+ 
+@@ -118,18 +126,33 @@ The design must be testable without a live model.
+ - Browser tests prove the sheet exposes context, retains/reports context transitions, distinguishes unsaved drafts, deep-links into existing editors, and preserves a failed request's input.
+ 
+ ## Non-goals
+ 
+ - A global unrestricted chat agent.
+ - Autonomous writes, background edits, or implicit save.
+ - A separate AI-only form/editor system.
+ - A multi-agent hierarchy, delegation framework, market-data/research agent, or broker-execution agent.
+ - Replacing all current direct model calls with agents.
+ 
++## Foundation acceptance checklist
++
++The AI foundation refactor (Tasks 1–4 of
++`docs/superpowers/plans/2026-10-08-ai-foundation-refactor.md`) lands only the
++server-only execution foundation. All of the following must be true once that
++work is merged; anything in `## Non-goals` or `## Incremental adoption` that is
++not enumerated below remains intentionally out of scope.
++
++- [ ] Provider/model/key resolution occurs only in the server runtime.
++- [ ] Provider options do not leak into AI feature routes.
++- [ ] Reflection and import have explicit policy and prompt versions.
++- [ ] No feature route returns provider credentials or raw provider errors.
++- [ ] No agent session, tool, draft persistence, or assistant UI ships in this
++      foundation refactor.
++
+ ## Incremental adoption
+ 
+ 1. Add provider-neutral execution and typed feature interfaces without changing existing routes or prompt behavior.
+ 2. Extract server-validated read-only context capabilities from current routes.
+ 3. Build the B side-sheet shell and typed draft-card contract for one low-risk refinement flow.
+ 4. Hand off drafts to the existing editor; verify no draft persists without normal submission.
+ 5. Expand to trade creation/editing, journaling, notebooks, playbooks, and missed trades one workflow at a time.
+ 6. Consolidate legacy prompt assembly only after equivalent contracts and regression coverage exist.

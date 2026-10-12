@@ -20,19 +20,16 @@ import {
 } from "@/components/ui/select";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { postJson, useApi } from "@/lib/use-api";
+import { useAccountDefault } from "@/lib/use-account-default";
 import { decodeImportFile } from "@/lib/decode-import";
 import { formatTimestamp, isTimeZone } from "@/lib/timezone";
 import { dayKeyOf } from "@luxalgo/journal-core";
 import { ImportReconciliation } from "@/components/import-reconciliation";
 import type { ImportReview, ImportReviewOptions } from "@/lib/import-review";
 import { TimeZonePicker } from "@/components/timezone-picker";
-import { AiImportOptions } from "@/components/ai-import-options";
-import { AI_DEFAULT_MODELS, type AiSettingsPayload } from "@/lib/ai-settings";
-import {
-  AI_IMPORT_MAX_BYTES,
-  AI_IMPORT_MAX_TEXT,
-  type AiImportOptions as AiOptions,
-} from "@/lib/ai-import";
+import { AiImportToggle } from "@/components/ai-import-options";
+import { AI_PROVIDER_NAMES, type AiSettingsPayload } from "@/lib/ai-settings";
+import { AI_IMPORT_MAX_BYTES, AI_IMPORT_MAX_TEXT } from "@/lib/ai-import";
 import { readHeaders, type SkippedReason } from "@luxalgo/journal-importers";
 import { Checkbox } from "@/components/ui/checkbox";
 
@@ -129,7 +126,8 @@ function ImportView() {
 
 function FileImport() {
   const router = useRouter();
-  const [accountId, setAccountId] = useState("");
+  const { defaultId, setDefault } = useAccountDefault();
+  const [accountId, setAccountId] = useState(defaultId ?? "");
   const [reviewOptions, setReviewOptions] = useState<ImportReviewOptions>({});
   const changeReview = (options: ImportReviewOptions) => {
     setReviewOptions(options);
@@ -154,11 +152,6 @@ function FileImport() {
   const [mapping, setMapping] = useState<Record<string, string>>({});
   const [busy, setBusy] = useState(false);
   const [aiEnabled, setAiEnabled] = useState(false);
-  const [aiOptions, setAiOptions] = useState<AiOptions>({
-    provider: "openai",
-    model: AI_DEFAULT_MODELS.openai,
-    apiKey: "",
-  });
   const [encoding, setEncoding] = useState<"text" | "pdf">("text");
   const [aiReviewed, setAiReviewed] = useState(false);
   const { data: formatData } = useApi<{ formats: { id: string; label: string }[] }>("/api/import");
@@ -172,10 +165,11 @@ function FileImport() {
   const timeZone = statementTimeZone ?? settingsData?.importTimeZone ?? "";
   const validTimeZone = isTimeZone(timeZone);
   const displayTimeZone = settingsData?.timeZone ?? "UTC";
-  const aiReady = Boolean(
-    aiOptions.model.trim() &&
-    (aiOptions.apiKey?.trim() || settingsData?.aiConnections[aiOptions.provider].configured),
-  );
+  const selectedAiProvider = settingsData?.aiProvider ?? "openai";
+  const aiReady = Boolean(settingsData?.aiConnections[selectedAiProvider].configured);
+  const aiConfigError = aiEnabled && !aiReady
+    ? `Add your ${AI_PROVIDER_NAMES[selectedAiProvider]} API key in Settings to parse with AI.`
+    : null;
   const invalidateAiPreview = () => {
     setPreview(null);
     setAiReviewed(false);
@@ -259,7 +253,7 @@ function FileImport() {
           symbol,
           timeZone,
           encoding,
-          ...(aiEnabled ? { ai: aiOptions } : {}),
+          ...(aiEnabled ? { ai: true } : {}),
           ...(aiEnabled && encoding !== "pdf" ? { headers: readHeaders(content) } : {}),
         }),
       );
@@ -313,7 +307,7 @@ function FileImport() {
         timeZone: preview.timeZone,
         ...(preview.aiPreviewToken
           ? {
-              ai: { provider: aiOptions.provider, model: aiOptions.model },
+              ai: true,
               encoding,
               aiPreviewToken: preview.aiPreviewToken,
               aiReviewed,
@@ -327,6 +321,7 @@ function FileImport() {
       alert(
         `Imported ${result.inserted} executions (${result.duplicates} duplicates skipped, ${result.corrected ?? 0} fee corrections).${skippedNote}`,
       );
+      setDefault(accountId);
       router.push(`/?accounts=${encodeURIComponent(accountId)}`);
     } catch (cause) {
       setError(cause instanceof Error ? cause.message : "Import failed");
@@ -342,23 +337,30 @@ function FileImport() {
       <Card>
         <CardHeader className="flex-row flex-wrap items-center justify-between gap-2 space-y-0">
           <CardTitle>Upload a statement or export</CardTitle>
-          <AiImportOptions
-            enabled={aiEnabled}
-            onEnabledChange={(enabled) => {
-              setAiEnabled(enabled);
-              invalidateAiPreview();
-              setContent(null);
-              setFileName("");
-              setMappingApplied(false);
-            }}
-            value={aiOptions}
-            onChange={(options) => {
-              setAiOptions(options);
-              invalidateAiPreview();
-            }}
-            settings={settingsData ?? undefined}
-            disabled={busy}
-          />
+          <div className="flex shrink-0 items-center gap-2">
+            {aiReady ? (
+              <AiImportToggle
+                enabled={aiEnabled}
+                onEnabledChange={(enabled) => {
+                  setAiEnabled(enabled);
+                  invalidateAiPreview();
+                  setContent(null);
+                  setFileName("");
+                  setMappingApplied(false);
+                }}
+                provider={selectedAiProvider}
+                disabled={busy}
+              />
+            ) : (
+              <a
+                href="/settings#ai-settings"
+                className="text-xs text-muted-foreground underline hover:text-foreground"
+              >
+                {aiConfigError ??
+                  `Add your ${AI_PROVIDER_NAMES[selectedAiProvider]} API key in Settings to parse with AI.`}
+              </a>
+            )}
+          </div>
         </CardHeader>
         <CardContent className="space-y-3">
           <div>
@@ -471,11 +473,12 @@ function FileImport() {
               </Button>
             </div>
           )}
-          {preview && !preview.needsMapping && preview.totals && (
+          {preview &&
+            !preview.needsMapping &&
+            preview.totals &&
             (() => {
               const zero = preview.totals.executions === 0;
-              const canRemap =
-                preview.detected !== "ninjatrader" && !preview.aiPreviewToken;
+              const canRemap = preview.detected !== "ninjatrader" && !preview.aiPreviewToken;
               // Group skip reasons by message so 24 "missing entry price" rows
               // become one line with a count. row indices within a group are dropped
               // when the group has more than one row — they don't help the user.
@@ -678,9 +681,7 @@ function FileImport() {
                     <div className="space-y-1 border-t pt-2 text-xs">
                       <div
                         className={
-                          preview.aiPreviewToken
-                            ? "max-h-80 space-y-2 overflow-auto"
-                            : "space-y-1"
+                          preview.aiPreviewToken ? "max-h-80 space-y-2 overflow-auto" : "space-y-1"
                         }
                       >
                         {(preview.aiPreviewToken
@@ -697,8 +698,7 @@ function FileImport() {
                               </span>
                               {preview.aiPreviewToken && (
                                 <span>
-                                  {execution.quantity} @ {execution.price} · Fees{" "}
-                                  {execution.fee}
+                                  {execution.quantity} @ {execution.price} · Fees {execution.fee}
                                 </span>
                               )}
                             </div>
@@ -711,9 +711,7 @@ function FileImport() {
                         ))}
                       </div>
                       {!preview.aiPreviewToken && preview.totals.executions > 5 && (
-                        <p className="text-muted-foreground">
-                          Showing the first 5 executions.
-                        </p>
+                        <p className="text-muted-foreground">Showing the first 5 executions.</p>
                       )}
                     </div>
                   )}
@@ -733,12 +731,15 @@ function FileImport() {
                       value={accountId}
                       onChange={(id) => {
                         setAccountId(id);
+                        setDefault(id);
                         setReviewOptions({});
                         setPreview((current) =>
                           current ? { ...current, reconciliation: undefined } : null,
                         );
                       }}
                       kind="import"
+                      defaultId={defaultId}
+                      onAutoFill={setDefault}
                     />
                   </fieldset>
                   {preview.detected === "ninjatrader" && accountId && (
@@ -769,14 +770,13 @@ function FileImport() {
                         disabled={busy}
                         onCheckedChange={(checked) => setAiReviewed(checked === true)}
                       />
-                      I compared all extracted executions with my statement, including the
-                      account, quantities, prices, fees and timestamps. Import this preview.
+                      I compared all extracted executions with my statement, including the account,
+                      quantities, prices, fees and timestamps. Import this preview.
                     </label>
                   )}
                 </div>
               );
-            })()
-          )}
+            })()}
           {showManualMapper && preview?.headers && !preview.needsMapping && (
             <div className="space-y-2 rounded-md border p-3">
               <div className="flex items-center justify-between gap-2">
@@ -836,8 +836,8 @@ function FileImport() {
               </Button>
               {preview.totals && preview.totals.executions === 0 && (
                 <p className="text-xs text-loss">
-                  Nothing came through with this mapping. Try AI parsing instead — it
-                  handles files that don&apos;t have an obvious side column.
+                  Nothing came through with this mapping. Try AI parsing instead — it handles files
+                  that don&apos;t have an obvious side column.
                 </p>
               )}
             </div>
@@ -899,6 +899,7 @@ function FileImport() {
 
 function BrokerConnect() {
   const router = useRouter();
+  const { setDefault } = useAccountDefault();
   const { data } = useApi<{ brokers: BrokerInfo[] }>("/api/brokers");
   const { data: settingsData, error: settingsError } = useApi<{ importTimeZone: string }>(
     "/api/settings",
@@ -929,6 +930,7 @@ function BrokerConnect() {
           `${created.sync.skipped} broker record(s) were skipped: ${created.sync.skippedReasons.join(" ")}`,
         );
       }
+      setDefault(created.id);
       router.push(`/?accounts=${encodeURIComponent(created.id)}`);
     } catch (cause) {
       setError(cause instanceof Error ? cause.message : "Connection failed");

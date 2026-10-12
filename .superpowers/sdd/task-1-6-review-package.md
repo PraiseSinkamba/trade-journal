@@ -1,6 +1,7 @@
 # Task 1.6 Review Package
 
 ## Commit
+
 - Range: `6ff6920..89eb90f`
 - Subject: `feat(web): surface per-row skip reasons in import preview`
 - Stat: 3 files, +25/-4
@@ -20,11 +21,11 @@
   </summary>
   <ul className="ml-4 mt-1 list-disc">
     {preview.totals.skippedReasons.slice(0, 5).map((reason, idx) => (
-      <li key={idx}>row {reason.row ?? "?"} — {reason.reason}</li>
+      <li key={idx}>
+        row {reason.row ?? "?"} — {reason.reason}
+      </li>
     ))}
-    {preview.totals.skippedRows > 5 && (
-      <li>and {preview.totals.skippedRows - 5} more</li>
-    )}
+    {preview.totals.skippedRows > 5 && <li>and {preview.totals.skippedRows - 5} more</li>}
     {preview.totals.skippedReasonsTruncated && (
       <li>showing the first 50 of {preview.totals.skippedRows} skip reasons</li>
     )}
