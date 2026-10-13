@@ -37,7 +37,7 @@ interface CreateBody {
   currency?: string;
   initialBalance?: number;
   profitCalcMethod?: "fifo" | "lifo" | "wavg";
-  credentials?: Record<string, string>;
+  credentials?: Record<string, unknown>;
   autoSync?: boolean;
 }
 
@@ -46,6 +46,15 @@ export const POST = handler(async (request: Request) => {
   if (!body.name || !body.kind) return bad("name and kind are required");
   if (body.kind === "sync" && (!body.broker || !body.credentials)) {
     return bad("sync accounts need a broker and credentials");
+  }
+  if (
+    body.kind === "sync" &&
+    body.broker === "ctrader-mcp" &&
+    body.credentials &&
+    body.credentials.mode === "remote" &&
+    !body.credentials.ctraderAccountId
+  ) {
+    return bad("Remote cTrader MCP requires ctraderAccountId");
   }
 
   const id = newId();

@@ -32,6 +32,12 @@ import { AI_PROVIDER_NAMES, type AiSettingsPayload } from "@/lib/ai-settings";
 import { AI_IMPORT_MAX_BYTES, AI_IMPORT_MAX_TEXT } from "@/lib/ai-import";
 import { readHeaders, type SkippedReason } from "@luxalgo/journal-importers";
 import { Checkbox } from "@/components/ui/checkbox";
+import {
+  cTraderMcpBrokerId,
+  defaultLocalEndpoint,
+  defaultRemoteEndpoint,
+  type CTraderAccount,
+} from "@/lib/ctrader-mcp-form";
 
 interface BrokerInfo {
   id: string;
@@ -910,12 +916,62 @@ function BrokerConnect() {
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const broker = data?.brokers.find((b) => b.id === brokerId) ?? null;
+  const isCTraderMcp = broker?.id === cTraderMcpBrokerId;
+
+  const [ctraderMode, setCtraderMode] = useState<"remote" | "local">("remote");
+  const [ctraderEndpoint, setCtraderEndpoint] = useState(defaultRemoteEndpoint);
+  const [ctraderToken, setCtraderToken] = useState("");
+  const [ctraderAccountId, setCtraderAccountId] = useState("");
+  const [ctraderAuthHeader, setCtraderAuthHeader] = useState("");
+  const [previewAccounts, setPreviewAccounts] = useState<CTraderAccount[]>([]);
+  const [previewBusy, setPreviewBusy] = useState(false);
+  const [previewError, setPreviewError] = useState<string | null>(null);
+
+  const fetchCTraderAccounts = async () => {
+    setPreviewBusy(true);
+    setPreviewError(null);
+    setPreviewAccounts([]);
+    try {
+      const out = await postJson<{ accounts: CTraderAccount[] }>(
+        "/api/accounts/ctrader-mcp-preview",
+        { endpoint: ctraderEndpoint, bearerToken: ctraderToken },
+      );
+      setPreviewAccounts(out.accounts);
+      if (out.accounts.length === 1) setCtraderAccountId(String(out.accounts[0]!.accountId));
+    } catch (cause) {
+      setPreviewError(cause instanceof Error ? cause.message : "Failed to load cTrader accounts");
+    } finally {
+      setPreviewBusy(false);
+    }
+  };
+
+  const ctraderReady = isCTraderMcp
+    ? ctraderMode === "remote"
+      ? ctraderEndpoint.startsWith("http") &&
+        ctraderToken.trim().length > 0 &&
+        ctraderAccountId.length > 0
+      : ctraderEndpoint.startsWith("http")
+    : true;
 
   const connect = async () => {
     if (!broker) return;
     setBusy(true);
     setError(null);
     try {
+      const payload = isCTraderMcp
+        ? ctraderMode === "remote"
+          ? {
+              mode: "remote" as const,
+              endpoint: ctraderEndpoint,
+              bearerToken: ctraderToken,
+              ctraderAccountId: Number(ctraderAccountId),
+            }
+          : {
+              mode: "local" as const,
+              endpoint: ctraderEndpoint,
+              ...(ctraderAuthHeader ? { authHeader: ctraderAuthHeader } : {}),
+            }
+        : credentials;
       const created = await postJson<{
         id: string;
         sync: { skipped: number; skippedReasons: string[] };
@@ -923,7 +979,7 @@ function BrokerConnect() {
         name: name || broker.displayName,
         kind: "sync",
         broker: broker.id,
-        credentials,
+        credentials: payload,
       });
       if (created.sync.skipped > 0) {
         alert(
@@ -952,6 +1008,13 @@ function BrokerConnect() {
             onValueChange={(value) => {
               setBrokerId(value);
               setCredentials({});
+              setCtraderMode("remote");
+              setCtraderEndpoint(defaultRemoteEndpoint);
+              setCtraderToken("");
+              setCtraderAccountId("");
+              setCtraderAuthHeader("");
+              setPreviewAccounts([]);
+              setPreviewError(null);
             }}
           >
             <SelectTrigger>
@@ -988,28 +1051,49 @@ function BrokerConnect() {
                 placeholder={broker.displayName}
               />
             </div>
-            {broker.credentials.map((field) => (
-              <div key={field.key}>
-                <Label className="mb-1 block text-xs text-muted-foreground">{field.label}</Label>
-                <Input
-                  aria-label={field.label}
-                  type={field.secret ? "password" : "text"}
-                  value={credentials[field.key] ?? ""}
-                  onChange={(event) =>
-                    setCredentials((c) => ({ ...c, [field.key]: event.target.value }))
-                  }
-                  autoComplete="off"
-                />
-              </div>
-            ))}
+            {isCTraderMcp ? (
+              <CTraderMcpFields
+                mode={ctraderMode}
+                onModeChange={setCtraderMode}
+                endpoint={ctraderEndpoint}
+                onEndpointChange={setCtraderEndpoint}
+                token={ctraderToken}
+                onTokenChange={setCtraderToken}
+                accountId={ctraderAccountId}
+                onAccountIdChange={setCtraderAccountId}
+                authHeader={ctraderAuthHeader}
+                onAuthHeaderChange={setCtraderAuthHeader}
+                previewAccounts={previewAccounts}
+                previewBusy={previewBusy}
+                previewError={previewError}
+                onFetchAccounts={fetchCTraderAccounts}
+              />
+            ) : (
+              broker.credentials.map((field) => (
+                <div key={field.key}>
+                  <Label className="mb-1 block text-xs text-muted-foreground">{field.label}</Label>
+                  <Input
+                    aria-label={field.label}
+                    type={field.secret ? "password" : "text"}
+                    value={credentials[field.key] ?? ""}
+                    onChange={(event) =>
+                      setCredentials((c) => ({ ...c, [field.key]: event.target.value }))
+                    }
+                    autoComplete="off"
+                  />
+                </div>
+              ))
+            )}
             {error && <p className="text-sm text-loss">{error}</p>}
             <Button
               onClick={connect}
               disabled={
                 busy ||
-                broker.credentials.some(
-                  (field) => !/optional/i.test(field.label) && !credentials[field.key]?.trim(),
-                ) ||
+                (!isCTraderMcp &&
+                  broker.credentials.some(
+                    (field) => !/optional/i.test(field.label) && !credentials[field.key]?.trim(),
+                  )) ||
+                (isCTraderMcp && !ctraderReady) ||
                 (broker.id === "ibkr-flex" && !isTimeZone(settingsData?.importTimeZone))
               }
             >
@@ -1019,5 +1103,119 @@ function BrokerConnect() {
         )}
       </CardContent>
     </Card>
+  );
+}
+
+interface CTraderMcpFieldsProps {
+  mode: "remote" | "local";
+  onModeChange: (mode: "remote" | "local") => void;
+  endpoint: string;
+  onEndpointChange: (value: string) => void;
+  token: string;
+  onTokenChange: (value: string) => void;
+  accountId: string;
+  onAccountIdChange: (value: string) => void;
+  authHeader: string;
+  onAuthHeaderChange: (value: string) => void;
+  previewAccounts: CTraderAccount[];
+  previewBusy: boolean;
+  previewError: string | null;
+  onFetchAccounts: () => void;
+}
+
+function CTraderMcpFields({
+  mode,
+  onModeChange,
+  endpoint,
+  onEndpointChange,
+  token,
+  onTokenChange,
+  accountId,
+  onAccountIdChange,
+  authHeader,
+  onAuthHeaderChange,
+  previewAccounts,
+  previewBusy,
+  previewError,
+  onFetchAccounts,
+}: CTraderMcpFieldsProps) {
+  const canFetch = endpoint.startsWith("http") && token.trim().length > 0 && !previewBusy;
+  return (
+    <>
+      <div>
+        <Label className="mb-1 block text-xs text-muted-foreground">Mode</Label>
+        <Tabs
+          value={mode}
+          onValueChange={(value) => {
+            const next = value as "remote" | "local";
+            onModeChange(next);
+            onEndpointChange(next === "remote" ? defaultRemoteEndpoint : defaultLocalEndpoint);
+          }}
+        >
+          <TabsList>
+            <TabsTrigger value="remote">Remote (Web token)</TabsTrigger>
+            <TabsTrigger value="local">Local (Desktop)</TabsTrigger>
+          </TabsList>
+        </Tabs>
+      </div>
+      <div>
+        <Label className="mb-1 block text-xs text-muted-foreground">Endpoint</Label>
+        <Input
+          aria-label="Endpoint"
+          value={endpoint}
+          onChange={(event) => onEndpointChange(event.target.value)}
+          autoComplete="off"
+        />
+      </div>
+      {mode === "remote" ? (
+        <>
+          <div>
+            <Label className="mb-1 block text-xs text-muted-foreground">Bearer token</Label>
+            <Input
+              aria-label="Bearer token"
+              type="password"
+              value={token}
+              onChange={(event) => onTokenChange(event.target.value)}
+              autoComplete="off"
+            />
+          </div>
+          <div className="flex items-center gap-2">
+            <Button variant="outline" onClick={onFetchAccounts} disabled={!canFetch}>
+              {previewBusy ? "Fetching…" : "Fetch accounts"}
+            </Button>
+            {previewError && <p className="text-sm text-loss">{previewError}</p>}
+          </div>
+          {previewAccounts.length > 0 ? (
+            <div>
+              <Label className="mb-1 block text-xs text-muted-foreground">cTrader account</Label>
+              <Select value={accountId} onValueChange={onAccountIdChange}>
+                <SelectTrigger>
+                  <SelectValue placeholder="Pick the cTrader account to sync" />
+                </SelectTrigger>
+                <SelectContent>
+                  {previewAccounts.map((acct) => (
+                    <SelectItem key={acct.accountId} value={String(acct.accountId)}>
+                      {acct.accountId} · {acct.brokerName} ({acct.currency})
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+          ) : null}
+        </>
+      ) : (
+        <div>
+          <Label className="mb-1 block text-xs text-muted-foreground">
+            Authorization header (optional)
+          </Label>
+          <Input
+            aria-label="Authorization header"
+            value={authHeader}
+            onChange={(event) => onAuthHeaderChange(event.target.value)}
+            autoComplete="off"
+          />
+        </div>
+      )}
+    </>
   );
 }
