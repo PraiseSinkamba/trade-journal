@@ -1,7 +1,10 @@
 import { bad, handler, ok } from "@/server/api";
 import { listCTraderAccounts } from "@/server/ctrader-mcp/accounts";
 import { CTraderMcpClient } from "@/server/ctrader-mcp/client";
-import { CTraderMcpSyncError } from "@/server/ctrader-mcp/errors";
+import {
+  CTraderMcpSyncError,
+  type CTraderMcpSyncErrorKind,
+} from "@/server/ctrader-mcp/errors";
 
 interface PreviewBody {
   endpoint?: string;
@@ -24,7 +27,7 @@ export const POST = handler(async (request: Request) => {
     return ok({ accounts });
   } catch (err) {
     if (err instanceof CTraderMcpSyncError) {
-      const SAFE: Record<string, string> = {
+      const SAFE: Record<CTraderMcpSyncErrorKind, string> = {
         unreachable: "Can't reach cTrader MCP. Check the URL and that the desktop is running.",
         auth: "cTrader MCP authentication failed. For remote: refresh the token in cTrader Web → Settings → Remote MCP.",
         account_gone: "cTrader account is no longer accessible from this token. Re-connect the account.",
@@ -32,7 +35,7 @@ export const POST = handler(async (request: Request) => {
         parse: "cTrader MCP returned unexpected data.",
         unknown: "cTrader MCP sync failed. Check server logs.",
       };
-      return bad(SAFE[err.kind]!, 502);
+      return bad(SAFE[err.kind], 502);
     }
     throw err;
   } finally {

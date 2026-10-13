@@ -948,10 +948,10 @@ function BrokerConnect() {
 
   const ctraderReady = isCTraderMcp
     ? ctraderMode === "remote"
-      ? ctraderEndpoint.startsWith("http") &&
+      ? ctraderEndpoint.startsWith("https://") &&
         ctraderToken.trim().length > 0 &&
         ctraderAccountId.length > 0
-      : ctraderEndpoint.startsWith("http")
+      : ctraderEndpoint.startsWith("http://")
     : true;
 
   const connect = async () => {
@@ -1140,7 +1140,8 @@ function CTraderMcpFields({
   previewError,
   onFetchAccounts,
 }: CTraderMcpFieldsProps) {
-  const canFetch = endpoint.startsWith("http") && token.trim().length > 0 && !previewBusy;
+  const canFetch =
+    endpoint.startsWith("https://") && token.trim().length > 0 && !previewBusy;
   return (
     <>
       <div>
@@ -1154,10 +1155,13 @@ function CTraderMcpFields({
           }}
         >
           <TabsList>
-            <TabsTrigger value="remote">Remote (Web token)</TabsTrigger>
-            <TabsTrigger value="local">Local (Desktop)</TabsTrigger>
+            <TabsTrigger value="remote">Remote</TabsTrigger>
+            <TabsTrigger value="local">Local</TabsTrigger>
           </TabsList>
         </Tabs>
+        <p className="mt-1 text-xs text-muted-foreground">
+          Remote uses your cTrader Web token; Local connects to cTrader Desktop.
+        </p>
       </div>
       <div>
         <Label className="mb-1 block text-xs text-muted-foreground">Endpoint</Label>
@@ -1178,13 +1182,19 @@ function CTraderMcpFields({
               value={token}
               onChange={(event) => onTokenChange(event.target.value)}
               autoComplete="off"
+              spellCheck={false}
+              inputMode="text"
             />
           </div>
           <div className="flex items-center gap-2">
             <Button variant="outline" onClick={onFetchAccounts} disabled={!canFetch}>
               {previewBusy ? "Fetching…" : "Fetch accounts"}
             </Button>
-            {previewError && <p className="text-sm text-loss">{previewError}</p>}
+            {previewError && (
+              <p role="alert" className="text-sm text-loss">
+                {previewError}
+              </p>
+            )}
           </div>
           {previewAccounts.length > 0 ? (
             <div>
@@ -1215,6 +1225,9 @@ function CTraderMcpFields({
             onChange={(event) => onAuthHeaderChange(event.target.value)}
             autoComplete="off"
           />
+          <p className="mt-1 text-xs text-muted-foreground">
+            Leave blank unless your cTrader Desktop build requires an auth header.
+          </p>
         </div>
       )}
     </>
