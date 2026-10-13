@@ -189,6 +189,6 @@ describe("CTraderMcpClient", () => {
       mode: "local",
       endpoint: "http://127.0.0.1:1/mcp",
     });
-    await expect(client.initialize()).rejects.toBeInstanceOf(CTraderMcpSyncError);
+    await expect(client.initialize()).rejects.toMatchObject({ kind: "unreachable" });
   });
 });
