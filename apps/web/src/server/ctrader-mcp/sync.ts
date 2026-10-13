@@ -44,7 +44,7 @@ export const syncCTraderMcpAccount = async (accountId: string): Promise<SyncOutc
   let positions: CTraderPosition[] = [];
   let pendingOrders: CTraderOrder[] = [];
   let accountInfo: CTraderAccountInfo | null = null;
-  let client!: CTraderMcpClient;
+  let client: CTraderMcpClient | undefined;
 
   try {
     const creds = decryptJson<CTraderMcpCredentials>(account.credentialsEnc);
@@ -134,6 +134,6 @@ export const syncCTraderMcpAccount = async (accountId: string): Promise<SyncOutc
     if (!(err instanceof CTraderMcpSyncError)) throw classifyMcpError(err);
     throw err;
   } finally {
-    await client.close().catch(() => undefined);
+    await client?.close().catch(() => undefined);
   }
 };
