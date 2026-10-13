@@ -65,7 +65,7 @@ describe("ADR 0002 boundary", () => {
   // Covers all ESM import forms: static (from), side-effect (import "..."), and dynamic (import("...")).
   it("forbids cTrader MCP module imports inside packages/importers/src/**", async () => {
     const CTRADER_IMPORT =
-      /import\s+["']\.\.?\/.*?ctrader[_-]mcp|import\s+["']@\/server\/.*?ctrader[_-]mcp|import\(["']\.\.?\/.*?ctrader[_-]mcp|import\(["']@\/server\/.*?ctrader[_-]mcp|CTraderMcpClient|CTraderMcpSyncError/i;
+      /import\s+\{[^}]*\}\s+from\s+["']\.\.?\/[^"']*ctrader[_-]mcp|import\s+\{[^}]*\}\s+from\s+["']@\/server\/[^"']*ctrader[_-]mcp|import\s+\w+\s+from\s+["']\.\.?\/[^"']*ctrader[_-]mcp|import\s+\w+\s+from\s+["']@\/server\/[^"']*ctrader[_-]mcp|import\s+["']\.\.?\/[^"']*ctrader[_-]mcp|import\s+["']@\/server\/[^"']*ctrader[_-]mcp|import\(["']\.\.?\/[^"']*ctrader[_-]mcp|import\(["']@\/server\/[^"']*ctrader[_-]mcp|CTraderMcpClient|CTraderMcpSyncError/i;
     for await (const file of glob("packages/importers/src/**/*.ts")) {
       const src = readFileSync(file, "utf8");
       expect(src).not.toMatch(CTRADER_IMPORT);
