@@ -41,14 +41,14 @@ export const syncCTraderMcpAccount = async (accountId: string): Promise<SyncOutc
     throw new Error("Account is not broker-connected");
   }
 
-  const creds = decryptJson<CTraderMcpCredentials>(account.credentialsEnc);
-  const client = getClient(creds);
-
   let positions: CTraderPosition[] = [];
   let pendingOrders: CTraderOrder[] = [];
   let accountInfo: CTraderAccountInfo | null = null;
+  let client!: CTraderMcpClient;
 
   try {
+    const creds = decryptJson<CTraderMcpCredentials>(account.credentialsEnc);
+    client = getClient(creds);
     await client.initialize();
 
     if (creds.mode === "remote") {
@@ -61,13 +61,15 @@ export const syncCTraderMcpAccount = async (accountId: string): Promise<SyncOutc
       }
     }
 
+    const syncedAt = nowIso();
+
     const symbols = await fetchSymbols(client);
     const symbolMap = buildAssetClassMap(symbols);
     const symbolNameMap = new Map(symbols.map((s) => [s.symbolId, s.name] as const));
 
     const deals = await fetchAllDeals(client, {
       fromTime: account.lastSyncAt ?? undefined,
-      toTime: nowIso(),
+      toTime: syncedAt,
       ...(creds.mode === "remote" ? { ctraderAccountId: creds.ctraderAccountId } : {}),
     });
 
@@ -93,32 +95,37 @@ export const syncCTraderMcpAccount = async (accountId: string): Promise<SyncOutc
       creds.mode === "remote" ? creds.ctraderAccountId : undefined,
     );
 
-    const syncedAt = nowIso();
     const equity = accountInfo?.equity ?? null;
 
-    const inserted = insertExecutions(accountId, rows, "sync");
-    db.update(accounts)
-      .set({
-        lastSyncAt: syncedAt,
-        snapshotJson: JSON.stringify({
-          equity,
-          positions,
-          openOrders: pendingOrders,
-          balance: accountInfo?.balance ?? null,
-          freeMargin: accountInfo?.freeMargin ?? null,
-          currency: accountInfo?.currency ?? account.currency,
-          fetchedAt: syncedAt,
-        }),
-      })
-      .where(eq(accounts.id, accountId))
-      .run();
+    const result = db.transaction(
+      () => {
+        const inserted = insertExecutions(accountId, rows, "sync");
+        db.update(accounts)
+          .set({
+            lastSyncAt: syncedAt,
+            snapshotJson: JSON.stringify({
+              equity,
+              positions,
+              openOrders: pendingOrders,
+              balance: accountInfo?.balance ?? null,
+              freeMargin: accountInfo?.freeMargin ?? null,
+              currency: accountInfo?.currency ?? account.currency,
+              fetchedAt: syncedAt,
+            }),
+          })
+          .where(eq(accounts.id, accountId))
+          .run();
+        return inserted;
+      },
+      { behavior: "immediate" },
+    );
 
     return {
       accountId,
-      inserted: inserted.inserted,
-      duplicates: inserted.duplicates,
-      skipped: inserted.skipped,
-      skippedReasons: inserted.skippedReasons,
+      inserted: result.inserted,
+      duplicates: result.duplicates,
+      skipped: result.skipped,
+      skippedReasons: result.skippedReasons,
       equity,
       positions: positions.length,
       syncedAt,

@@ -1,9 +1,10 @@
 import { eq } from "drizzle-orm";
-import { afterEach, beforeEach, describe, expect, it } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { db, accounts } from "@/db";
 import { encryptJson } from "@/server/crypto";
 import { newId } from "@/server/ids";
 import { syncCTraderMcpAccount } from "@/server/ctrader-mcp/sync";
+import type { InsertResult } from "@/server/executions";
 
 const ORIGINAL = (globalThis as { __FAKE_MCP__?: unknown }).__FAKE_MCP__;
 let fake: FakeMcp;
@@ -15,6 +16,20 @@ interface FakeMcp {
   close: () => Promise<void>;
   callTool: (name: string, args: Record<string, unknown>) => Promise<unknown>;
 }
+
+// vi.importActual bypasses the module cache and returns the real module.
+// vi.hoisted runs before vi.mock factory, so the real fn is captured here.
+const { insertExecutions: realInsertExecutions } = await vi.importActual<{
+  insertExecutions: (...a: unknown[]) => InsertResult;
+}>("@/server/executions");
+
+const insertExecutionsMock = vi.hoisted(() =>
+  vi.fn<(...a: unknown[]) => InsertResult>((...a) => realInsertExecutions(...a)),
+);
+
+vi.mock("@/server/executions", () => ({
+  insertExecutions: (...a: unknown[]) => insertExecutionsMock(...a),
+}));
 
 beforeEach(() => {
   fake = {
@@ -33,6 +48,7 @@ beforeEach(() => {
 
 afterEach(() => {
   (globalThis as { __FAKE_MCP__?: unknown }).__FAKE_MCP__ = ORIGINAL;
+  vi.restoreAllMocks();
 });
 
 const creds = {
@@ -127,7 +143,11 @@ describe("syncCTraderMcpAccount", () => {
   });
 
   it("does not advance lastSyncAt when insertExecutions throws", async () => {
-    const syncError = new Error("simulated insertExecutions failure");
+    const insertError = new Error("simulated insertExecutions failure");
+    insertExecutionsMock.mockImplementation(() => {
+      throw insertError;
+    });
+
     fake.toolResponses = {
       get_account_list_by_access_token: {
         accounts: [{ accountId: 1, brokerName: "TestBroker", currency: "USD" }],
@@ -142,8 +162,21 @@ describe("syncCTraderMcpAccount", () => {
           },
         ],
       },
-      // Inject error when fetching deals — simulates a mid-sync failure
-      get_deals: syncError,
+      get_deals: {
+        deals: [
+          {
+            dealId: "D-1",
+            positionId: "P-1",
+            symbolId: 42,
+            side: "BUY",
+            filledVolume: 1000,
+            executionPrice: 1.1,
+            executionTime: "2026-09-30T12:00:00Z",
+            commission: 0,
+            swap: 0,
+          },
+        ],
+      },
       get_positions: { positions: [] },
       get_pending_orders: { orders: [] },
       get_account_info: {
