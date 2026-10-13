@@ -9,6 +9,12 @@ import { glob } from "node:fs/promises";
  * 2. Outside the carve-out (including packages/importers/src/**):
  *    fetch (Node 18+ global) is legitimate; axios, node-fetch, http.get/http.post
  *    are not normally used and are forbidden by ADR 0001.
+ *
+ * Scan layers:
+ *   1. Bare-call  — catches axios(...) / node-fetch(...) directly.
+ *   2. Identifier — catches imports and member-calls: axios.get(...), import axios,
+ *                    axios.default.post(...), nodeFetch(...).
+ *   Layer 1 alone misses member-call and import forms; combining both closes the gap.
  */
 
 // Inside the carve-out: any raw fetch/axios/node-fetch/http.get/http.post is forbidden.
@@ -16,10 +22,19 @@ import { glob } from "node:fs/promises";
 const RAW_HTTP_IN_CARVEOUT =
   /(?<![.\w$])(?:fetch|axios|node-fetch)\(|(?<![.\w$])http\.(?:get|post)\(/;
 
+// Identifier token for axios / node-fetch (catches imports + member-call forms like axios.get).
+// Negative lookbehind (?<![.\w$]) ensures myAxios or $.axios are not matched.
+const IDENT_AXIOS_IN_CARVEOUT =
+  /(?<![.\w$])(?:axios|node-fetch|nodeFetch)(?![.\w])/;
+
 // Outside the carve-out: only axios, node-fetch, http.get/http.post are flagged.
 // fetch() is a legitimate Node 18+ global used throughout the codebase.
 const RAW_HTTP_OUTSIDE_CARVEOUT =
   /(?<![.\w$])(?:axios|node-fetch)\(|(?<![.\w$])http\.(?:get|post)\(/;
+
+// Identifier token for axios / node-fetch outside the carve-out.
+const IDENT_AXIOS_OUTSIDE_CARVEOUT =
+  /(?<![.\w$])(?:axios|node-fetch|nodeFetch)(?![.\w])/;
 
 describe("ADR 0002 boundary", () => {
   it("forbids raw HTTP inside the cTrader MCP carve-out folder", async () => {
@@ -58,7 +73,51 @@ describe("ADR 0002 boundary", () => {
     }
   });
 
-  // Catches actual imports of the cTrader MCP module (e.g. from "@/server/ctrader-mcp/client")
+  // ---- Identifier scans: member-call and import forms ----
+
+  it("catches axios.get(...) inside the carve-out", async () => {
+    const src = 'import axios from "axios";\naxios.get("/foo");';
+    expect(src).toMatch(IDENT_AXIOS_IN_CARVEOUT);
+  });
+
+  it("catches axios.post(...) inside the carve-out", async () => {
+    const src = 'import axios from "axios";\naxios.post("/foo");';
+    expect(src).toMatch(IDENT_AXIOS_IN_CARVEOUT);
+  });
+
+  it("catches import axios from 'axios' inside the carve-out", async () => {
+    const src = 'import axios from "axios";';
+    expect(src).toMatch(IDENT_AXIOS_IN_CARVEOUT);
+  });
+
+  it("catches import nodeFetch from 'node-fetch' inside the carve-out", async () => {
+    const src = 'import nodeFetch from "node-fetch";';
+    expect(src).toMatch(IDENT_AXIOS_IN_CARVEOUT);
+  });
+
+  it("catches axios.default.post(...) inside the carve-out", async () => {
+    const src = 'import axios from "axios";\naxios.default.post("/foo");';
+    expect(src).toMatch(IDENT_AXIOS_IN_CARVEOUT);
+  });
+
+  it("catches bare axios(...) inside the carve-out via bare-call scan", async () => {
+    const src = 'import axios from "axios";\naxios("/foo");';
+    expect(src).toMatch(RAW_HTTP_IN_CARVEOUT);
+  });
+
+  it("bare-call regex catches direct axios(...) outside the carve-out", async () => {
+    const src = 'axios("/foo");';
+    expect(src).toMatch(RAW_HTTP_OUTSIDE_CARVEOUT);
+  });
+
+  it("identifier regex catches axios.get(...) outside the carve-out", async () => {
+    const src = 'import axios from "axios";\naxios.get("/foo");';
+    expect(src).toMatch(IDENT_AXIOS_OUTSIDE_CARVEOUT);
+  });
+
+  // ---- End identifier scans ----
+
+
   // or cTrader-specific identifiers (CTraderMcpClient, CTraderMcpSyncError).
   // Allows Pepperstone/IC Markets format files that mention "cTrader" as a platform
   // in docstrings and labels — those are about broker export formats, not the MCP module.
