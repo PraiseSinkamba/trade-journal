@@ -42,8 +42,8 @@ describe("ADR 0002 boundary", () => {
     for await (const file of glob("apps/web/src/**/*.ts")) {
       if (file.includes("node_modules")) continue;
       if (file.startsWith("apps/web/src/server/ctrader-mcp/")) continue;
-      // ctrader-mcp-preview/route.ts imports from the carve-out and does no raw HTTP itself — exempt
-      if (file.includes("ctrader-mcp-preview")) continue;
+      // ctrader-mcp-preview/route.ts imports from the carve-out and does no raw HTTP itself — exact-path exempt
+      if (file === "apps/web/src/app/api/accounts/ctrader-mcp-preview/route.ts") continue;
       const src = readFileSync(file, "utf8");
       const matches = src.match(RAW_HTTP_OUTSIDE_CARVEOUT);
       if (matches) {
@@ -62,8 +62,10 @@ describe("ADR 0002 boundary", () => {
   // or cTrader-specific identifiers (CTraderMcpClient, CTraderMcpSyncError).
   // Allows Pepperstone/IC Markets format files that mention "cTrader" as a platform
   // in docstrings and labels — those are about broker export formats, not the MCP module.
+  // Covers all ESM import forms: static (from), side-effect (import "..."), and dynamic (import("...")).
   it("forbids cTrader MCP module imports inside packages/importers/src/**", async () => {
-    const CTRADER_IMPORT = /from\s+["']\.\.?\/.*ctrader[_-]mcp|from\s+["']@\/server\/ctrader[_-]mcp|CTraderMcpClient|CTraderMcpSyncError/i;
+    const CTRADER_IMPORT =
+      /import\s+["']\.\.?\/.*ctrader[_-]mcp|import\s+["']@\/server\/ctrader[_-]mcp|import\(["']\.\.?\/.*ctrader[_-]mcp|import\(["']@\/server\/ctrader[_-]mcp|CTraderMcpClient|CTraderMcpSyncError/i;
     for await (const file of glob("packages/importers/src/**/*.ts")) {
       const src = readFileSync(file, "utf8");
       expect(src).not.toMatch(CTRADER_IMPORT);
