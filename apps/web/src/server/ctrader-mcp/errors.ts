@@ -23,17 +23,41 @@ export class CTraderMcpConnectError extends CTraderMcpSyncError {
   }
 }
 
-export const classifyMcpError = (error: unknown): CTraderMcpSyncError => {
+const ERROR_MESSAGES: Record<
+  CTraderMcpSyncErrorKind,
+  (ctx?: { endpoint?: string }) => string
+> = {
+  unreachable: ({ endpoint } = {}) =>
+    endpoint
+      ? `Can't reach cTrader MCP at ${endpoint}. Check the URL and that the desktop is running.`
+      : "Can't reach cTrader MCP. Check the URL and that the desktop is running.",
+  auth: () =>
+    "cTrader MCP rejected the credentials. For remote: refresh the token in cTrader Web → Settings → Remote MCP.",
+  account_gone: () =>
+    "cTrader account is no longer accessible from this token. Re-connect the account.",
+  rate_limited: () => "cTrader MCP rate-limited. Retry in a minute.",
+  parse: () => "cTrader MCP returned unexpected data.",
+  unknown: () => "cTrader MCP sync failed. Check server logs.",
+};
+
+export const classifyMcpError = (
+  error: unknown,
+  ctx?: { endpoint?: string },
+): CTraderMcpSyncError => {
   if (error instanceof CTraderMcpSyncError) return error;
   const message = error instanceof Error ? error.message : String(error);
   if (/ECONNREFUSED|ENOTFOUND|fetch failed|network/i.test(message)) {
-    return new CTraderMcpSyncError("unreachable", message, error);
+    return new CTraderMcpSyncError(
+      "unreachable",
+      ERROR_MESSAGES.unreachable(ctx),
+      error,
+    );
   }
   if (/401|403|unauthor/i.test(message)) {
-    return new CTraderMcpSyncError("auth", message, error);
+    return new CTraderMcpSyncError("auth", ERROR_MESSAGES.auth(), error);
   }
   if (/429|rate.?limit/i.test(message)) {
-    return new CTraderMcpSyncError("rate_limited", message, error);
+    return new CTraderMcpSyncError("rate_limited", ERROR_MESSAGES.rate_limited(), error);
   }
-  return new CTraderMcpSyncError("unknown", message, error);
+  return new CTraderMcpSyncError("unknown", ERROR_MESSAGES.unknown(), error);
 };
