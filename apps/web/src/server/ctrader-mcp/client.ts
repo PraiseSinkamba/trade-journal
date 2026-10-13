@@ -41,12 +41,12 @@ export class CTraderMcpClient {
     }
   }
 
-  async callTool<OUT>(
+  async callTool<S extends z.ZodType<z.infer<S>, z.ZodTypeDef, unknown>>(
     name: string,
     args: Record<string, unknown>,
-    schema: z.ZodType<OUT>,
+    schema: S,
     opts?: { signal?: AbortSignal },
-  ): Promise<OUT> {
+  ): Promise<z.infer<S>> {
     if (!this.raw || !this.initialized) {
       throw new CTraderMcpSyncError("unknown", "MCP client not initialized");
     }

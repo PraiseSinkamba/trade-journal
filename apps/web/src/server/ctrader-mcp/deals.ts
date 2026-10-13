@@ -1,3 +1,4 @@
+import { z } from "zod";
 import type { ImportedExecution } from "@luxalgo/journal-importers";
 import type { CTraderMcpClient } from "./client";
 import { cTraderDealsResponseSchema, type AssetClass, type CTraderDeal } from "./schemas";
@@ -15,7 +16,7 @@ export const fetchAllDeals = async (
   const out: CTraderDeal[] = [];
   let cursor: string | null | undefined = undefined;
   do {
-    const page = await client.callTool(
+    const page: z.infer<typeof cTraderDealsResponseSchema> = await client.callTool(
       "get_deals",
       {
         ...(args.fromTime ? { fromTime: args.fromTime } : {}),
@@ -43,7 +44,7 @@ export const mapDealToExecution = (
   price: deal.executionPrice,
   fee: (deal.commission ?? 0) + (deal.swap ?? 0),
   executedAt: deal.executionTime,
-  assetClass,
+  assetClass: assetClass === "stock" ? "equity" : assetClass,
   importMetadata: {
     id: deal.dealId,
     group: deal.positionId,
