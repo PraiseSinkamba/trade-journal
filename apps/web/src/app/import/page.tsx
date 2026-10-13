@@ -931,6 +931,7 @@ function BrokerConnect() {
     setPreviewBusy(true);
     setPreviewError(null);
     setPreviewAccounts([]);
+    setCtraderAccountId("");
     try {
       const out = await postJson<{ accounts: CTraderAccount[] }>(
         "/api/accounts/ctrader-mcp-preview",
