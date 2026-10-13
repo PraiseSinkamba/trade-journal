@@ -29,9 +29,9 @@ describe("POST /api/accounts/ctrader-mcp-preview", () => {
 
     const res = await POST(req as Request);
     expect(res.status).toBe(502);
-    const body = (await res.json()) as { message?: string };
-    expect(body.message ?? "").not.toContain("SUPER_SECRET");
-    expect(body.message ?? "").not.toContain("leaked");
-    expect(body.message ?? "").not.toContain("credential");
+    const body = (await res.json()) as { error?: string };
+    expect(body.error ?? "").not.toContain("SUPER_SECRET");
+    expect(body.error ?? "").not.toContain("leaked");
+    expect(body.error ?? "").not.toContain("credential");
   });
 });

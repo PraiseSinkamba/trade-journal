@@ -32,7 +32,7 @@ const ERROR_MESSAGES: Record<
       ? `Can't reach cTrader MCP at ${endpoint}. Check the URL and that the desktop is running.`
       : "Can't reach cTrader MCP. Check the URL and that the desktop is running.",
   auth: () =>
-    "cTrader MCP rejected the credentials. For remote: refresh the token in cTrader Web → Settings → Remote MCP.",
+    "cTrader MCP authentication failed. For remote: refresh the token in cTrader Web → Settings → Remote MCP.",
   account_gone: () =>
     "cTrader account is no longer accessible from this token. Re-connect the account.",
   rate_limited: () => "cTrader MCP rate-limited. Retry in a minute.",

@@ -23,7 +23,17 @@ export const POST = handler(async (request: Request) => {
     const accounts = await listCTraderAccounts(client);
     return ok({ accounts });
   } catch (err) {
-    if (err instanceof CTraderMcpSyncError) return bad(err.message, 502);
+    if (err instanceof CTraderMcpSyncError) {
+      const SAFE: Record<string, string> = {
+        unreachable: "Can't reach cTrader MCP. Check the URL and that the desktop is running.",
+        auth: "cTrader MCP authentication failed. For remote: refresh the token in cTrader Web → Settings → Remote MCP.",
+        account_gone: "cTrader account is no longer accessible from this token. Re-connect the account.",
+        rate_limited: "cTrader MCP rate-limited. Retry in a minute.",
+        parse: "cTrader MCP returned unexpected data.",
+        unknown: "cTrader MCP sync failed. Check server logs.",
+      };
+      return bad(SAFE[err.kind]!, 502);
+    }
     throw err;
   } finally {
     await client.close().catch(() => undefined);

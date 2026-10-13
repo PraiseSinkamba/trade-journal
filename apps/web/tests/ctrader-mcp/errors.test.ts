@@ -65,7 +65,7 @@ describe("classifyMcpError", () => {
     for (const msg of ["401 Unauthorized", "403 Forbidden", "Unauthorized"]) {
       const result = classifyMcpError(new Error(msg));
       expect(result.kind).toBe("auth");
-      expect(result.message).toMatch(/^cTrader MCP rejected the credentials/);
+      expect(result.message).toMatch(/^cTrader MCP authentication failed/);
       expect(result.cause).toBeInstanceOf(Error);
     }
   });
