@@ -1,4 +1,5 @@
 import { connect, listBrokers, type BrokerId } from "@luxalgo/broker-sdk";
+import { syncCTraderMcpAccount } from "./ctrader-mcp/sync";
 import { eq } from "drizzle-orm";
 import type { ImportedExecution } from "@luxalgo/journal-importers";
 import { accounts, db } from "@/db";
@@ -36,6 +37,11 @@ export const syncAccount = async (accountId: string): Promise<SyncOutcome> => {
   if (statementTimeZone !== undefined) assertIbkrSyncTimeZone(account, statementTimeZone);
 
   const credentials = decryptJson<Record<string, string>>(account.credentialsEnc);
+
+  if (account.broker === "ctrader-mcp") {
+    return syncCTraderMcpAccount(accountId);
+  }
+
   const connection = connect({
     broker: account.broker as BrokerId,
     credentials,
