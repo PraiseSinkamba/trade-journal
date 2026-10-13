@@ -62,10 +62,11 @@ describe("ADR 0002 boundary", () => {
   // or cTrader-specific identifiers (CTraderMcpClient, CTraderMcpSyncError).
   // Allows Pepperstone/IC Markets format files that mention "cTrader" as a platform
   // in docstrings and labels — those are about broker export formats, not the MCP module.
-  // Covers all ESM import forms: static (from), side-effect (import "..."), and dynamic (import("...")).
+  // Matches the ctrader-mcp path inside any quoted string, covering ALL ESM import forms:
+  // namespace (import * as mcp from "..."), combined default+named, type-only, side-effect, and dynamic.
   it("forbids cTrader MCP module imports inside packages/importers/src/**", async () => {
     const CTRADER_IMPORT =
-      /import\s+\{[^}]*\}\s+from\s+["']\.\.?\/[^"']*ctrader[_-]mcp|import\s+\{[^}]*\}\s+from\s+["']@\/server\/[^"']*ctrader[_-]mcp|import\s+\w+\s+from\s+["']\.\.?\/[^"']*ctrader[_-]mcp|import\s+\w+\s+from\s+["']@\/server\/[^"']*ctrader[_-]mcp|import\s+["']\.\.?\/[^"']*ctrader[_-]mcp|import\s+["']@\/server\/[^"']*ctrader[_-]mcp|import\(["']\.\.?\/[^"']*ctrader[_-]mcp|import\(["']@\/server\/[^"']*ctrader[_-]mcp|CTraderMcpClient|CTraderMcpSyncError/i;
+      /["'][^"']*ctrader[_-]mcp[^"']*["']|CTraderMcpClient|CTraderMcpSyncError/i;
     for await (const file of glob("packages/importers/src/**/*.ts")) {
       const src = readFileSync(file, "utf8");
       expect(src).not.toMatch(CTRADER_IMPORT);
