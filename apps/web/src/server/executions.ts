@@ -39,8 +39,7 @@ export const executionProblem = (row: unknown, source: ExecutionSource): string 
   const meta = r.importMetadata;
   const metaOk =
     !meta ||
-    (source === "import" &&
-      typeof meta.id === "string" &&
+    (typeof meta.id === "string" &&
       meta.id.length > 0 &&
       meta.id.length <= 2000 &&
       (meta.group === undefined ||
