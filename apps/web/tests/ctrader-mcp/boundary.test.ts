@@ -40,13 +40,23 @@ describe("ADR 0002 boundary", () => {
   it("forbids raw HTTP inside the cTrader MCP carve-out folder", async () => {
     for await (const file of glob("apps/web/src/server/ctrader-mcp/**/*.ts")) {
       const src = readFileSync(file, "utf8");
-      const matches = src.match(RAW_HTTP_IN_CARVEOUT);
-      if (matches) {
+      const bareMatches = src.match(RAW_HTTP_IN_CARVEOUT);
+      if (bareMatches) {
         throw new Error(
           "Raw HTTP in carve-out " +
             file +
             ": " +
-            JSON.stringify(matches) +
+            JSON.stringify(bareMatches) +
+            ". Use @ai-sdk/mcp for MCP calls inside apps/web/src/server/ctrader-mcp/**."
+        );
+      }
+      const identMatches = src.match(IDENT_AXIOS_IN_CARVEOUT);
+      if (identMatches) {
+        throw new Error(
+          "Axios/node-fetch identifier in carve-out " +
+            file +
+            ": " +
+            JSON.stringify(identMatches) +
             ". Use @ai-sdk/mcp for MCP calls inside apps/web/src/server/ctrader-mcp/**."
         );
       }
@@ -60,13 +70,23 @@ describe("ADR 0002 boundary", () => {
       // ctrader-mcp-preview/route.ts imports from the carve-out and does no raw HTTP itself — exact-path exempt
       if (file === "apps/web/src/app/api/accounts/ctrader-mcp-preview/route.ts") continue;
       const src = readFileSync(file, "utf8");
-      const matches = src.match(RAW_HTTP_OUTSIDE_CARVEOUT);
-      if (matches) {
+      const bareMatches = src.match(RAW_HTTP_OUTSIDE_CARVEOUT);
+      if (bareMatches) {
         throw new Error(
           "Raw HTTP outside carve-out in " +
             file +
             ": " +
-            JSON.stringify(matches) +
+            JSON.stringify(bareMatches) +
+            ". Only fetch() (Node 18+ global) is permitted outside the carve-out."
+        );
+      }
+      const identMatches = src.match(IDENT_AXIOS_OUTSIDE_CARVEOUT);
+      if (identMatches) {
+        throw new Error(
+          "Axios/node-fetch identifier outside carve-out in " +
+            file +
+            ": " +
+            JSON.stringify(identMatches) +
             ". Only fetch() (Node 18+ global) is permitted outside the carve-out."
         );
       }
