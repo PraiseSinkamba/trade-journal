@@ -12,7 +12,7 @@ export const GET = handler(() => {
         displayName: "cTrader (MCP)",
         credentials: [],
         readOnlySetup:
-            "cTrader Live sync via cTrader's MCP servers (Local or Web Remote token). Pick the mode after selecting this broker.",
+            "Enable the MCP server in cTrader Desktop → Settings → MCP Server. The journal connects to http://127.0.0.1:9876/mcp/.",
         supportsBars: false,
       },
     ],

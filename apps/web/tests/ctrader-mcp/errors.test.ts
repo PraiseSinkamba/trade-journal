@@ -19,16 +19,6 @@ describe("CTraderMcpSyncError", () => {
   });
 });
 
-const FIXED_MESSAGES = [
-  "Can't reach cTrader MCP at ",
-  "Check the URL and that the desktop is running.",
-  "cTrader MCP rejected the credentials.",
-  "cTrader account is no longer accessible from this token.",
-  "cTrader MCP rate-limited.",
-  "cTrader MCP returned unexpected data.",
-  "cTrader MCP sync failed.",
-] as const;
-
 describe("classifyMcpError", () => {
   it("never echoes raw error message to output", () => {
     const input = new Error("server leaked credential XYZ and secret token ABC");

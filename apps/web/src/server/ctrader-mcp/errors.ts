@@ -1,7 +1,6 @@
 export type CTraderMcpSyncErrorKind =
   | "unreachable"
   | "auth"
-  | "account_gone"
   | "rate_limited"
   | "parse"
   | "unknown";
@@ -32,9 +31,7 @@ const ERROR_MESSAGES: Record<
       ? `Can't reach cTrader MCP at ${endpoint}. Check the URL and that the desktop is running.`
       : "Can't reach cTrader MCP. Check the URL and that the desktop is running.",
   auth: () =>
-    "cTrader MCP authentication failed. For remote: refresh the token in cTrader Web → Settings → Remote MCP.",
-  account_gone: () =>
-    "cTrader account is no longer accessible from this token. Re-connect the account.",
+    "cTrader MCP authentication failed. Check the Authorization header and that the desktop is running.",
   rate_limited: () => "cTrader MCP rate-limited. Retry in a minute.",
   parse: () => "cTrader MCP returned unexpected data.",
   unknown: () => "cTrader MCP sync failed. Check server logs.",

@@ -1,14 +1,10 @@
 import type { CTraderMcpClient } from "./client";
-import { cTraderOrdersResponseSchema, type CTraderOrder } from "./schemas";
+import {
+  cTraderOrdersResponseSchema,
+  type CTraderOrder,
+} from "./schemas";
 
-export const getPendingOrders = async (
+export const getPendingOrders = (
   client: CTraderMcpClient,
-  ctraderAccountId?: number,
-): Promise<CTraderOrder[]> => {
-  const out = await client.callTool(
-    "get_pending_orders",
-    ctraderAccountId ? { accountId: ctraderAccountId } : {},
-    cTraderOrdersResponseSchema,
-  );
-  return out.orders;
-};
+): Promise<CTraderOrder[]> =>
+  client.callTool("get_pending_orders", {}, cTraderOrdersResponseSchema).then((r) => r.orders);

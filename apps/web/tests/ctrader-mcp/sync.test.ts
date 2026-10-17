@@ -6,7 +6,10 @@ import { newId } from "@/server/ids";
 import { syncCTraderMcpAccount } from "@/server/ctrader-mcp/sync";
 import type { InsertResult } from "@/server/executions";
 
-const ORIGINAL = (globalThis as { __FAKE_MCP__?: unknown }).__FAKE_MCP__;
+// Test seam: tests install a fake MCP via globalThis.__FAKE_MCP__ and use the
+// typed alias below for read/write. Defined once to avoid per-use inline casts.
+const testSlot = globalThis as unknown as { __FAKE_MCP__?: unknown };
+const ORIGINAL = testSlot.__FAKE_MCP__;
 let fake: FakeMcp;
 
 interface FakeMcp {
@@ -47,15 +50,13 @@ beforeEach(() => {
 });
 
 afterEach(() => {
-  (globalThis as { __FAKE_MCP__?: unknown }).__FAKE_MCP__ = ORIGINAL;
+  testSlot.__FAKE_MCP__ = ORIGINAL;
   vi.restoreAllMocks();
 });
 
 const creds = {
-  mode: "remote" as const,
-  endpoint: "https://fake.ctrader.com",
-  bearerToken: "fake-token",
-  ctraderAccountId: 1,
+  endpoint: "http://127.0.0.1:9876/mcp/",
+  ctraderAccountId: 42,
 };
 
 const addAccount = (
@@ -76,43 +77,35 @@ const addAccount = (
     .run();
 };
 
-describe("syncCTraderMcpAccount", () => {
+describe("syncCTraderMcpAccount (Local)", () => {
   it("inserts one execution per deal and re-sync is a no-op", async () => {
     fake.toolResponses = {
-      get_account_list_by_access_token: {
-        accounts: [{ accountId: 1, brokerName: "TestBroker", currency: "USD" }],
-      },
       get_symbols: {
-        symbols: [
-          {
-            symbolId: 42,
-            name: "EURUSD",
-            digits: 5,
-            assetClass: "forex",
-          },
-        ],
+        symbols: [{ symbolName: "EURUSD", description: "Euro vs US Dollar" }],
       },
       get_deals: {
         deals: [
           {
-            dealId: "D-1",
-            positionId: "P-1",
-            symbolId: 42,
-            side: "BUY",
+            orderId: 1,
+            positionId: 100,
+            symbolName: "EURUSD",
+            dealType: "fill",
+            side: "Buy",
             filledVolume: 1000,
             executionPrice: 1.1,
-            executionTime: "2026-09-30T12:00:00Z",
+            time: "2026-09-30T12:00:00Z",
             commission: 0,
             swap: 0,
           },
           {
-            dealId: "D-2",
-            positionId: "P-1",
-            symbolId: 42,
-            side: "SELL",
+            orderId: 2,
+            positionId: 100,
+            symbolName: "EURUSD",
+            dealType: "close",
+            side: "Sell",
             filledVolume: 1000,
             executionPrice: 1.2,
-            executionTime: "2026-09-30T13:00:00Z",
+            time: "2026-09-30T13:00:00Z",
             commission: 0,
             swap: 0,
           },
@@ -120,15 +113,17 @@ describe("syncCTraderMcpAccount", () => {
       },
       get_positions: { positions: [] },
       get_pending_orders: { orders: [] },
-      get_account_info: {
-        accountId: 1,
+      get_balance: {
         balance: 100,
         equity: 100,
+        margin: 0,
         freeMargin: 100,
-        currency: "USD",
+        marginLevel: null,
+        depositAsset: "USD",
+        brokerName: "Pepperstone",
       },
     };
-    (globalThis as { __FAKE_MCP__?: unknown }).__FAKE_MCP__ = fake;
+    testSlot.__FAKE_MCP__ = fake;
 
     const accountId = newId();
     addAccount(accountId);
@@ -149,29 +144,18 @@ describe("syncCTraderMcpAccount", () => {
     });
 
     fake.toolResponses = {
-      get_account_list_by_access_token: {
-        accounts: [{ accountId: 1, brokerName: "TestBroker", currency: "USD" }],
-      },
-      get_symbols: {
-        symbols: [
-          {
-            symbolId: 42,
-            name: "EURUSD",
-            digits: 5,
-            assetClass: "forex",
-          },
-        ],
-      },
+      get_symbols: { symbols: [] },
       get_deals: {
         deals: [
           {
-            dealId: "D-1",
-            positionId: "P-1",
-            symbolId: 42,
-            side: "BUY",
+            orderId: 1,
+            positionId: 100,
+            symbolName: "EURUSD",
+            dealType: "fill",
+            side: "Buy",
             filledVolume: 1000,
             executionPrice: 1.1,
-            executionTime: "2026-09-30T12:00:00Z",
+            time: "2026-09-30T12:00:00Z",
             commission: 0,
             swap: 0,
           },
@@ -179,15 +163,17 @@ describe("syncCTraderMcpAccount", () => {
       },
       get_positions: { positions: [] },
       get_pending_orders: { orders: [] },
-      get_account_info: {
-        accountId: 1,
+      get_balance: {
         balance: 100,
         equity: 100,
+        margin: 0,
         freeMargin: 100,
-        currency: "USD",
+        marginLevel: null,
+        depositAsset: "USD",
+        brokerName: "Pepperstone",
       },
     };
-    (globalThis as { __FAKE_MCP__?: unknown }).__FAKE_MCP__ = fake;
+    testSlot.__FAKE_MCP__ = fake;
 
     const accountId = newId();
     const createdAt = "2026-01-01T00:00:00.000Z";
@@ -226,5 +212,19 @@ describe("syncCTraderMcpAccount", () => {
     await expect(syncCTraderMcpAccount(accountId)).rejects.toThrow(
       "Account is not broker-connected",
     );
+  });
+
+  it("classifies a transport-level failure as 'unreachable'", async () => {
+    fake.callTool = async () => {
+      throw new Error("ECONNREFUSED 127.0.0.1:9876");
+    };
+    testSlot.__FAKE_MCP__ = fake;
+
+    const accountId = newId();
+    addAccount(accountId);
+
+    await expect(syncCTraderMcpAccount(accountId)).rejects.toMatchObject({
+      kind: "unreachable",
+    });
   });
 });

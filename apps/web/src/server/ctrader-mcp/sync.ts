@@ -5,17 +5,22 @@ import { nowIso } from "@/server/ids";
 import { insertExecutions, type InsertResult } from "@/server/executions";
 import { CTraderMcpClient } from "./client";
 import { classifyMcpError, CTraderMcpSyncError } from "./errors";
-import { getAccountInfo } from "./account";
-import { listCTraderAccounts } from "./accounts";
+import { getAccountBalance } from "./account";
 import { fetchAllDeals, mapDealToExecution } from "./deals";
 import { getPendingOrders } from "./orders";
 import { getOpenPositions } from "./positions";
-import { buildAssetClassMap, fetchSymbols } from "./symbols";
-import { type CTraderAccountInfo, type CTraderOrder, type CTraderPosition } from "./schemas";
+import { fetchSymbols, findAssetClass } from "./symbols";
+import {
+  type CTraderBalance,
+  type CTraderOrder,
+  type CTraderPosition,
+} from "./schemas";
 
-export type CTraderMcpCredentials =
-  | { mode: "remote"; endpoint: string; bearerToken: string; ctraderAccountId: number }
-  | { mode: "local"; endpoint: string; authHeader?: string };
+export type CTraderMcpCredentials = {
+  endpoint: string;
+  authHeader?: string;
+  ctraderAccountId: number;
+};
 
 export interface SyncOutcome extends InsertResult {
   accountId: string;
@@ -24,14 +29,19 @@ export interface SyncOutcome extends InsertResult {
   syncedAt: string;
 }
 
+// Test seam: tests install a fake MCP via globalThis.__FAKE_MCP__. The cast is
+// hoisted to a named const so call sites don't re-cast inline.
+const testSlot = globalThis as unknown as { __FAKE_MCP__?: CTraderMcpClient };
+
 const getClient = (creds: CTraderMcpCredentials): CTraderMcpClient => {
-  if (
-    process.env.NODE_ENV === "test" &&
-    (globalThis as unknown as { __FAKE_MCP__?: CTraderMcpClient }).__FAKE_MCP__
-  ) {
-    return (globalThis as unknown as { __FAKE_MCP__: CTraderMcpClient }).__FAKE_MCP__;
+  if (process.env.NODE_ENV === "test" && testSlot.__FAKE_MCP__) {
+    return testSlot.__FAKE_MCP__;
   }
-  return new CTraderMcpClient(creds);
+  return new CTraderMcpClient({
+    mode: "local",
+    endpoint: creds.endpoint,
+    authHeader: creds.authHeader,
+  });
 };
 
 export const syncCTraderMcpAccount = async (accountId: string): Promise<SyncOutcome> => {
@@ -43,7 +53,7 @@ export const syncCTraderMcpAccount = async (accountId: string): Promise<SyncOutc
 
   let positions: CTraderPosition[] = [];
   let pendingOrders: CTraderOrder[] = [];
-  let accountInfo: CTraderAccountInfo | null = null;
+  let balance: CTraderBalance | null = null;
   let client: CTraderMcpClient | undefined;
 
   try {
@@ -51,51 +61,20 @@ export const syncCTraderMcpAccount = async (accountId: string): Promise<SyncOutc
     client = getClient(creds);
     await client.initialize();
 
-    if (creds.mode === "remote") {
-      const accessible = await listCTraderAccounts(client);
-      if (!accessible.some((a) => a.accountId === creds.ctraderAccountId)) {
-        throw new CTraderMcpSyncError(
-          "account_gone",
-          "cTrader account is no longer accessible from this token. Re-connect the account.",
-        );
-      }
-    }
-
     const syncedAt = nowIso();
 
     const symbols = await fetchSymbols(client);
-    const symbolMap = buildAssetClassMap(symbols);
-    const symbolNameMap = new Map(symbols.map((s) => [s.symbolId, s.name] as const));
 
-    const deals = await fetchAllDeals(client, {
-      fromTime: account.lastSyncAt ?? undefined,
-      toTime: syncedAt,
-      ...(creds.mode === "remote" ? { ctraderAccountId: creds.ctraderAccountId } : {}),
-    });
-
+    const deals = await fetchAllDeals(client);
     const rows = deals.map((deal, i) =>
-      mapDealToExecution(
-        deal,
-        symbolNameMap.get(deal.symbolId) ?? `UNKNOWN-${deal.symbolId}`,
-        symbolMap.get(deal.symbolId) ?? "other",
-        i,
-      ),
+      mapDealToExecution(deal, deal.symbolName, findAssetClass(symbols, deal.symbolName), i),
     );
 
-    positions = await getOpenPositions(
-      client,
-      creds.mode === "remote" ? creds.ctraderAccountId : undefined,
-    );
-    pendingOrders = await getPendingOrders(
-      client,
-      creds.mode === "remote" ? creds.ctraderAccountId : undefined,
-    );
-    accountInfo = await getAccountInfo(
-      client,
-      creds.mode === "remote" ? creds.ctraderAccountId : undefined,
-    );
+    positions = await getOpenPositions(client);
+    pendingOrders = await getPendingOrders(client);
+    balance = await getAccountBalance(client);
 
-    const equity = accountInfo?.equity ?? null;
+    const equity = balance?.equity ?? null;
 
     const result = db.transaction(
       () => {
@@ -107,9 +86,10 @@ export const syncCTraderMcpAccount = async (accountId: string): Promise<SyncOutc
               equity,
               positions,
               openOrders: pendingOrders,
-              balance: accountInfo?.balance ?? null,
-              freeMargin: accountInfo?.freeMargin ?? null,
-              currency: accountInfo?.currency ?? account.currency,
+              balance: balance?.balance ?? null,
+              freeMargin: balance?.freeMargin ?? null,
+              depositAsset: balance?.depositAsset ?? null,
+              brokerName: balance?.brokerName ?? null,
               fetchedAt: syncedAt,
             }),
           })

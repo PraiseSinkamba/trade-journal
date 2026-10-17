@@ -34,8 +34,7 @@ import { readHeaders, type SkippedReason } from "@luxalgo/journal-importers";
 import { Checkbox } from "@/components/ui/checkbox";
 import {
   cTraderMcpBrokerId,
-  defaultLocalEndpoint,
-  defaultRemoteEndpoint,
+  defaultEndpoint,
   type CTraderAccount,
 } from "@/lib/ctrader-mcp-form";
 
@@ -918,9 +917,7 @@ function BrokerConnect() {
   const broker = data?.brokers.find((b) => b.id === brokerId) ?? null;
   const isCTraderMcp = broker?.id === cTraderMcpBrokerId;
 
-  const [ctraderMode, setCtraderMode] = useState<"remote" | "local">("remote");
-  const [ctraderEndpoint, setCtraderEndpoint] = useState(defaultRemoteEndpoint);
-  const [ctraderToken, setCtraderToken] = useState("");
+  const [ctraderEndpoint, setCtraderEndpoint] = useState(defaultEndpoint);
   const [ctraderAccountId, setCtraderAccountId] = useState("");
   const [ctraderAuthHeader, setCtraderAuthHeader] = useState("");
   const [previewAccounts, setPreviewAccounts] = useState<CTraderAccount[]>([]);
@@ -935,10 +932,13 @@ function BrokerConnect() {
     try {
       const out = await postJson<{ accounts: CTraderAccount[] }>(
         "/api/accounts/ctrader-mcp-preview",
-        { endpoint: ctraderEndpoint, bearerToken: ctraderToken },
+        {
+          endpoint: ctraderEndpoint,
+          ...(ctraderAuthHeader ? { authHeader: ctraderAuthHeader } : {}),
+        },
       );
       setPreviewAccounts(out.accounts);
-      if (out.accounts.length === 1) setCtraderAccountId(String(out.accounts[0]!.accountId));
+      if (out.accounts.length === 1) setCtraderAccountId(String(out.accounts[0]!.id));
     } catch (cause) {
       setPreviewError(cause instanceof Error ? cause.message : "Failed to load cTrader accounts");
     } finally {
@@ -947,11 +947,7 @@ function BrokerConnect() {
   };
 
   const ctraderReady = isCTraderMcp
-    ? ctraderMode === "remote"
-      ? ctraderEndpoint.startsWith("https://") &&
-        ctraderToken.trim().length > 0 &&
-        ctraderAccountId.length > 0
-      : ctraderEndpoint.startsWith("http://")
+    ? /^\s*https?:\/\//i.test(ctraderEndpoint) && ctraderAccountId.length > 0
     : true;
 
   const connect = async () => {
@@ -960,18 +956,11 @@ function BrokerConnect() {
     setError(null);
     try {
       const payload = isCTraderMcp
-        ? ctraderMode === "remote"
-          ? {
-              mode: "remote" as const,
-              endpoint: ctraderEndpoint,
-              bearerToken: ctraderToken,
-              ctraderAccountId: Number(ctraderAccountId),
-            }
-          : {
-              mode: "local" as const,
-              endpoint: ctraderEndpoint,
-              ...(ctraderAuthHeader ? { authHeader: ctraderAuthHeader } : {}),
-            }
+        ? {
+            endpoint: ctraderEndpoint,
+            ...(ctraderAuthHeader ? { authHeader: ctraderAuthHeader } : {}),
+            ctraderAccountId: Number(ctraderAccountId),
+          }
         : credentials;
       const created = await postJson<{
         id: string;
@@ -1009,9 +998,7 @@ function BrokerConnect() {
             onValueChange={(value) => {
               setBrokerId(value);
               setCredentials({});
-              setCtraderMode("remote");
-              setCtraderEndpoint(defaultRemoteEndpoint);
-              setCtraderToken("");
+              setCtraderEndpoint(defaultEndpoint);
               setCtraderAccountId("");
               setCtraderAuthHeader("");
               setPreviewAccounts([]);
@@ -1054,12 +1041,8 @@ function BrokerConnect() {
             </div>
             {isCTraderMcp ? (
               <CTraderMcpFields
-                mode={ctraderMode}
-                onModeChange={setCtraderMode}
                 endpoint={ctraderEndpoint}
                 onEndpointChange={setCtraderEndpoint}
-                token={ctraderToken}
-                onTokenChange={setCtraderToken}
                 accountId={ctraderAccountId}
                 onAccountIdChange={setCtraderAccountId}
                 authHeader={ctraderAuthHeader}
@@ -1108,12 +1091,8 @@ function BrokerConnect() {
 }
 
 interface CTraderMcpFieldsProps {
-  mode: "remote" | "local";
-  onModeChange: (mode: "remote" | "local") => void;
   endpoint: string;
   onEndpointChange: (value: string) => void;
-  token: string;
-  onTokenChange: (value: string) => void;
   accountId: string;
   onAccountIdChange: (value: string) => void;
   authHeader: string;
@@ -1125,12 +1104,8 @@ interface CTraderMcpFieldsProps {
 }
 
 function CTraderMcpFields({
-  mode,
-  onModeChange,
   endpoint,
   onEndpointChange,
-  token,
-  onTokenChange,
   accountId,
   onAccountIdChange,
   authHeader,
@@ -1140,29 +1115,9 @@ function CTraderMcpFields({
   previewError,
   onFetchAccounts,
 }: CTraderMcpFieldsProps) {
-  const canFetch =
-    endpoint.startsWith("https://") && token.trim().length > 0 && !previewBusy;
+  const canFetch = /^\s*https?:\/\//i.test(endpoint) && !previewBusy;
   return (
     <>
-      <div>
-        <Label className="mb-1 block text-xs text-muted-foreground">Mode</Label>
-        <Tabs
-          value={mode}
-          onValueChange={(value) => {
-            const next = value as "remote" | "local";
-            onModeChange(next);
-            onEndpointChange(next === "remote" ? defaultRemoteEndpoint : defaultLocalEndpoint);
-          }}
-        >
-          <TabsList>
-            <TabsTrigger value="remote">Remote</TabsTrigger>
-            <TabsTrigger value="local">Local</TabsTrigger>
-          </TabsList>
-        </Tabs>
-        <p className="mt-1 text-xs text-muted-foreground">
-          Remote uses your cTrader Web token; Local connects to cTrader Desktop.
-        </p>
-      </div>
       <div>
         <Label className="mb-1 block text-xs text-muted-foreground">Endpoint</Label>
         <Input
@@ -1170,66 +1125,57 @@ function CTraderMcpFields({
           value={endpoint}
           onChange={(event) => onEndpointChange(event.target.value)}
           autoComplete="off"
+          spellCheck={false}
+          inputMode="text"
         />
+        <p className="mt-1 text-xs text-muted-foreground">
+          Default points at cTrader Desktop&apos;s embedded MCP server
+          ({defaultEndpoint}).
+        </p>
       </div>
-      {mode === "remote" ? (
-        <>
-          <div>
-            <Label className="mb-1 block text-xs text-muted-foreground">Bearer token</Label>
-            <Input
-              aria-label="Bearer token"
-              type="password"
-              value={token}
-              onChange={(event) => onTokenChange(event.target.value)}
-              autoComplete="off"
-              spellCheck={false}
-              inputMode="text"
-            />
-          </div>
-          <div className="flex items-center gap-2">
-            <Button variant="outline" onClick={onFetchAccounts} disabled={!canFetch}>
-              {previewBusy ? "Fetching…" : "Fetch accounts"}
-            </Button>
-            {previewError && (
-              <p role="alert" className="text-sm text-loss">
-                {previewError}
-              </p>
-            )}
-          </div>
-          {previewAccounts.length > 0 ? (
-            <div>
-              <Label className="mb-1 block text-xs text-muted-foreground">cTrader account</Label>
-              <Select value={accountId} onValueChange={onAccountIdChange}>
-                <SelectTrigger>
-                  <SelectValue placeholder="Pick the cTrader account to sync" />
-                </SelectTrigger>
-                <SelectContent>
-                  {previewAccounts.map((acct) => (
-                    <SelectItem key={acct.accountId} value={String(acct.accountId)}>
-                      {acct.accountId} · {acct.brokerName} ({acct.currency})
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            </div>
-          ) : null}
-        </>
-      ) : (
-        <div>
-          <Label className="mb-1 block text-xs text-muted-foreground">
-            Authorization header (optional)
-          </Label>
-          <Input
-            aria-label="Authorization header"
-            value={authHeader}
-            onChange={(event) => onAuthHeaderChange(event.target.value)}
-            autoComplete="off"
-          />
-          <p className="mt-1 text-xs text-muted-foreground">
-            Leave blank unless your cTrader Desktop build requires an auth header.
+      <div>
+        <Label className="mb-1 block text-xs text-muted-foreground">
+          Authorization header (optional)
+        </Label>
+        <Input
+          aria-label="Authorization header"
+          value={authHeader}
+          onChange={(event) => onAuthHeaderChange(event.target.value)}
+          autoComplete="off"
+          spellCheck={false}
+          inputMode="text"
+        />
+        <p className="mt-1 text-xs text-muted-foreground">
+          Leave blank unless your cTrader Desktop build requires an auth header.
+        </p>
+      </div>
+      <div className="flex items-center gap-2">
+        <Button variant="outline" onClick={onFetchAccounts} disabled={!canFetch}>
+          {previewBusy ? "Fetching…" : "Fetch accounts"}
+        </Button>
+        {previewError && (
+          <p role="alert" className="text-sm text-loss">
+            {previewError}
           </p>
+        )}
+      </div>
+      {previewAccounts.length > 0 ? (
+        <div>
+          <Label className="mb-1 block text-xs text-muted-foreground">cTrader account</Label>
+          <Select value={accountId} onValueChange={onAccountIdChange}>
+            <SelectTrigger>
+              <SelectValue placeholder="Pick the cTrader account to sync" />
+            </SelectTrigger>
+            <SelectContent>
+              {previewAccounts.map((acct) => (
+                <SelectItem key={acct.id} value={String(acct.id)}>
+                  {acct.brokerTitle} · {acct.login} ({acct.currency})
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
         </div>
-      )}
+      ) : null}
     </>
   );
 }

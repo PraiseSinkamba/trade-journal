@@ -51,10 +51,10 @@ export const POST = handler(async (request: Request) => {
     body.kind === "sync" &&
     body.broker === "ctrader-mcp" &&
     body.credentials &&
-    body.credentials.mode === "remote" &&
-    !body.credentials.ctraderAccountId
+    typeof body.credentials.endpoint === "string" &&
+    !/^https?:\/\//i.test(body.credentials.endpoint)
   ) {
-    return bad("Remote cTrader MCP requires ctraderAccountId");
+    return bad("cTrader MCP endpoint must be an http(s) URL");
   }
 
   const id = newId();

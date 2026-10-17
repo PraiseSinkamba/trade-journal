@@ -1,13 +1,5 @@
 import type { CTraderMcpClient } from "./client";
-import { cTraderAccountInfoSchema } from "./schemas";
+import { cTraderBalanceSchema, type CTraderBalance } from "./schemas";
 
-export const getAccountInfo = async (
-  client: CTraderMcpClient,
-  ctraderAccountId?: number,
-) => {
-  return client.callTool(
-    "get_account_info",
-    ctraderAccountId ? { accountId: ctraderAccountId } : {},
-    cTraderAccountInfoSchema,
-  );
-};
+export const getAccountBalance = (client: CTraderMcpClient): Promise<CTraderBalance> =>
+  client.callTool("get_balance", {}, cTraderBalanceSchema);

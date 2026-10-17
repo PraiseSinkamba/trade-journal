@@ -1,14 +1,10 @@
 import type { CTraderMcpClient } from "./client";
-import { cTraderPositionsResponseSchema, type CTraderPosition } from "./schemas";
+import {
+  cTraderPositionsResponseSchema,
+  type CTraderPosition,
+} from "./schemas";
 
-export const getOpenPositions = async (
+export const getOpenPositions = (
   client: CTraderMcpClient,
-  ctraderAccountId?: number,
-): Promise<CTraderPosition[]> => {
-  const out = await client.callTool(
-    "get_positions",
-    ctraderAccountId ? { accountId: ctraderAccountId } : {},
-    cTraderPositionsResponseSchema,
-  );
-  return out.positions;
-};
+): Promise<CTraderPosition[]> =>
+  client.callTool("get_positions", {}, cTraderPositionsResponseSchema).then((r) => r.positions);

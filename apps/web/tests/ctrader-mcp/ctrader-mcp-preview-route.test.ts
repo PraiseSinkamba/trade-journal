@@ -1,6 +1,7 @@
 import { describe, expect, it, vi } from "vitest";
 import { CTraderMcpClient } from "@/server/ctrader-mcp/client";
 import { CTraderMcpSyncError } from "@/server/ctrader-mcp/errors";
+import { POST } from "@/app/api/accounts/ctrader-mcp-preview/route";
 
 vi.mock("@/server/ctrader-mcp/client", () => ({
   CTraderMcpClient: vi.fn(),
@@ -18,12 +19,11 @@ describe("POST /api/accounts/ctrader-mcp-preview", () => {
       () => mockClient as unknown as InstanceType<typeof CTraderMcpClient>,
     );
 
-    const { POST } = await import("@/app/api/accounts/ctrader-mcp-preview/route");
+    // Local-only body shape: endpoint + optional Authorization header.
     const req = new Request("http://localhost/api/accounts/ctrader-mcp-preview", {
       method: "POST",
       body: JSON.stringify({
         endpoint: "http://127.0.0.1:9876/mcp/",
-        bearerToken: "test-token",
       }),
     });
 
