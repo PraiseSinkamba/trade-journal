@@ -61,8 +61,28 @@ to the new module. Every other broker continues to flow through
   module needs to be retired or reduced to a thin adapter that calls
   `connect({ broker: "ctrader-mcp" })`.
 - Forbidden: any new direct broker HTTP call anywhere else in the repo;
-  any import of cTrader vendor SDKs or OAuth libraries outside the
-  cTrader MCP module.
+any import of cTrader vendor SDKs or OAuth libraries outside the
+cTrader MCP module.
+
+## Scope (revision 2026-10-17)
+
+The v0 implementation targeted in this ADR is **Local-only**. The public
+Remote MCP at `https://mcp.ctrader.com/trading/mcp` does not expose
+`get_account_list_by_access_token` and returns `get_balance` in integer
+minor units (no `moneyDigits`), `get_deals` with `executionTimestamp` in
+epoch ms and a 30-day range cap, and numeric `dealId`. Adapting to all
+of those requires money conversion, time conversion, dedup-key
+reshuffling, and removing the account-picker UX — that work is deferred
+to a follow-up. Local MCP at `http://127.0.0.1:9876/mcp/` returns real
+currency, ISO-8601 `time`, and `get_accounts_list` (so we can keep a
+multi-account picker), and uses `orderId` (+ time/volume/price
+tiebreakers) as the natural dedup key.
+
+The `mode: "remote" | "local"` discriminator that the v0 form schema
+briefly carried is removed; the credentials shape is now
+`{ endpoint, authHeader?, ctraderAccountId }`. Re-introducing Remote
+mode requires refreshing this ADR with the reconverted shapes; until
+then this ADR governs the Local-only journal-side module.
 
 This decision is reversible once broker-sdk upstream lands cTrader.
 Reversal steps: open a PR on broker-sdk adding cTrader MCP support;

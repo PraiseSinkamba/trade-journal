@@ -1315,3 +1315,54 @@ git commit -m "test(ctrader-mcp): ADR 0002 boundary scan"
 - All wrapper signatures in T3 use the same `client.callTool(name, args, schema)` shape.
 
 If issues found during implementation, fix them inline and re-run the affected task's tests.
+
+---
+
+## Local-only adaptation (2026-10-17)
+
+The original plan above was written against the assumed cTrader Remote MCP shapes; after a live probe at `.superpowers/sdd/ctrader-mcp-toolset-probe.md` the Remote server's actual shape diverged materially. This section replaces the Local-only implementation that ships in v0.
+
+### Files this revision changes
+
+| File | Change |
+|---|---|
+| `docs/superpowers/specs/2026-10-13-ctrader-mcp-sync-design.md` | Rewritten for Local-only; Remote mode deferred |
+| `docs/decisions/0002-ctrader-mcp-via-direct-mcp-client.md` | "Scope (revision 2026-10-17)" paragraph documenting Local-only |
+| `apps/web/src/server/ctrader-mcp/schemas.ts` | Local Zod schemas (`CTraderAccount`, `CTraderAccountInfo`, `CTraderDeal`, `CTraderPosition`, `CTraderOrder`, `CTraderSymbol`) |
+| `apps/web/src/server/ctrader-mcp/accounts.ts` | `listCTraderAccounts` calls `get_accounts_list` (no args) |
+| `apps/web/src/server/ctrader-mcp/account.ts` | `getAccountInfo` calls `get_balance` (no args) |
+| `apps/web/src/server/ctrader-mcp/symbols.ts` | `fetchSymbols` calls `get_symbols` (no args); `buildAssetClassMap` keys by symbolName |
+| `apps/web/src/server/ctrader-mcp/deals.ts` | Paginate `get_deals` by `count: 200`; composite dedup key `${orderId}:${time}:${filledVolume}:${executionPrice}` |
+| `apps/web/src/server/ctrader-mcp/positions.ts` | `getOpenPositions` calls `get_positions` (no args) |
+| `apps/web/src/server/ctrader-mcp/orders.ts` | `getPendingOrders` calls `get_pending_orders` (no args) |
+| `apps/web/src/server/ctrader-mcp/sync.ts` | Drop Remote-mode account-existence check; drop `mode` discriminator; `CTraderMcpCredentials` = `{ endpoint, authHeader?, ctraderAccountId }` |
+| `apps/web/src/lib/ctrader-mcp-form.ts` | Drop `mode: "remote" \| "local"` union; Local-only schema `{ endpoint, authHeader?, ctraderAccountId }`; `defaultEndpoint` = `http://127.0.0.1:9876/mcp/` |
+| `apps/web/src/app/api/accounts/ctrader-mcp-preview/route.ts` | Body = `{ endpoint, authHeader? }`; calls `get_accounts_list`; smaller `SAFE` map (no `account_gone`) |
+| `apps/web/src/app/api/accounts/route.ts` | Drop `ctraderAccountId` Remote validation |
+| `apps/web/src/app/api/brokers/route.ts` | Update `readOnlySetup` for Local MCP |
+| `apps/web/src/app/import/page.tsx` | Drop Mode tabs and Bearer-token field; single Local form with Fetch-accounts + Select |
+| `apps/web/tests/ctrader-mcp/schemas.test.ts` | Local `cTraderDealSchema` fixtures |
+| `apps/web/tests/ctrader-mcp/deals.test.ts` | Local `mapDealToExecution` tests; composite dedup id |
+| `apps/web/tests/ctrader-mcp/sync.test.ts` | Local canned responses (no `account_gone` test) |
+| `apps/web/tests/ctrader-mcp/ctrader-mcp-preview-route.test.ts` | Local body shape; smaller `SAFE` map |
+
+### Local MCP contract (new)
+
+- `get_accounts_list` (no args) → `{ accounts: [{ id: number, login: number, accountName: string, brokerTitle: string, isLive: boolean, balance: number, currency: string, accountType: string, isOnline: boolean }], count: number }`
+- `get_balance` (no args) → `{ balance, equity, margin, freeMargin, marginLevel: number|null, netProfit, grossProfit, leverage, depositAsset, accountName, accountType, traderId, brokerName, connectionState, isSwapFree }`
+- `get_symbols` (no args) → `{ symbols: [{ symbolName, description, ...metadata }] }`
+- `get_deals` (`{ count: 200 }`) → `{ deals: [{ orderId, positionId, symbolName, dealType, side: "Buy"|"Sell", filledVolume, executionPrice, entryPrice, pips, grossProfit, commission, swap, netProfit, label, comment, time: ISO-8601 }], count }`
+- `get_positions` (no args) → `{ positions: [...] }`
+- `get_pending_orders` (no args) → `{ orders: [...] }`
+
+### Composite dedup key
+
+`importMetadata.id = ${deal.orderId}:${deal.time}:${deal.filledVolume}:${deal.executionPrice}` — stable across re-syncs, differs on any of the four components, has no `dealId` (Local has none).
+
+### Asset-class heuristic
+
+`buildAssetClassMap` now keys by `symbolName` (not `symbolId`). The heuristic inspects `description` first ("Forex"/"CFD"/"Crypto"/etc.); if absent, falls back to inspecting `symbolName` (contains `/` and 6 letters → forex; ends in numeric digits → cfd; `USD`-denominated crypto like BTCUSD → crypto; default → other).
+
+### Cursor strategy
+
+`get_deals` accepts only `count` (no time-range, no cursor). First sync fetches the latest N; subsequent syncs re-fetch and dedup via `executionHash` against the unique index. `lastSyncAt` is informational only.
