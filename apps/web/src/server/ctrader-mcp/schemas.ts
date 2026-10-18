@@ -41,11 +41,13 @@ export const cTraderBalanceSchema = z.object({
 });
 export type CTraderBalance = z.infer<typeof cTraderBalanceSchema>;
 
-/** Symbol metadata from `get_symbols`. `symbolName` is the join key. */
+/** Symbol metadata from `get_symbols`. `name` is the join key (deals use `symbolName`). */
 export const cTraderSymbolSchema = z
   .object({
-    symbolName: z.string().min(1),
+    name: z.string().min(1),
     description: z.string().optional().default(""),
+    category: z.string().optional().default(""),
+    assetClass: z.string().optional().default(""),
   })
   .passthrough();
 export type CTraderSymbol = z.infer<typeof cTraderSymbolSchema>;

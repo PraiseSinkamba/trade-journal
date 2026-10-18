@@ -81,7 +81,7 @@ describe("syncCTraderMcpAccount (Local)", () => {
   it("inserts one execution per deal and re-sync is a no-op", async () => {
     fake.toolResponses = {
       get_symbols: {
-        symbols: [{ symbolName: "EURUSD", description: "Euro vs US Dollar" }],
+        symbols: [{ name: "EURUSD", description: "Euro vs US Dollar", assetClass: "Forex (Spot)" }],
       },
       get_deals: {
         deals: [

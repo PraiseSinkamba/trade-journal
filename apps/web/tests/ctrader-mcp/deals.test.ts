@@ -4,6 +4,7 @@ import {
   fetchAllDeals,
   mapDealToExecution,
 } from "@/server/ctrader-mcp/deals";
+import { findAssetClass } from "@/server/ctrader-mcp/symbols";
 
 const localDeal = {
   orderId: 12345,
@@ -105,5 +106,28 @@ describe("fetchAllDeals (Local)", () => {
       expect.objectContaining({ symbolName: "EURUSD" }),
       expect.anything(),
     );
+  });
+});
+
+describe("deal × symbol join (Local)", () => {
+  it("joins a deal symbolName against a symbol keyed by `name`", async () => {
+    // The orchestrator looks up assetClass via findAssetClass(symbols, deal.symbolName).
+    // Symbols arrive keyed by `name`; deals arrive keyed by `symbolName`.
+    // Both must agree on the same string ("NAS100" === "NAS100").
+    const callTool = vi.fn().mockResolvedValue({
+      deals: [{ ...localDeal, symbolName: "NAS100" }],
+    });
+    const fake = { initialize: async () => undefined, close: async () => undefined, callTool };
+    const deals = await fetchAllDeals(
+      fake as unknown as Parameters<typeof fetchAllDeals>[0],
+    );
+    const symbols = [
+      { name: "NAS100", description: "US Tech 100", category: "Indices", assetClass: "Indices" },
+    ];
+    const assetClass = findAssetClass(symbols, deals[0]!.symbolName);
+    const ex = mapDealToExecution(deals[0]!, deals[0]!.symbolName, assetClass, 0);
+    expect(deals[0]!.symbolName).toBe("NAS100");
+    expect(ex.symbol).toBe("NAS100");
+    expect(ex.assetClass).toBe("cfd");
   });
 });

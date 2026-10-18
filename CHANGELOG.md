@@ -35,6 +35,11 @@ All notable changes to this project are documented here. The format follows [Kee
 ### Fixed
 
 - Password protection now verifies the session signature on every API route. Previously, when `JOURNAL_PASSWORD` was set, any request carrying a cookie of the right name was accepted, so a forged cookie could read the journal.
+- cTrader MCP `get_symbols` now parses the real Local payload (`name`, `description`, `category`, `assetClass`); previously the schema required `symbolName` and `get_symbols` validation aborted the sync. Asset-class inference now prefers the explicit `assetClass` string before falling back to the legacy heuristic.
+
+### Changed
+
+- cTrader MCP account picker in the connect form shows the account balance and Live/Demo state alongside the broker and login.
 
 ## [0.1.0] - 2026-09-03
 

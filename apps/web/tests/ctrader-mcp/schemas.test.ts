@@ -12,6 +12,7 @@ import {
   cTraderSymbolSchema,
   cTraderSymbolsResponseSchema,
 } from "@/server/ctrader-mcp/schemas";
+import { findAssetClass } from "@/server/ctrader-mcp/symbols";
 
 const localDeal = {
   orderId: 12345,
@@ -129,17 +130,83 @@ describe("cTraderBalanceSchema (Local)", () => {
 describe("cTraderSymbolSchema (Local)", () => {
   it("parses a representative payload", () => {
     const s = cTraderSymbolSchema.parse({
-      symbolName: "EURUSD",
+      name: "EURUSD",
       description: "Euro vs US Dollar",
+      category: "FX Majors",
+      assetClass: "Forex (Spot)",
     });
-    expect(s.symbolName).toBe("EURUSD");
+    expect(s.name).toBe("EURUSD");
+    expect(s.category).toBe("FX Majors");
+    expect(s.assetClass).toBe("Forex (Spot)");
+  });
+
+  it("accepts passthrough fields from the live cTrader payload", () => {
+    const s = cTraderSymbolSchema.parse({
+      name: "NAS100",
+      description: "US Tech 100",
+      category: "Indices",
+      assetClass: "Indices",
+      digits: 2,
+      pipPosition: 1,
+    });
+    expect(s.name).toBe("NAS100");
+    // passthrough: extra fields kept on the parsed object
+    expect((s as Record<string, unknown>).digits).toBe(2);
   });
 
   it("cTraderSymbolsResponseSchema wraps an array", () => {
     const parsed = cTraderSymbolsResponseSchema.parse({
-      symbols: [{ symbolName: "EURUSD" }],
+      symbols: [{ name: "EURUSD" }],
     });
-    expect(parsed.symbols[0]?.symbolName).toBe("EURUSD");
+    expect(parsed.symbols[0]?.name).toBe("EURUSD");
+  });
+});
+
+describe("findAssetClass (symbols.ts)", () => {
+  it("maps Forex (Spot) to forex", () => {
+    expect(
+      findAssetClass(
+        [{ name: "EURUSD", description: "", category: "", assetClass: "Forex (Spot)" }],
+        "EURUSD",
+      ),
+    ).toBe("forex");
+  });
+
+  it("maps Indices to cfd", () => {
+    expect(
+      findAssetClass(
+        [{ name: "NAS100", description: "", category: "", assetClass: "Indices" }],
+        "NAS100",
+      ),
+    ).toBe("cfd");
+  });
+
+  it("maps Crypto to crypto", () => {
+    expect(
+      findAssetClass(
+        [{ name: "BTCUSD", description: "", category: "", assetClass: "Crypto" }],
+        "BTCUSD",
+      ),
+    ).toBe("crypto");
+  });
+
+  it("falls back to category heuristic when assetClass is empty", () => {
+    // No assetClass, category starts with "FX " → forex.
+    expect(
+      findAssetClass(
+        [{ name: "EURUSD", description: "", category: "FX Majors", assetClass: "" }],
+        "EURUSD",
+      ),
+    ).toBe("forex");
+  });
+
+  it("falls back to category heuristic when assetClass field is missing", () => {
+    expect(
+      findAssetClass(
+        [{ name: "US500", description: "US 500", category: "", assetClass: "" }],
+        "US500",
+      ),
+    ).toBe("cfd");
   });
 });
 

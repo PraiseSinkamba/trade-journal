@@ -57,7 +57,10 @@ UI: connect form
                            (multiple accounts may be exposed; the user-selected
                            account id is persisted as ctraderAccountId)
                      4. fetch get_balance per the chosen account → snapshot fields
-                     5. fetch get_symbols once → symbolName → assetClass map
+                     5. fetch get_symbols once → name → assetClass map
+                        (deals arrive keyed by symbolName; symbols arrive keyed
+                         by `name` — the cTrader MCP uses different keys for
+                         each tool; the join is `deal.symbolName === symbol.name`)
                      6. page through get_deals via count=200 until empty
                            (Local has no time-range filter; dedup relies on
                             executionHash + the unique index)
@@ -208,6 +211,6 @@ superseded.
 
 - **Local-only.** Remote mode is deferred; if a user without cTrader Desktop connects, the form simply won't reach the MCP server. Re-enabling Remote requires a design refresh.
 - **`get_deals` history cap.** Local caps at 200 per page; pagination is `count`-driven with no time-range filter. First sync pulls the latest 200; subsequent syncs re-pull and dedup.
-- **Asset-class inference.** `get_symbols` returns `description`; we classify by `description`/`symbolName` heuristically (contains `/` and 6 letters → forex; numeric suffix → cfd). Unknown symbols fall back to `other`.
+- **Asset-class inference.** `get_symbols` returns `{ name, description, category, assetClass, ... }`. We prefer the explicit `assetClass` string (Forex (Spot) → forex, Indices/Commodities/Metals/Energies/Bonds/Shares/ETFs → cfd, Crypto/Cryptocurrency → crypto, Stocks → stock); fall back to `category`; fall back to a `name + description` heuristic (contains `/` and 6 letters → forex; BTC/ETH/BITCOIN → crypto; numeric suffix → cfd); unknown → `other`.
 - **Cursor drift on a failed run.** Guarded by the explicit "advance `lastSyncAt` only after commit" rule plus the integration test that asserts it.
 - **broker-sdk upstream later ships cTrader.** Remove the ADR 0002 carve-out when that lands; the journal-side `ctrader-mcp/` module retires or shrinks to a thin adapter.
