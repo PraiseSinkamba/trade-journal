@@ -1169,7 +1169,7 @@ function CTraderMcpFields({
             <SelectContent>
               {previewAccounts.map((acct) => (
                 <SelectItem key={acct.id} value={String(acct.id)}>
-                  {acct.brokerTitle} · {acct.login} ({acct.currency})
+                  {acct.brokerTitle} · {acct.login} ({acct.currency}) · ${acct.balance.toFixed(2)} · {acct.isLive ? "Live" : "Demo"}
                 </SelectItem>
               ))}
             </SelectContent>
