@@ -25,6 +25,22 @@ data/
 .DS_Store
 *.log
 coverage/
-
+*.diff
 # Scratch files at the repo root (test.ico, etc.)
 /*.ico
+
+# Internal tool scratch — not project code
+/.agents/
+/.omp/
+/.github/agents/
+/.github/hooks/
+/.github/skills/
+/browse-test.mjs
+
+# Internal tool scratch — not project code
+/.agents/
+/.omp/
+/.github/agents/
+/.github/hooks/
+/.github/skills/
+/browse-test.mjs
