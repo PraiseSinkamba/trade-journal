@@ -39,33 +39,17 @@ export const fetchOrderHistory = async (
       },
       cTraderOrderHistoryResponseSchema,
     );
-    out.push(...page.orders);
+    out.push(...page.trades);
   }
   return out;
 };
 
-/** cTrader order types that represent protective orders attached after entry, not the opener. */
-const PROTECTIVE_ORDER_TYPES: Record<string, true> = {
-  "Stop Loss": true,
-  "Take Profit": true,
-  Stop: true,
-  "Trailing Stop": true,
-  STOP_LOSS: true,
-  TAKE_PROFIT: true,
-  TRAILING_STOP: true,
-};
-
-const isProtectiveOrderType = (orderType: string | undefined): boolean =>
-  orderType !== undefined && PROTECTIVE_ORDER_TYPES[orderType] === true;
-
 /**
- * Reduce a list of historical orders to: positionId → earliest opening
- * time. Heuristic: the opener is the EARLIEST order that
- *   (a) shares `positionId` with a known close,
- *   (b) is on the OPPOSITE side of the close, and
- *   (c) is not a protective order (Stop Loss / Take Profit / Stop / Trailing Stop).
- * Returns an empty map for any position the heuristic cannot resolve; the
- * caller's fallback is to reuse the close time (existing behavior).
+ * Reduce a list of historical trade records to: positionId → opening time.
+ * The Local MCP returns flat-to-flat trade records (one per position), so
+ * the heuristic is a direct lookup: any record whose `positionId` matches
+ * a known close yields its `openTime` as the opening timestamp. Records
+ * without `positionId` or `openTime` are skipped.
  */
 export const openingTimeByPosition = (
   orders: CTraderHistoricalOrder[],
@@ -73,15 +57,9 @@ export const openingTimeByPosition = (
 ): Map<string, string> => {
   const map = new Map<string, string>();
   for (const order of orders) {
-    if (!order.positionId || !order.time || !order.side) continue;
-    if (isProtectiveOrderType(order.orderType)) continue;
-    const close = closedDealByPosition.get(String(order.positionId));
-    if (!close) continue; // not a position we have a close for
-    if (order.side === close.side) continue; // this is the close order, not the opener
-    const existing = map.get(String(order.positionId));
-    if (!existing || order.time < existing) {
-      map.set(String(order.positionId), order.time);
-    }
+    if (!order.positionId || !order.openTime) continue;
+    if (!closedDealByPosition.has(String(order.positionId))) continue; // not a position we have a close for
+    map.set(String(order.positionId), order.openTime);
   }
   return map;
 };

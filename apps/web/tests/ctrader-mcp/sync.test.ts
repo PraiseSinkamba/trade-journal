@@ -48,7 +48,7 @@ beforeEach(() => {
       // fixtures don't pre-populate; keeps test output free of harmless
       // "get_order_history failed" warnings.
       if (resp === undefined && name === "get_order_history") {
-        return { orders: [] };
+        return { trades: [] };
       }
       return resp;
     },
@@ -445,14 +445,13 @@ describe("syncCTraderMcpAccount (Local)", () => {
         brokerName: "Pepperstone",
       },
       get_order_history: {
-        orders: [
+        trades: [
           {
-            orderId: 395217500,
             positionId: 626745677,
             symbolName: "NAS100",
             side: "Buy",
-            orderType: "MARKET",
-            time: "2026-10-15T13:30:00.000Z",
+            openTime: "2026-10-15T13:30:00.000Z",
+            closeTime: "2026-10-15T14:01:25.056Z",
           },
         ],
       },

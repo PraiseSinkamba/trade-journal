@@ -119,27 +119,30 @@ export const cTraderOrdersResponseSchema = z.object({
 });
 
 /**
- * Historical order from `get_order_history`. Used to recover the opening
+ * Historical trade from `get_order_history`. Used to recover the opening
  * time of closed positions whose entry fill is no longer in the deal
- * stream. `positionId` is required for our opener-detection heuristic;
- * `time` and `side` are required for the same. Other vendor fields ride
+ * stream. The Local MCP returns flat-to-flat trade records (one per
+ * position), with `openTime` and `closeTime` already paired. Required for
+ * our heuristic: `positionId` to join against the close, and `openTime`
+ * to use as the synthetic entry's `executedAt`. Other vendor fields ride
  * through via `.passthrough()`.
  */
 export const cTraderHistoricalOrderSchema = z
   .object({
-    orderId: z.union([z.number(), z.string()]).optional(),
     positionId: z.union([z.number(), z.string()]).optional(),
     symbolName: z.string().optional(),
+    /** ENTRY side of the position (e.g. "Buy" for a long opened-then-closed). */
     side: z.enum(["Buy", "Sell"]).optional(),
-    /** cTrader order type string, e.g. "MARKET", "LIMIT", "STOP", "STOP_LOSS", "TAKE_PROFIT". */
-    orderType: z.string().optional(),
-    /** ISO-8601 timestamp the order was placed/executed. */
-    time: z.string().optional(),
+    /** ISO-8601 timestamp the position was opened. */
+    openTime: z.string().optional(),
+    /** ISO-8601 timestamp the position was closed. */
+    closeTime: z.string().optional(),
   })
   .passthrough();
 export type CTraderHistoricalOrder = z.infer<typeof cTraderHistoricalOrderSchema>;
 
 export const cTraderOrderHistoryResponseSchema = z.object({
-  orders: z.array(cTraderHistoricalOrderSchema),
+  /** The Local MCP wraps records in `trades`, not `orders`. */
+  trades: z.array(cTraderHistoricalOrderSchema),
   count: z.number().optional(),
 });

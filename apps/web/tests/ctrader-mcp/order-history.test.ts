@@ -6,20 +6,19 @@ import {
 import type { CTraderHistoricalOrder } from "@/server/ctrader-mcp/schemas";
 
 const baseOrder = (overrides: Partial<CTraderHistoricalOrder> = {}): CTraderHistoricalOrder => ({
-  orderId: 1,
   positionId: 100,
   symbolName: "NAS100",
   side: "Buy",
-  orderType: "MARKET",
-  time: "2026-10-15T13:55:00.000Z",
+  openTime: "2026-10-15T13:55:00.000Z",
+  closeTime: "2026-10-15T14:01:25.056Z",
   ...overrides,
 });
 
 describe("openingTimeByPosition", () => {
-  it("returns the earliest opposite-side order for each closed position", () => {
+  it("returns openTime for each closed position keyed by positionId", () => {
     const orders: CTraderHistoricalOrder[] = [
-      baseOrder({ orderId: 1, positionId: 100, side: "Buy", orderType: "MARKET", time: "2026-10-15T13:55:00.000Z" }),
-      baseOrder({ orderId: 2, positionId: 200, side: "Sell", orderType: "MARKET", time: "2026-10-15T14:30:00.000Z" }),
+      baseOrder({ positionId: 100, openTime: "2026-10-15T13:55:00.000Z" }),
+      baseOrder({ positionId: 200, openTime: "2026-10-15T14:30:00.000Z", side: "Sell" }),
     ];
     const closes = new Map<string, { side: "Buy" | "Sell" }>([
       ["100", { side: "Sell" }],
@@ -30,61 +29,37 @@ describe("openingTimeByPosition", () => {
     expect(out.get("200")).toBe("2026-10-15T14:30:00.000Z");
   });
 
-  it("picks the EARLIEST of multiple qualifying opposite-side orders", () => {
-    const orders: CTraderHistoricalOrder[] = [
-      baseOrder({ orderId: 1, positionId: 100, side: "Buy", time: "2026-10-15T14:00:00.000Z" }),
-      baseOrder({ orderId: 2, positionId: 100, side: "Buy", time: "2026-10-15T13:00:00.000Z" }),
-    ];
-    const closes = new Map<string, { side: "Buy" | "Sell" }>([["100", { side: "Sell" }]]);
-    const out = openingTimeByPosition(orders, closes);
-    expect(out.get("100")).toBe("2026-10-15T13:00:00.000Z");
-  });
-
-  it("skips orders where side === close.side (those are close orders)", () => {
-    const orders: CTraderHistoricalOrder[] = [
-      baseOrder({ orderId: 1, positionId: 100, side: "Sell", time: "2026-10-15T13:55:00.000Z" }),
-    ];
-    const closes = new Map<string, { side: "Buy" | "Sell" }>([["100", { side: "Sell" }]]);
-    const out = openingTimeByPosition(orders, closes);
-    expect(out.has("100")).toBe(false);
-  });
-
   it("skips orders without a matching closedDealByPosition entry", () => {
     const orders: CTraderHistoricalOrder[] = [
-      baseOrder({ orderId: 1, positionId: 999, side: "Buy", time: "2026-10-15T13:55:00.000Z" }),
+      baseOrder({ positionId: 999, openTime: "2026-10-15T13:55:00.000Z" }),
     ];
     const closes = new Map<string, { side: "Buy" | "Sell" }>([["100", { side: "Sell" }]]);
     const out = openingTimeByPosition(orders, closes);
     expect(out.has("999")).toBe(false);
   });
 
-  it("skips orders without positionId, time, or side", () => {
+  it("skips orders without positionId or openTime", () => {
     const orders: CTraderHistoricalOrder[] = [
-      baseOrder({ positionId: undefined, time: "2026-10-15T13:55:00.000Z" }),
-      baseOrder({ time: undefined, positionId: 100 }),
-      baseOrder({ side: undefined, positionId: 100 }),
+      baseOrder({ openTime: undefined, positionId: 100 }),
+      baseOrder({ positionId: undefined, openTime: "2026-10-15T13:55:00.000Z" }),
     ];
     const closes = new Map<string, { side: "Buy" | "Sell" }>([["100", { side: "Sell" }]]);
     const out = openingTimeByPosition(orders, closes);
     expect(out.size).toBe(0);
-  });
-
-  it("skips protective order types (Stop Loss, Take Profit, Stop, Trailing Stop)", () => {
-    const orders: CTraderHistoricalOrder[] = [
-      baseOrder({ orderId: 1, positionId: 100, side: "Buy", orderType: "Stop Loss", time: "2026-10-15T12:00:00.000Z" }),
-      baseOrder({ orderId: 2, positionId: 100, side: "Buy", orderType: "Take Profit", time: "2026-10-15T12:01:00.000Z" }),
-      baseOrder({ orderId: 3, positionId: 100, side: "Buy", orderType: "STOP_LOSS", time: "2026-10-15T12:02:00.000Z" }),
-      baseOrder({ orderId: 4, positionId: 100, side: "Buy", orderType: "TRAILING_STOP", time: "2026-10-15T12:03:00.000Z" }),
-      baseOrder({ orderId: 5, positionId: 100, side: "Buy", orderType: "MARKET", time: "2026-10-15T12:04:00.000Z" }),
-    ];
-    const closes = new Map<string, { side: "Buy" | "Sell" }>([["100", { side: "Sell" }]]);
-    const out = openingTimeByPosition(orders, closes);
-    expect(out.get("100")).toBe("2026-10-15T12:04:00.000Z");
   });
 
   it("returns an empty map for an empty input", () => {
     const out = openingTimeByPosition([], new Map());
     expect(out.size).toBe(0);
+  });
+
+  it("does not require a side on the historical record (flat-to-flat from the Local MCP)", () => {
+    const orders: CTraderHistoricalOrder[] = [
+      baseOrder({ positionId: 100, side: undefined, openTime: "2026-10-15T13:55:00.000Z" }),
+    ];
+    const closes = new Map<string, { side: "Buy" | "Sell" }>([["100", { side: "Sell" }]]);
+    const out = openingTimeByPosition(orders, closes);
+    expect(out.get("100")).toBe("2026-10-15T13:55:00.000Z");
   });
 });
 
@@ -117,8 +92,8 @@ describe("fetchOrderHistory (Local)", () => {
     expect(fake.callTool).not.toHaveBeenCalled();
   });
 
-  it("issues a single call when the range is within 30 days", async () => {
-    const callTool = vi.fn().mockResolvedValue({ orders: [baseOrder()] });
+  it("issues a single call when the range is within 30 days and reads `trades`", async () => {
+    const callTool = vi.fn().mockResolvedValue({ trades: [baseOrder()] });
     const fake = { callTool, initialize: async () => undefined, close: async () => undefined };
     const out = await fetchOrderHistory(
       fake as unknown as Parameters<typeof fetchOrderHistory>[0],
@@ -139,7 +114,7 @@ describe("fetchOrderHistory (Local)", () => {
   it("splits ranges longer than 30 days into multiple 30-day windows", async () => {
     const callTool = vi.fn().mockImplementation((_name: string, args: { fromTimestamp: string }) => {
       const start = new Date(args.fromTimestamp).getTime();
-      return Promise.resolve({ orders: [baseOrder({ orderId: start, time: new Date(start).toISOString() })] });
+      return Promise.resolve({ trades: [baseOrder({ positionId: start, openTime: new Date(start).toISOString() })] });
     });
     const fake = { callTool, initialize: async () => undefined, close: async () => undefined };
     const out = await fetchOrderHistory(
@@ -149,7 +124,7 @@ describe("fetchOrderHistory (Local)", () => {
     // 120 / 30 = 4 windows
     expect(callTool).toHaveBeenCalledTimes(4);
     expect(out).toHaveLength(4);
-    // Each call's fromTimestamp advances by exactly 30 days.
+    // Each call's toTimestamp advances by exactly 30 days.
     const calls = callTool.mock.calls;
     for (let i = 1; i < calls.length; i++) {
       const prev = new Date(calls[i - 1]![1]!.toTimestamp as string).getTime();
@@ -159,7 +134,7 @@ describe("fetchOrderHistory (Local)", () => {
   });
 
   it("passes symbolName through to the tool when provided", async () => {
-    const callTool = vi.fn().mockResolvedValue({ orders: [] });
+    const callTool = vi.fn().mockResolvedValue({ trades: [] });
     const fake = { callTool, initialize: async () => undefined, close: async () => undefined };
     await fetchOrderHistory(
       fake as unknown as Parameters<typeof fetchOrderHistory>[0],
