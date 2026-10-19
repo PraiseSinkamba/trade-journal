@@ -44,3 +44,4 @@ coverage/
 /.github/hooks/
 /.github/skills/
 /browse-test.mjs
+/apps/web/.impeccable/
