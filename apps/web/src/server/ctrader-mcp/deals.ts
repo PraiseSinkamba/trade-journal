@@ -65,9 +65,12 @@ export const mapDealToExecution = (
  * Build a synthetic entry + real close for a closed position whose opening
  * fill is missing from the deal stream. Local `get_deals` is capped at 200
  * with no time filter, so any position whose entry was older than the latest
- * 200 deals appears only as a closing fill. The synthetic entry uses the
- * close time as a best-effort estimate — `get_deals` doesn't expose the
- * entry timestamp, so `durationMs` will be 0 for these cycles.
+ * 200 deals appears only as a closing fill.
+ *
+ * If `openingTime` is supplied (recovered from `get_order_history`), the
+ * synthetic entry uses it as `executedAt`, giving the round-trip engine a
+ * real `durationMs`. Without it, the synthetic entry uses the close time as
+ * a best-effort estimate and `durationMs` is 0 — the documented fallback.
  *
  * `reportedGrossPnl` on the close carries `grossProfit` straight to the
  * round-trip engine, which uses it verbatim (see
@@ -78,16 +81,18 @@ export const mapClosedPositionToExecutions = (
   symbolName: string,
   assetClass: AssetClass,
   dealIndex: number,
+  openingTime?: string,
 ): ImportedExecution[] => {
   const group = String(deal.positionId);
   const closeId = dealExecutionId(deal);
+  const entryTime = openingTime ?? deal.time;
   const syntheticEntry: ImportedExecution = {
     symbol: symbolName,
     side: deal.side === "Buy" ? "sell" : "buy",
     quantity: deal.filledVolume,
     price: deal.entryPrice ?? deal.executionPrice,
     fee: 0,
-    executedAt: deal.time,
+    executedAt: entryTime,
     assetClass: assetClass === "stock" ? "equity" : assetClass,
     importMetadata: {
       id: `synthetic:open:${closeId}`,

@@ -36,6 +36,7 @@ All notable changes to this project are documented here. The format follows [Kee
 
 - Password protection now verifies the session signature on every API route. Previously, when `JOURNAL_PASSWORD` was set, any request carrying a cookie of the right name was accepted, so a forged cookie could read the journal.
 - cTrader MCP `get_symbols` now parses the real Local payload (`name`, `description`, `category`, `assetClass`); previously the schema required `symbolName` and `get_symbols` validation aborted the sync. Asset-class inference now prefers the explicit `assetClass` string before falling back to the legacy heuristic.
+- cTrader MCP sync now calls `get_order_history` to recover the opening time of closed positions whose entry fell off the 200-deal window, so closed trades get a real `durationMs` instead of 0. Order-history failures are non-fatal and leave the existing `durationMs=0` fallback in place.
 
 ### Changed
 

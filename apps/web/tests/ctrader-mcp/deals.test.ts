@@ -185,6 +185,25 @@ describe("mapClosedPositionToExecutions (Local)", () => {
       expect(fill.assetClass).toBe("equity");
     });
   });
+
+  it("uses openingTime for the synthetic entry when provided", () => {
+    const result = mapClosedPositionToExecutions(
+      closedDeal,
+      "NAS100",
+      "cfd",
+      5,
+      "2026-10-15T13:55:42.000Z",
+    );
+    expect(result[0]?.executedAt).toBe("2026-10-15T13:55:42.000Z");
+    // Close is still the close time.
+    expect(result[1]?.executedAt).toBe("2026-10-15T14:01:25.056Z");
+  });
+
+  it("falls back to deal.time when openingTime is omitted", () => {
+    const result = mapClosedPositionToExecutions(closedDeal, "NAS100", "cfd", 5);
+    expect(result[0]?.executedAt).toBe("2026-10-15T14:01:25.056Z");
+    expect(result[1]?.executedAt).toBe("2026-10-15T14:01:25.056Z");
+  });
 });
 
 describe("deal × symbol join (Local)", () => {

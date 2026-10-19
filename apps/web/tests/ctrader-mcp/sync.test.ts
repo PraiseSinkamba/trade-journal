@@ -1,6 +1,6 @@
 import { eq } from "drizzle-orm";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { db, accounts } from "@/db";
+import { db, accounts, executions, trades } from "@/db";
 import { encryptJson } from "@/server/crypto";
 import { newId } from "@/server/ids";
 import { syncCTraderMcpAccount } from "@/server/ctrader-mcp/sync";
@@ -44,6 +44,12 @@ beforeEach(() => {
       fake.callCount++;
       const resp = fake.toolResponses[name];
       if (resp instanceof Error) throw resp;
+      // Default for tools the new sync flow always calls but older
+      // fixtures don't pre-populate; keeps test output free of harmless
+      // "get_order_history failed" warnings.
+      if (resp === undefined && name === "get_order_history") {
+        return { orders: [] };
+      }
       return resp;
     },
   };
@@ -93,9 +99,11 @@ describe("syncCTraderMcpAccount (Local)", () => {
             side: "Buy",
             filledVolume: 1000,
             executionPrice: 1.1,
+            entryPrice: 1.1,
             time: "2026-09-30T12:00:00Z",
             commission: 0,
             swap: 0,
+            grossProfit: 0,
           },
           {
             orderId: 2,
@@ -105,9 +113,11 @@ describe("syncCTraderMcpAccount (Local)", () => {
             side: "Sell",
             filledVolume: 1000,
             executionPrice: 1.2,
+            entryPrice: 1.1,
             time: "2026-09-30T13:00:00Z",
             commission: 0,
             swap: 0,
+            grossProfit: 100,
           },
         ],
       },
@@ -135,6 +145,178 @@ describe("syncCTraderMcpAccount (Local)", () => {
     const second = await syncCTraderMcpAccount(accountId);
     expect(second.inserted).toBe(0);
     expect(second.duplicates).toBe(2);
+  });
+
+  it("emits synthetic entry + real close when only the close is in the deal stream", async () => {
+    fake.toolResponses = {
+      get_symbols: {
+        symbols: [{ name: "NAS100", description: "US Tech 100", assetClass: "Indices" }],
+      },
+      get_deals: {
+        deals: [
+          {
+            orderId: 395217525,
+            positionId: 626745677,
+            symbolName: "NAS100",
+            dealType: "close",
+            side: "Sell",
+            filledVolume: 0.1,
+            executionPrice: 29555,
+            entryPrice: 29447.1,
+            grossProfit: -10.79,
+            commission: 0,
+            swap: 0,
+            time: "2026-10-15T14:01:25.056Z",
+          },
+        ],
+      },
+      get_positions: { positions: [] },
+      get_pending_orders: { orders: [] },
+      get_balance: {
+        balance: 24.71,
+        equity: 24.71,
+        margin: 0,
+        freeMargin: 24.71,
+        marginLevel: null,
+        depositAsset: "USD",
+        brokerName: "Pepperstone",
+      },
+    };
+    testSlot.__FAKE_MCP__ = fake;
+
+    const accountId = newId();
+    addAccount(accountId);
+
+    const out = await syncCTraderMcpAccount(accountId);
+    expect(out.inserted).toBe(2);
+
+    const rows = db
+      .select()
+      .from(executions)
+      .where(eq(executions.accountId, accountId))
+      .all();
+    expect(rows.length).toBe(2);
+    const trade = db
+      .select()
+      .from(trades)
+      .where(eq(trades.accountId, accountId))
+      .get();
+    expect(trade).toBeTruthy();
+    expect(trade!.status).toBe("loss");
+    expect(trade!.grossPnl).toBeCloseTo(-10.79, 2);
+  });
+
+  it("emits raw fills when both sides of a closed position are in the deal stream", async () => {
+    fake.toolResponses = {
+      get_symbols: {
+        symbols: [{ name: "EURUSD", description: "Euro vs US Dollar", assetClass: "Forex (Spot)" }],
+      },
+      get_deals: {
+        deals: [
+          {
+            orderId: 1,
+            positionId: 200,
+            symbolName: "EURUSD",
+            dealType: "fill",
+            side: "Buy",
+            filledVolume: 1000,
+            executionPrice: 1.1,
+            entryPrice: 1.1,
+            time: "2026-09-30T12:00:00Z",
+            commission: 0,
+            swap: 0,
+            grossProfit: 0,
+          },
+          {
+            orderId: 2,
+            positionId: 200,
+            symbolName: "EURUSD",
+            dealType: "close",
+            side: "Sell",
+            filledVolume: 1000,
+            executionPrice: 1.2,
+            entryPrice: 1.1,
+            time: "2026-09-30T13:00:00Z",
+            commission: 0,
+            swap: 0,
+            grossProfit: 100,
+          },
+        ],
+      },
+      get_positions: { positions: [] },
+      get_pending_orders: { orders: [] },
+      get_balance: {
+        balance: 100,
+        equity: 100,
+        margin: 0,
+        freeMargin: 100,
+        marginLevel: null,
+        depositAsset: "USD",
+        brokerName: "Pepperstone",
+      },
+    };
+    testSlot.__FAKE_MCP__ = fake;
+
+    const accountId = newId();
+    addAccount(accountId);
+
+    const out = await syncCTraderMcpAccount(accountId);
+    expect(out.inserted).toBe(2);
+
+    const trade = db.select().from(trades).where(eq(trades.accountId, accountId)).get();
+    expect(trade).toBeTruthy();
+    expect(trade!.status).toBe("win");
+    expect(trade!.grossPnl).toBeCloseTo(100, 2);
+  });
+
+  it("keeps a position open when its id is in the open positions list", async () => {
+    fake.toolResponses = {
+      get_symbols: {
+        symbols: [{ name: "EURUSD", description: "Euro vs US Dollar", assetClass: "Forex (Spot)" }],
+      },
+      get_deals: {
+        deals: [
+          {
+            orderId: 5,
+            positionId: 300,
+            symbolName: "EURUSD",
+            dealType: "fill",
+            side: "Buy",
+            filledVolume: 1000,
+            executionPrice: 1.1,
+            entryPrice: 1.1,
+            time: "2026-09-30T12:00:00Z",
+            commission: 0,
+            swap: 0,
+            grossProfit: 0,
+          },
+        ],
+      },
+      get_positions: {
+        positions: [{ positionId: 300, symbolName: "EURUSD" }],
+      },
+      get_pending_orders: { orders: [] },
+      get_balance: {
+        balance: 100,
+        equity: 100,
+        margin: 0,
+        freeMargin: 100,
+        marginLevel: null,
+        depositAsset: "USD",
+        brokerName: "Pepperstone",
+      },
+    };
+    testSlot.__FAKE_MCP__ = fake;
+
+    const accountId = newId();
+    addAccount(accountId);
+
+    const out = await syncCTraderMcpAccount(accountId);
+    expect(out.inserted).toBe(1);
+
+    const trade = db.select().from(trades).where(eq(trades.accountId, accountId)).get();
+    expect(trade).toBeTruthy();
+    expect(trade!.status).toBe("open");
   });
 
   it("does not advance lastSyncAt when insertExecutions throws", async () => {
@@ -226,5 +408,134 @@ describe("syncCTraderMcpAccount (Local)", () => {
     await expect(syncCTraderMcpAccount(accountId)).rejects.toMatchObject({
       kind: "unreachable",
     });
+  });
+
+  it("uses the opening time from get_order_history to compute a real durationMs", async () => {
+    fake.toolResponses = {
+      get_symbols: {
+        symbols: [{ name: "NAS100", description: "US Tech 100", assetClass: "Indices" }],
+      },
+      get_deals: {
+        deals: [
+          {
+            orderId: 395217525,
+            positionId: 626745677,
+            symbolName: "NAS100",
+            dealType: "close",
+            side: "Sell",
+            filledVolume: 0.1,
+            executionPrice: 29555,
+            entryPrice: 29447.1,
+            grossProfit: -10.79,
+            commission: 0,
+            swap: 0,
+            time: "2026-10-15T14:01:25.056Z",
+          },
+        ],
+      },
+      get_positions: { positions: [] },
+      get_pending_orders: { orders: [] },
+      get_balance: {
+        balance: 24.71,
+        equity: 24.71,
+        margin: 0,
+        freeMargin: 24.71,
+        marginLevel: null,
+        depositAsset: "USD",
+        brokerName: "Pepperstone",
+      },
+      get_order_history: {
+        orders: [
+          {
+            orderId: 395217500,
+            positionId: 626745677,
+            symbolName: "NAS100",
+            side: "Buy",
+            orderType: "MARKET",
+            time: "2026-10-15T13:30:00.000Z",
+          },
+        ],
+      },
+    };
+    testSlot.__FAKE_MCP__ = fake;
+
+    const accountId = newId();
+    addAccount(accountId);
+
+    const out = await syncCTraderMcpAccount(accountId);
+    expect(out.inserted).toBe(2);
+
+    const trade = db
+      .select()
+      .from(trades)
+      .where(eq(trades.accountId, accountId))
+      .get();
+    expect(trade).toBeTruthy();
+    expect(trade!.status).toBe("loss");
+    // (14:01:25 - 13:30:00) in milliseconds = 1,885,056 ms
+    expect(trade!.durationMs).toBe(
+      Date.parse("2026-10-15T14:01:25.056Z") - Date.parse("2026-10-15T13:30:00.000Z"),
+    );
+    expect(trade!.openedAt).toBe("2026-10-15T13:30:00.000Z");
+    expect(trade!.closedAt).toBe("2026-10-15T14:01:25.056Z");
+  });
+
+  it("falls back to durationMs=0 when get_order_history fails", async () => {
+    fake.toolResponses = {
+      get_symbols: {
+        symbols: [{ name: "NAS100", description: "US Tech 100", assetClass: "Indices" }],
+      },
+      get_deals: {
+        deals: [
+          {
+            orderId: 395217525,
+            positionId: 626745677,
+            symbolName: "NAS100",
+            dealType: "close",
+            side: "Sell",
+            filledVolume: 0.1,
+            executionPrice: 29555,
+            entryPrice: 29447.1,
+            grossProfit: -10.79,
+            commission: 0,
+            swap: 0,
+            time: "2026-10-15T14:01:25.056Z",
+          },
+        ],
+      },
+      get_positions: { positions: [] },
+      get_pending_orders: { orders: [] },
+      get_balance: {
+        balance: 24.71,
+        equity: 24.71,
+        margin: 0,
+        freeMargin: 24.71,
+        marginLevel: null,
+        depositAsset: "USD",
+        brokerName: "Pepperstone",
+      },
+      get_order_history: new Error("upstream timeout"),
+    };
+    testSlot.__FAKE_MCP__ = fake;
+
+    const warnSpy = vi.spyOn(console, "warn").mockImplementation(() => undefined);
+
+    const accountId = newId();
+    addAccount(accountId);
+
+    const out = await syncCTraderMcpAccount(accountId);
+    expect(out.inserted).toBe(2);
+
+    const trade = db
+      .select()
+      .from(trades)
+      .where(eq(trades.accountId, accountId))
+      .get();
+    expect(trade).toBeTruthy();
+    expect(trade!.status).toBe("loss");
+    // No order history → entry uses close time → durationMs=0
+    expect(trade!.durationMs).toBe(0);
+    expect(warnSpy).toHaveBeenCalled();
+    warnSpy.mockRestore();
   });
 });
