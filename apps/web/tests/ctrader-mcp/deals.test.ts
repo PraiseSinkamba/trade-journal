@@ -2,6 +2,7 @@ import { describe, expect, it, vi } from "vitest";
 import {
   dealExecutionId,
   fetchAllDeals,
+  mapClosedPositionToExecutions,
   mapDealToExecution,
 } from "@/server/ctrader-mcp/deals";
 import { findAssetClass } from "@/server/ctrader-mcp/symbols";
@@ -106,6 +107,83 @@ describe("fetchAllDeals (Local)", () => {
       expect.objectContaining({ symbolName: "EURUSD" }),
       expect.anything(),
     );
+  });
+});
+
+describe("mapClosedPositionToExecutions (Local)", () => {
+  const closedDeal = {
+    orderId: 395217525,
+    positionId: 626745677,
+    symbolName: "NAS100",
+    dealType: "close",
+    side: "Sell" as const,
+    filledVolume: 0.1,
+    executionPrice: 29555,
+    entryPrice: 29447.1,
+    pips: -107.9,
+    grossProfit: -10.79,
+    commission: 0,
+    swap: 0,
+    netProfit: -10.79,
+    label: "",
+    comment: "",
+    time: "2026-10-15T14:01:25.056Z",
+  };
+
+  it("emits a synthetic entry plus the real close with reportedGrossPnl", () => {
+    const result = mapClosedPositionToExecutions(closedDeal, "NAS100", "cfd", 5);
+    result.forEach((entry, i) => {
+      if (i === 0) {
+        // Synthetic entry: opposite side, entryPrice, fee 0, same group, order=dealIndex*2.
+        expect(entry.side).toBe("buy");
+        expect(entry.price).toBe(29447.1);
+        expect(entry.quantity).toBe(0.1);
+        expect(entry.fee).toBe(0);
+        expect(entry.executedAt).toBe("2026-10-15T14:01:25.056Z");
+        expect(entry.symbol).toBe("NAS100");
+        expect(entry.assetClass).toBe("cfd");
+        expect(entry.importMetadata?.id).toBe(
+          `synthetic:open:${closedDeal.orderId}:${closedDeal.time}:${closedDeal.filledVolume}:${closedDeal.executionPrice}`,
+        );
+        expect(entry.importMetadata?.group).toBe("626745677");
+        expect(entry.importMetadata?.order).toBe(10);
+      } else {
+        // Real close: same as mapDealToExecution but with reportedGrossPnl and order=dealIndex*2+1.
+        expect(entry.side).toBe("sell");
+        expect(entry.price).toBe(29555);
+        expect(entry.quantity).toBe(0.1);
+        expect(entry.fee).toBe(0);
+        expect(entry.executedAt).toBe("2026-10-15T14:01:25.056Z");
+        expect(entry.symbol).toBe("NAS100");
+        expect(entry.assetClass).toBe("cfd");
+        expect(entry.importMetadata?.id).toBe(
+          `${closedDeal.orderId}:${closedDeal.time}:${closedDeal.filledVolume}:${closedDeal.executionPrice}`,
+        );
+        expect(entry.importMetadata?.group).toBe("626745677");
+        expect(entry.importMetadata?.order).toBe(11);
+        expect(entry.importMetadata?.reportedGrossPnl).toBe(-10.79);
+        expect(entry.importMetadata?.preserveFee).toBe(true);
+      }
+    });
+  });
+
+  it("flips sides for a Buy close", () => {
+    const buyClose = { ...closedDeal, side: "Buy" as const, grossProfit: 5.5 };
+    const result = mapClosedPositionToExecutions(buyClose, "EURUSD", "forex", 0);
+    result.forEach((fill, i) => {
+      if (i === 0) expect(fill.side).toBe("sell");
+      else {
+        expect(fill.side).toBe("buy");
+        expect(fill.importMetadata?.reportedGrossPnl).toBe(5.5);
+      }
+    });
+  });
+
+  it("remaps stock asset class to equity on both fills", () => {
+    const result = mapClosedPositionToExecutions(closedDeal, "AAPL", "stock", 0);
+    result.forEach((fill) => {
+      expect(fill.assetClass).toBe("equity");
+    });
   });
 });
 

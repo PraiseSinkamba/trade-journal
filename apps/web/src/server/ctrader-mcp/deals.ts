@@ -60,3 +60,57 @@ export const mapDealToExecution = (
     preserveFee: true,
   },
 });
+
+/**
+ * Build a synthetic entry + real close for a closed position whose opening
+ * fill is missing from the deal stream. Local `get_deals` is capped at 200
+ * with no time filter, so any position whose entry was older than the latest
+ * 200 deals appears only as a closing fill. The synthetic entry uses the
+ * close time as a best-effort estimate — `get_deals` doesn't expose the
+ * entry timestamp, so `durationMs` will be 0 for these cycles.
+ *
+ * `reportedGrossPnl` on the close carries `grossProfit` straight to the
+ * round-trip engine, which uses it verbatim (see
+ * `packages/core/src/round-trips.ts`).
+ */
+export const mapClosedPositionToExecutions = (
+  deal: CTraderDeal,
+  symbolName: string,
+  assetClass: AssetClass,
+  dealIndex: number,
+): ImportedExecution[] => {
+  const group = String(deal.positionId);
+  const closeId = dealExecutionId(deal);
+  const syntheticEntry: ImportedExecution = {
+    symbol: symbolName,
+    side: deal.side === "Buy" ? "sell" : "buy",
+    quantity: deal.filledVolume,
+    price: deal.entryPrice ?? deal.executionPrice,
+    fee: 0,
+    executedAt: deal.time,
+    assetClass: assetClass === "stock" ? "equity" : assetClass,
+    importMetadata: {
+      id: `synthetic:open:${closeId}`,
+      group,
+      order: dealIndex * 2,
+      preserveFee: true,
+    },
+  };
+  const realClose: ImportedExecution = {
+    symbol: symbolName,
+    side: deal.side === "Buy" ? "buy" : "sell",
+    quantity: deal.filledVolume,
+    price: deal.executionPrice,
+    fee: Math.abs(deal.commission ?? 0) + Math.abs(deal.swap ?? 0),
+    executedAt: deal.time,
+    assetClass: assetClass === "stock" ? "equity" : assetClass,
+    importMetadata: {
+      id: closeId,
+      group,
+      order: dealIndex * 2 + 1,
+      preserveFee: true,
+      reportedGrossPnl: deal.grossProfit ?? 0,
+    },
+  };
+  return [syntheticEntry, realClose];
+};
