@@ -117,3 +117,29 @@ export type CTraderOrder = z.infer<typeof cTraderOrderSchema>;
 export const cTraderOrdersResponseSchema = z.object({
   orders: z.array(cTraderOrderSchema),
 });
+
+/**
+ * Historical order from `get_order_history`. Used to recover the opening
+ * time of closed positions whose entry fill is no longer in the deal
+ * stream. `positionId` is required for our opener-detection heuristic;
+ * `time` and `side` are required for the same. Other vendor fields ride
+ * through via `.passthrough()`.
+ */
+export const cTraderHistoricalOrderSchema = z
+  .object({
+    orderId: z.union([z.number(), z.string()]).optional(),
+    positionId: z.union([z.number(), z.string()]).optional(),
+    symbolName: z.string().optional(),
+    side: z.enum(["Buy", "Sell"]).optional(),
+    /** cTrader order type string, e.g. "MARKET", "LIMIT", "STOP", "STOP_LOSS", "TAKE_PROFIT". */
+    orderType: z.string().optional(),
+    /** ISO-8601 timestamp the order was placed/executed. */
+    time: z.string().optional(),
+  })
+  .passthrough();
+export type CTraderHistoricalOrder = z.infer<typeof cTraderHistoricalOrderSchema>;
+
+export const cTraderOrderHistoryResponseSchema = z.object({
+  orders: z.array(cTraderHistoricalOrderSchema),
+  count: z.number().optional(),
+});

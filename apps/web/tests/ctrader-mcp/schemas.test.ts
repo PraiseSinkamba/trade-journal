@@ -5,6 +5,8 @@ import {
   cTraderBalanceSchema,
   cTraderDealSchema,
   cTraderDealsResponseSchema,
+  cTraderHistoricalOrderSchema,
+  cTraderOrderHistoryResponseSchema,
   cTraderOrderSchema,
   cTraderOrdersResponseSchema,
   cTraderPositionSchema,
@@ -246,5 +248,68 @@ describe("cTraderPositionSchema / cTraderOrderSchema (Local)", () => {
   it("cTraderOrdersResponseSchema wraps orders", () => {
     const parsed = cTraderOrdersResponseSchema.parse({ orders: [] });
     expect(parsed.orders).toEqual([]);
+  });
+});
+
+describe("cTraderHistoricalOrderSchema (Local)", () => {
+  it("parses a representative order-history entry", () => {
+    const parsed = cTraderHistoricalOrderSchema.parse({
+      orderId: 395217525,
+      positionId: 626745677,
+      symbolName: "NAS100",
+      side: "Buy",
+      orderType: "MARKET",
+      time: "2026-10-15T13:55:42.000Z",
+    });
+    expect(parsed.positionId).toBe(626745677);
+    expect(parsed.side).toBe("Buy");
+    expect(parsed.orderType).toBe("MARKET");
+    expect(parsed.time).toBe("2026-10-15T13:55:42.000Z");
+  });
+
+  it("accepts passthrough fields from the live cTrader payload", () => {
+    const parsed = cTraderHistoricalOrderSchema.parse({
+      orderId: 1,
+      positionId: 1,
+      side: "Sell",
+      orderType: "LIMIT",
+      time: "2026-09-30T12:00:00Z",
+      filledVolume: 0.1,
+      executionPrice: 29555,
+    });
+    expect((parsed as Record<string, unknown>).filledVolume).toBe(0.1);
+    expect((parsed as Record<string, unknown>).executionPrice).toBe(29555);
+  });
+
+  it("accepts string positionId", () => {
+    const parsed = cTraderHistoricalOrderSchema.parse({
+      orderId: 1,
+      positionId: "P-1",
+      side: "Buy",
+      time: "2026-09-30T12:00:00Z",
+    });
+    expect(parsed.positionId).toBe("P-1");
+  });
+
+  it("cTraderOrderHistoryResponseSchema wraps orders and accepts an optional count", () => {
+    const parsed = cTraderOrderHistoryResponseSchema.parse({
+      orders: [
+        {
+          orderId: 1,
+          positionId: 1,
+          side: "Buy",
+          time: "2026-09-30T12:00:00Z",
+        },
+      ],
+      count: 1,
+    });
+    expect(parsed.orders[0]?.positionId).toBe(1);
+    expect(parsed.count).toBe(1);
+  });
+
+  it("cTraderOrderHistoryResponseSchema accepts an empty orders list", () => {
+    const parsed = cTraderOrderHistoryResponseSchema.parse({ orders: [] });
+    expect(parsed.orders).toEqual([]);
+    expect(parsed.count).toBeUndefined();
   });
 });
