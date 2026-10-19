@@ -920,6 +920,8 @@ function BrokerConnect() {
   const [ctraderEndpoint, setCtraderEndpoint] = useState(defaultEndpoint);
   const [ctraderAccountId, setCtraderAccountId] = useState("");
   const [ctraderAuthHeader, setCtraderAuthHeader] = useState("");
+  const [ctraderInitialBalance, setCtraderInitialBalance] = useState(0);
+  const [ctraderInitialBalanceTouched, setCtraderInitialBalanceTouched] = useState(false);
   const [previewAccounts, setPreviewAccounts] = useState<CTraderAccount[]>([]);
   const [previewBusy, setPreviewBusy] = useState(false);
   const [previewError, setPreviewError] = useState<string | null>(null);
@@ -970,6 +972,9 @@ function BrokerConnect() {
         kind: "sync",
         broker: broker.id,
         credentials: payload,
+        ...(isCTraderMcp && ctraderInitialBalance > 0
+          ? { initialBalance: ctraderInitialBalance }
+          : {}),
       });
       if (created.sync.skipped > 0) {
         alert(
@@ -1001,6 +1006,8 @@ function BrokerConnect() {
               setCtraderEndpoint(defaultEndpoint);
               setCtraderAccountId("");
               setCtraderAuthHeader("");
+              setCtraderInitialBalance(0);
+              setCtraderInitialBalanceTouched(false);
               setPreviewAccounts([]);
               setPreviewError(null);
             }}
@@ -1044,9 +1051,20 @@ function BrokerConnect() {
                 endpoint={ctraderEndpoint}
                 onEndpointChange={setCtraderEndpoint}
                 accountId={ctraderAccountId}
-                onAccountIdChange={setCtraderAccountId}
+                onAccountIdChange={(value) => {
+                  setCtraderAccountId(value);
+                  if (!ctraderInitialBalanceTouched) {
+                    const matched = previewAccounts.find((acct) => String(acct.id) === value);
+                    if (matched) setCtraderInitialBalance(matched.balance);
+                  }
+                }}
                 authHeader={ctraderAuthHeader}
                 onAuthHeaderChange={setCtraderAuthHeader}
+                initialBalance={ctraderInitialBalance}
+                onInitialBalanceChange={(value) => {
+                  setCtraderInitialBalance(value);
+                  setCtraderInitialBalanceTouched(true);
+                }}
                 previewAccounts={previewAccounts}
                 previewBusy={previewBusy}
                 previewError={previewError}
@@ -1097,6 +1115,8 @@ interface CTraderMcpFieldsProps {
   onAccountIdChange: (value: string) => void;
   authHeader: string;
   onAuthHeaderChange: (value: string) => void;
+  initialBalance: number;
+  onInitialBalanceChange: (value: number) => void;
   previewAccounts: CTraderAccount[];
   previewBusy: boolean;
   previewError: string | null;
@@ -1110,6 +1130,8 @@ function CTraderMcpFields({
   onAccountIdChange,
   authHeader,
   onAuthHeaderChange,
+  initialBalance,
+  onInitialBalanceChange,
   previewAccounts,
   previewBusy,
   previewError,
@@ -1176,6 +1198,30 @@ function CTraderMcpFields({
           </Select>
         </div>
       ) : null}
+      <div>
+        <Label className="mb-1 block text-xs text-muted-foreground">Initial balance</Label>
+        <Input
+          aria-label="Initial balance"
+          type="number"
+          min={0}
+          step="any"
+          value={Number.isFinite(initialBalance) ? initialBalance : 0}
+          onChange={(event) => {
+            const next = Number(event.target.value);
+            onInitialBalanceChange(Number.isFinite(next) && next >= 0 ? next : 0);
+          }}
+          autoComplete="off"
+          inputMode="decimal"
+        />
+        <p className="mt-1 text-xs text-muted-foreground">
+          {(() => {
+              const acct = previewAccounts.find((a) => String(a.id) === accountId);
+              return acct
+                ? `Live cTrader balance: $${acct.balance.toFixed(2)} (will be set on create unless you change this field).`
+                : "Set to 0 if you're not sure; you can update it later.";
+            })()}
+        </p>
+      </div>
     </>
   );
 }
