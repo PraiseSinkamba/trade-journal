@@ -833,8 +833,8 @@ body.dashboard-is-dragging .journal-hover-card {
   min-height: 64px;
   padding: 4px 2px;
   font-size: clamp(8px, 2.8cqi, 11px);
-  aspect-ratio: 1 / 1;
   min-width: 3.5rem;
+  max-width: 7rem;
 }
 .journal-calendar-day-link {
   outline: 2px solid transparent;
