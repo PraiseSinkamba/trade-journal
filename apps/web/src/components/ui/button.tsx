@@ -45,31 +45,49 @@ function Button({
   className,
   variant = "default",
   size = "default",
-  asChild = false,
+  asChild,
   title,
   ...props
-}: ButtonPrimitive.Props & VariantProps<typeof buttonVariants> & { asChild?: boolean }) {
-  const ariaLabel: string | undefined = props["aria-label"]
-  const hint = title || (size === "icon" ? ariaLabel : undefined)
+}: ButtonPrimitive.Props &
+  VariantProps<typeof buttonVariants> & {
+    asChild?: boolean
+    title?: string
+  }) {
+  const iconOnly = size === "icon" || size === "icon-xs" || size === "icon-sm" || size === "icon-lg"
+  const ariaLabel = (props as React.ButtonHTMLAttributes<HTMLButtonElement>)["aria-label"]
+  const needsHint = title != null || (iconOnly && !ariaLabel)
 
-  const inner = (
+  // Bridge asChild → base-ui render prop (best-effort: only when children is a single ReactElement)
+  if (asChild && React.isValidElement(props.children)) {
+    return (
+      <ButtonPrimitive
+        data-slot="button"
+        className={cn(buttonVariants({ variant, size, className }))}
+        render={(childProps) =>
+          React.cloneElement(props.children as React.ReactElement, childProps)
+        }
+        {...props}
+      />
+    )
+  }
+
+  let inner = (
     <ButtonPrimitive
       data-slot="button"
-      render={
-        asChild
-          ? (React.createElement("button", {
-              className: cn(buttonVariants({ variant, size, className })),
-              ...props,
-            }) as React.ReactElement)
-          : undefined
-      }
-      className={asChild ? undefined : cn(buttonVariants({ variant, size, className }))}
-      {...(asChild ? {} : props)}
-      aria-label={ariaLabel ?? (size === "icon" ? title : undefined)}
+      className={cn(buttonVariants({ variant, size, className }))}
+      {...props}
     />
   )
 
-  return hint ? <HoverHint content={hint}>{inner}</HoverHint> : inner
+  if (needsHint) {
+    return (
+      <HoverHint content={title ?? ariaLabel ?? null}>
+        {inner}
+      </HoverHint>
+    )
+  }
+
+  return inner
 }
 
 export { Button, buttonVariants }

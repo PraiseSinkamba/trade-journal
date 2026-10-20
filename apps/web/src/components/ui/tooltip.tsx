@@ -2,8 +2,8 @@
 
 import * as React from "react"
 import { Tooltip as TooltipPrimitive } from "@base-ui/react/tooltip"
-import { cn } from "@/lib/utils"
 import { CircleHelp } from "lucide-react"
+import { cn } from "cn"
 
 function TooltipProvider({
   delay = 0,
@@ -46,73 +46,97 @@ function TooltipContent({
         alignOffset={alignOffset}
         side={side}
         sideOffset={sideOffset}
-        collisionPadding={12}
         className="isolate z-50"
       >
         <TooltipPrimitive.Popup
           data-slot="tooltip-content"
           className={cn(
-            "journal-hover-card z-[80] max-w-[min(19rem,calc(100vw-24px))] rounded-xl border bg-popover p-3.5 text-[13px] leading-relaxed text-popover-foreground",
+            "z-50 inline-flex w-fit max-w-xs origin-(--transform-origin) items-center gap-1.5 rounded-md bg-foreground px-3 py-1.5 text-xs text-background has-data-[slot=kbd]:pr-1.5 data-[side=bottom]:slide-in-from-top-2 data-[side=inline-end]:slide-in-from-left-2 data-[side=inline-start]:slide-in-from-right-2 data-[side=left]:slide-in-from-right-2 data-[side=right]:slide-in-from-left-2 data-[side=top]:slide-in-from-bottom-2 **:data-[slot=kbd]:relative **:data-[slot=kbd]:isolate **:data-[slot=kbd]:z-50 **:data-[slot=kbd]:rounded-sm data-[state=delayed-open]:animate-in data-[state=delayed-open]:fade-in-0 data-[state=delayed-open]:zoom-in-95 data-open:animate-in data-open:fade-in-0 data-open:zoom-in-95 data-closed:animate-out data-closed:fade-out-0 data-closed:zoom-out-95",
             className
           )}
           {...props}
         >
           {children}
+          <TooltipPrimitive.Arrow className="z-50 size-2.5 translate-y-[calc(-50%-2px)] rotate-45 rounded-[2px] bg-foreground fill-foreground data-[side=bottom]:top-1 data-[side=inline-end]:top-1/2! data-[side=inline-end]:-left-1 data-[side=inline-end]:-translate-y-1/2 data-[side=inline-start]:top-1/2! data-[side=inline-start]:-right-1 data-[side=inline-start]:-translate-y-1/2 data-[side=left]:top-1/2! data-[side=left]:-right-1 data-[side=left]:-translate-y-1/2 data-[side=right]:top-1/2! data-[side=right]:-left-1 data-[side=right]:-translate-y-1/2 data-[side=top]:-bottom-2.5" />
         </TooltipPrimitive.Popup>
       </TooltipPrimitive.Positioner>
     </TooltipPrimitive.Portal>
   )
 }
 
-// Project extensions.
-export function HoverHint({
+// HoverHint: wraps trigger children with a tooltip, short-circuits when content is null
+function HoverHint({
   children,
-  content,
   heading,
-  side = "top",
-  align = "center",
-  delayDuration,
-  skipDelayDuration,
-}: HoverHintProps) {
-  if (content === null) return <>{children}</>
-  return (
-    <Tooltip>
-      <TooltipTrigger delay={delayDuration ?? 350} closeDelay={skipDelayDuration ?? 150}>
-        {children}
-      </TooltipTrigger>
-      <TooltipContent align={align} side={side}>
-        {heading && (
-          <div className="mb-1 text-[13px] font-semibold text-popover-foreground">{heading}</div>
-        )}
-        <div className={heading ? "text-muted-foreground" : undefined}>{content}</div>
-      </TooltipContent>
-    </Tooltip>
-  )
-}
-
-export function HelpHint({ heading, children }: { heading: string; children: React.ReactNode }) {
-  return (
-    <HoverHint heading={heading} content={children}>
-      <button
-        type="button"
-        aria-label={`About ${heading}`}
-        className="inline-flex h-6 w-6 shrink-0 items-center justify-center rounded-md text-muted-foreground/70 transition-colors hover:bg-accent hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
-      >
-        <CircleHelp aria-hidden="true" className="h-3.5 w-3.5" />
-      </button>
-    </HoverHint>
-  )
-}
-
-export type HoverHintProps = {
-  children: React.ReactElement
-  content: React.ReactNode
+  content,
+  align,
+  side,
+  delay: delayDuration,
+}: {
+  children: React.ReactNode
   heading?: string
-  align?: "center" | "start" | "end"
-  side?: "top" | "right" | "bottom" | "left" | "inline-end" | "inline-start"
-  sideOffset?: number
-  delayDuration?: number
-  skipDelayDuration?: number
+  content?: React.ReactNode | null
+  align?: TooltipPrimitive.Positioner.Props["align"]
+  side?: TooltipPrimitive.Positioner.Props["side"]
+  delay?: number
+}) {
+  if (heading === undefined && (content === undefined || content === null)) return <>{children}</>
+  return (
+    <TooltipProvider delay={delayDuration ?? 350}>
+      <Tooltip>
+        <TooltipTrigger>{children}</TooltipTrigger>
+        <TooltipContent align={align} side={side}>
+          {heading && content ? (
+            <>
+              <span className="font-semibold">{heading}</span>
+              <br />
+              {content}
+            </>
+          ) : (
+            heading ?? content
+          )}
+        </TooltipContent>
+      </Tooltip>
+    </TooltipProvider>
+  )
 }
 
-export { Tooltip, TooltipTrigger, TooltipContent, TooltipProvider }
+// HelpHint: icon-trigger tooltip using CircleHelp
+function HelpHint({
+  children,
+  heading,
+  content,
+  align,
+  side,
+  delay: delayDuration,
+}: {
+  children?: React.ReactNode
+  heading?: string
+  content?: React.ReactNode | null
+  align?: TooltipPrimitive.Positioner.Props["align"]
+  side?: TooltipPrimitive.Positioner.Props["side"]
+  delay?: number
+}) {
+  if (heading === undefined && content === undefined) return <>{children}</>
+  if (heading === undefined && content === null) return <>{children}</>
+  return (
+    <TooltipProvider delay={delayDuration ?? 350}>
+      <Tooltip>
+        <TooltipTrigger>{children ?? <CircleHelp className="size-4" />}</TooltipTrigger>
+        <TooltipContent align={align} side={side}>
+          {heading && content ? (
+            <>
+              <span className="font-semibold">{heading}</span>
+              <br />
+              {content}
+            </>
+          ) : (
+            heading ?? content
+          )}
+        </TooltipContent>
+      </Tooltip>
+    </TooltipProvider>
+  )
+}
+
+export { Tooltip, TooltipTrigger, TooltipContent, TooltipProvider, HoverHint, HelpHint }
