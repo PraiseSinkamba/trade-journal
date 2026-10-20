@@ -805,6 +805,13 @@ body.dashboard-is-dragging .journal-hover-card {
 .journal-calendar {
   container: calendar / inline-size;
 }
+
+/* Root class for react-day-picker Calendar (journal-date- prefixed for specificity). */
+.journal-date-calendar {
+  display: flex;
+  flex-direction: column;
+  gap: 0;
+}
 .journal-calendar-grid {
   grid-template-columns: repeat(7, minmax(0, 1fr));
 }
