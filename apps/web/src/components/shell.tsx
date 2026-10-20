@@ -34,7 +34,6 @@ import {
   SidebarMenuButton,
   SidebarMenuItem,
   SidebarProvider,
-  SidebarRail,
   SidebarSeparator,
   SidebarTrigger,
   SidebarInset,
@@ -90,21 +89,24 @@ export function AppSidebar() {
 
   return (
     <Sidebar collapsible="icon" className="bg-sidebar">
-      <SidebarHeader>
-        <SidebarMenu>
+      <SidebarHeader className="relative flex flex-row items-center gap-2 border-b p-0">
+        <SidebarMenu className="w-full">
           <SidebarMenuItem>
             <SidebarMenuButton
               render={<Link href="/" aria-label="Trade Journal home" />}
               size="lg"
               tooltip="Trade Journal"
-              className="gap-2.5"
+              className="gap-2.5 rounded-none"
             >
               <LuxAlgoMark className="h-[18px] w-5 shrink-0" />
               <span className="text-sm font-semibold tracking-tight group-data-[collapsible=icon]:hidden">
                 Trade Journal
               </span>
             </SidebarMenuButton>
-            <SidebarTrigger className="ml-auto h-7 w-7 rounded-md shadow-sm [&_svg]:size-4" />
+            <SidebarTrigger
+              aria-label="Toggle sidebar"
+              className="journal-sidebar-trigger absolute h-7 w-7 rounded-full border bg-background shadow-sm [&_svg]:size-3.5"
+            />
           </SidebarMenuItem>
         </SidebarMenu>
       </SidebarHeader>
@@ -184,7 +186,6 @@ export function AppSidebar() {
           <div>Not investment advice.</div>
         </div>
       </SidebarFooter>
-      <SidebarRail />
     </Sidebar>
   );
 }
