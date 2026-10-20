@@ -1,29 +1,20 @@
-"use client"
+"use client";
 
-import * as React from "react"
-import { Tooltip as TooltipPrimitive } from "@base-ui/react/tooltip"
-import { CircleHelp } from "lucide-react"
-import { cn } from "cn"
+import * as React from "react";
+import { Tooltip as TooltipPrimitive } from "@base-ui/react/tooltip";
+import { CircleHelp } from "lucide-react";
+import { cn } from "cn";
 
-function TooltipProvider({
-  delay = 0,
-  ...props
-}: TooltipPrimitive.Provider.Props) {
-  return (
-    <TooltipPrimitive.Provider
-      data-slot="tooltip-provider"
-      delay={delay}
-      {...props}
-    />
-  )
+function TooltipProvider({ delay = 0, ...props }: TooltipPrimitive.Provider.Props) {
+  return <TooltipPrimitive.Provider data-slot="tooltip-provider" delay={delay} {...props} />;
 }
 
 function Tooltip({ ...props }: TooltipPrimitive.Root.Props) {
-  return <TooltipPrimitive.Root data-slot="tooltip" {...props} />
+  return <TooltipPrimitive.Root data-slot="tooltip" {...props} />;
 }
 
 function TooltipTrigger({ ...props }: TooltipPrimitive.Trigger.Props) {
-  return <TooltipPrimitive.Trigger data-slot="tooltip-trigger" {...props} />
+  return <TooltipPrimitive.Trigger data-slot="tooltip-trigger" {...props} />;
 }
 
 function TooltipContent({
@@ -35,10 +26,7 @@ function TooltipContent({
   children,
   ...props
 }: TooltipPrimitive.Popup.Props &
-  Pick<
-    TooltipPrimitive.Positioner.Props,
-    "align" | "alignOffset" | "side" | "sideOffset"
-  >) {
+  Pick<TooltipPrimitive.Positioner.Props, "align" | "alignOffset" | "side" | "sideOffset">) {
   return (
     <TooltipPrimitive.Portal>
       <TooltipPrimitive.Positioner
@@ -52,7 +40,7 @@ function TooltipContent({
           data-slot="tooltip-content"
           className={cn(
             "z-50 inline-flex w-fit max-w-xs origin-(--transform-origin) items-center gap-1.5 rounded-md bg-foreground px-3 py-1.5 text-xs text-background has-data-[slot=kbd]:pr-1.5 data-[side=bottom]:slide-in-from-top-2 data-[side=inline-end]:slide-in-from-left-2 data-[side=inline-start]:slide-in-from-right-2 data-[side=left]:slide-in-from-right-2 data-[side=right]:slide-in-from-left-2 data-[side=top]:slide-in-from-bottom-2 **:data-[slot=kbd]:relative **:data-[slot=kbd]:isolate **:data-[slot=kbd]:z-50 **:data-[slot=kbd]:rounded-sm data-[state=delayed-open]:animate-in data-[state=delayed-open]:fade-in-0 data-[state=delayed-open]:zoom-in-95 data-open:animate-in data-open:fade-in-0 data-open:zoom-in-95 data-closed:animate-out data-closed:fade-out-0 data-closed:zoom-out-95",
-            className
+            className,
           )}
           {...props}
         >
@@ -61,7 +49,7 @@ function TooltipContent({
         </TooltipPrimitive.Popup>
       </TooltipPrimitive.Positioner>
     </TooltipPrimitive.Portal>
-  )
+  );
 }
 
 // HoverHint: wraps trigger children with a tooltip, short-circuits when content is null
@@ -73,14 +61,14 @@ function HoverHint({
   side,
   delay: delayDuration,
 }: {
-  children: React.ReactNode
-  heading?: string
-  content?: React.ReactNode | null
-  align?: TooltipPrimitive.Positioner.Props["align"]
-  side?: TooltipPrimitive.Positioner.Props["side"]
-  delay?: number
+  children: React.ReactNode;
+  heading?: string;
+  content?: React.ReactNode | null;
+  align?: TooltipPrimitive.Positioner.Props["align"];
+  side?: TooltipPrimitive.Positioner.Props["side"];
+  delay?: number;
 }) {
-  if (heading === undefined && (content === undefined || content === null)) return <>{children}</>
+  if (heading === undefined && (content === undefined || content === null)) return <>{children}</>;
   return (
     <TooltipProvider delay={delayDuration ?? 350}>
       <Tooltip>
@@ -93,15 +81,17 @@ function HoverHint({
               {content}
             </>
           ) : (
-            heading ?? content
+            (heading ?? content)
           )}
         </TooltipContent>
       </Tooltip>
     </TooltipProvider>
-  )
+  );
 }
 
-// HelpHint: icon-trigger tooltip using CircleHelp
+// HelpHint: icon-trigger tooltip using CircleHelp.
+// `children` is the tooltip BODY (not the trigger). The trigger is always the
+// CircleHelp icon button so the description never renders inline by accident.
 function HelpHint({
   children,
   heading,
@@ -110,33 +100,38 @@ function HelpHint({
   side,
   delay: delayDuration,
 }: {
-  children?: React.ReactNode
-  heading?: string
-  content?: React.ReactNode | null
-  align?: TooltipPrimitive.Positioner.Props["align"]
-  side?: TooltipPrimitive.Positioner.Props["side"]
-  delay?: number
+  children?: React.ReactNode;
+  heading?: string;
+  content?: React.ReactNode | null;
+  align?: TooltipPrimitive.Positioner.Props["align"];
+  side?: TooltipPrimitive.Positioner.Props["side"];
+  delay?: number;
 }) {
-  if (heading === undefined && content === undefined) return <>{children}</>
-  if (heading === undefined && content === null) return <>{children}</>
+  const body = content ?? children;
+  if (heading === undefined && (body === undefined || body === null)) return null;
   return (
     <TooltipProvider delay={delayDuration ?? 350}>
       <Tooltip>
-        <TooltipTrigger>{children ?? <CircleHelp className="size-4" />}</TooltipTrigger>
+        <TooltipTrigger
+          aria-label={heading ? `About ${heading}` : "More information"}
+          className="inline-flex h-6 w-6 shrink-0 items-center justify-center rounded-md text-muted-foreground/70 transition-colors hover:bg-accent hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+        >
+          <CircleHelp aria-hidden="true" className="h-3.5 w-3.5" />
+        </TooltipTrigger>
         <TooltipContent align={align} side={side}>
-          {heading && content ? (
+          {heading && body ? (
             <>
               <span className="font-semibold">{heading}</span>
               <br />
-              {content}
+              {body}
             </>
           ) : (
-            heading ?? content
+            (heading ?? body)
           )}
         </TooltipContent>
       </Tooltip>
     </TooltipProvider>
-  )
+  );
 }
 
-export { Tooltip, TooltipTrigger, TooltipContent, TooltipProvider, HoverHint, HelpHint }
+export { Tooltip, TooltipTrigger, TooltipContent, TooltipProvider, HoverHint, HelpHint };
