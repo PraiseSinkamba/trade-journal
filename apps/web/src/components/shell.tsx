@@ -104,6 +104,7 @@ export function AppSidebar() {
                 Trade Journal
               </span>
             </SidebarMenuButton>
+            <SidebarTrigger className="ml-auto h-7 w-7 rounded-md shadow-sm group-data-[collapsible=icon]:hidden [&_svg]:size-4" />
           </SidebarMenuItem>
         </SidebarMenu>
       </SidebarHeader>
@@ -165,33 +166,6 @@ export function AppSidebar() {
       </SidebarContent>
 
       <SidebarFooter className="gap-2 border-t p-3">
-        {/*
-         * CONCERN (task-22): DictationMenuItem and VoiceNotesMenuItem are named in the brief
-         * as custom footer slots to preserve, but neither exists as a standalone component.
-         * VoiceNote is a page-level component; it has no sidebar-menu-item variant.
-         * DashboardCustomizerMenuItem also does not exist as a sidebar component.
-         * Placeholder ghost buttons are rendered here; implement dedicated wrappers if those
-         * features migrate into the sidebar.
-         */}
-        <div className="flex flex-col gap-1">
-          <Button
-            variant="ghost"
-            size="sm"
-            className="w-full justify-start gap-2 text-sidebar-foreground/70 hover:bg-sidebar-accent hover:text-sidebar-accent-foreground"
-          >
-            <Mic className="h-4 w-4 shrink-0" />
-            <span className="truncate text-xs">Dictate</span>
-          </Button>
-          <Button
-            variant="ghost"
-            size="sm"
-            className="w-full justify-start gap-2 text-sidebar-foreground/70 hover:bg-sidebar-accent hover:text-sidebar-accent-foreground"
-          >
-            <Settings2 className="h-4 w-4 shrink-0" />
-            <span className="truncate text-xs">Customize</span>
-          </Button>
-        </div>
-
         {/* Theme + Privacy toggles — collapse to icons when sidebar is collapsed */}
         <SidebarFooterToggles />
 
