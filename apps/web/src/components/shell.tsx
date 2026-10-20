@@ -89,7 +89,7 @@ export function AppSidebar() {
 
   return (
     <Sidebar collapsible="icon" className="bg-sidebar">
-      <SidebarHeader className="relative flex flex-row items-center gap-2 border-b p-0">
+      <SidebarHeader className="relative flex min-h-14 flex-row items-center gap-2 border-b px-4">
         <SidebarMenu className="w-full">
           <SidebarMenuItem>
             <SidebarMenuButton
