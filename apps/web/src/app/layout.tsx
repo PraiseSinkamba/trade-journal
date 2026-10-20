@@ -20,7 +20,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
         <script dangerouslySetInnerHTML={{ __html: THEME_INIT_SCRIPT }} />
       </head>
       <body className="min-h-screen font-sans antialiased">
-        <TooltipProvider delayDuration={350} skipDelayDuration={150}>
+        <TooltipProvider delay={350}>
           <Suspense>
             <ThemeProvider>
               <PrivacyProvider>
