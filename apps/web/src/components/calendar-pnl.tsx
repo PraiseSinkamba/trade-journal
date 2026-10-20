@@ -1,6 +1,4 @@
 "use client";
-import { HoverHint } from "./ui/tooltip";
-
 import Link from "next/link";
 import { useSearchParams } from "next/navigation";
 import type { CalendarMonth } from "@luxalgo/journal-core";
@@ -9,6 +7,11 @@ import { Pnl } from "./pnl";
 import { MonetaryValue, usePrivacy } from "./privacy";
 import type { CalendarPnlPoint } from "@/lib/calendar-insights";
 import { CalendarDayPreview } from "./calendar-day-preview";
+import {
+  HoverCard,
+  HoverCardContent,
+  HoverCardTrigger,
+} from "./ui/hover-card";
 
 const compactFormatters = new Map<string, Intl.NumberFormat>();
 const compactMoney = (value: number, currency: string) => {
@@ -114,44 +117,33 @@ function CalendarWeekRow({
               ? "loss"
               : "neutral";
         return (
-          <HoverHint
-            key={day.date}
-            heading={day.date}
-            content={
-              runningPnl ? (
-                <CalendarDayPreview
-                  points={runningPnl[day.date] ?? []}
-                  total={day.netPnl}
-                  trades={day.trades}
-                  currency={currency}
-                  monetary={monetary}
+          <HoverCard key={day.date}>
+            <HoverCardTrigger
+              delay={350}
+              closeDelay={150}
+              render={
+                <Link
+                  href={`/journal/${day.date}?${search}`}
+                  aria-label={`${day.date}, ${!monetary ? "Multiple currencies" : privacy ? "P&L hidden" : fmtMoney(day.netPnl, currency)}, ${day.trades} trades`}
+                  className={cn(
+                    "journal-calendar-day journal-calendar-day-link min-w-0 rounded-md border",
+                    !traded && "border-transparent bg-muted/30",
+                  )}
+                  data-performance={performance}
+                  style={
+                    traded && monetary
+                      ? {
+                          backgroundColor: `color-mix(in oklab, ${
+                            performance === "profit"
+                              ? "var(--profit-fill)"
+                              : performance === "loss"
+                                ? "var(--loss)"
+                                : "var(--neutral-mid)"
+                          } ${Math.round(intensity * 100)}%, var(--card))`,
+                        }
+                      : undefined
+                  }
                 />
-              ) : (
-                `${!monetary ? "Multiple currencies" : privacy ? "P&L hidden" : fmtMoney(day.netPnl, currency)} · ${day.trades} trades`
-              )
-            }
-          >
-            <Link
-              key={day.date}
-              href={`/journal/${day.date}?${search}`}
-              aria-label={`${day.date}, ${!monetary ? "Multiple currencies" : privacy ? "P&L hidden" : fmtMoney(day.netPnl, currency)}, ${day.trades} trades`}
-              className={cn(
-                "journal-calendar-day journal-calendar-day-link min-w-0 rounded-md border",
-                !traded && "border-transparent bg-muted/30",
-              )}
-              data-performance={performance}
-              style={
-                traded && monetary
-                  ? {
-                      backgroundColor: `color-mix(in oklab, ${
-                        performance === "profit"
-                          ? "var(--profit-fill)"
-                          : performance === "loss"
-                            ? "var(--loss)"
-                            : "var(--neutral-mid)"
-                      } ${Math.round(intensity * 100)}%, var(--card))`,
-                    }
-                  : undefined
               }
             >
               <div className="text-muted-foreground">{Number(day.date.slice(8))}</div>
@@ -176,8 +168,22 @@ function CalendarWeekRow({
                   </div>
                 </>
               )}
-            </Link>
-          </HoverHint>
+            </HoverCardTrigger>
+            <HoverCardContent className="w-72 space-y-2">
+              <div className="font-semibold">{day.date}</div>
+              {runningPnl ? (
+                <CalendarDayPreview
+                  points={runningPnl[day.date] ?? []}
+                  total={day.netPnl}
+                  trades={day.trades}
+                  currency={currency}
+                  monetary={monetary}
+                />
+              ) : (
+                `${!monetary ? "Multiple currencies" : privacy ? "P&L hidden" : fmtMoney(day.netPnl, currency)} · ${day.trades} trades`
+              )}
+            </HoverCardContent>
+          </HoverCard>
         );
       })}
       <div className="journal-calendar-week flex rounded-md bg-muted/40 p-1.5">
