@@ -34,6 +34,7 @@ import {
   SidebarMenuButton,
   SidebarMenuItem,
   SidebarProvider,
+  SidebarRail,
   SidebarSeparator,
   SidebarTrigger,
   SidebarInset,
@@ -89,12 +90,22 @@ export function AppSidebar() {
 
   return (
     <Sidebar collapsible="icon" className="bg-sidebar">
-      <SidebarHeader className="flex flex-row items-center gap-2.5 px-3">
-        <Link href="/" className="flex items-center gap-2.5">
-          <LuxAlgoMark className="h-[18px] w-5 shrink-0" />
-          <span className="text-sm font-semibold tracking-tight">Trade Journal</span>
-        </Link>
-        <SidebarTrigger className="ml-auto h-7 w-7 rounded-full shadow-sm" />
+      <SidebarHeader>
+        <SidebarMenu>
+          <SidebarMenuItem>
+            <SidebarMenuButton
+              render={<Link href="/" aria-label="Trade Journal home" />}
+              size="lg"
+              tooltip="Trade Journal"
+              className="gap-2.5"
+            >
+              <LuxAlgoMark className="h-[18px] w-5 shrink-0" />
+              <span className="text-sm font-semibold tracking-tight group-data-[collapsible=icon]:hidden">
+                Trade Journal
+              </span>
+            </SidebarMenuButton>
+          </SidebarMenuItem>
+        </SidebarMenu>
       </SidebarHeader>
 
       <SidebarContent>
@@ -115,9 +126,7 @@ export function AppSidebar() {
                         : "text-sidebar-foreground/70 hover:bg-sidebar-accent hover:text-sidebar-accent-foreground",
                     )}
                   >
-                    <Icon
-                      className={cn("h-4 w-4 shrink-0", active && "text-[var(--brand)]")}
-                    />
+                    <Icon className={cn("h-4 w-4 shrink-0", active && "text-[var(--brand)]")} />
                     <span className="truncate">{label}</span>
                   </SidebarMenuButton>
                 </SidebarMenuItem>
@@ -186,7 +195,7 @@ export function AppSidebar() {
         {/* Theme + Privacy toggles — collapse to icons when sidebar is collapsed */}
         <SidebarFooterToggles />
 
-        <div className="space-y-1 border-t pt-2 text-xs text-sidebar-foreground/50">
+        <div className="space-y-1 border-t pt-2 text-xs text-sidebar-foreground/50 group-data-[collapsible=icon]:hidden">
           <div>
             Open source ·{" "}
             <a
@@ -201,6 +210,7 @@ export function AppSidebar() {
           <div>Not investment advice.</div>
         </div>
       </SidebarFooter>
+      <SidebarRail />
     </Sidebar>
   );
 }
