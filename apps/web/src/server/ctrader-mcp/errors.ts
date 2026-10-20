@@ -1,9 +1,4 @@
-export type CTraderMcpSyncErrorKind =
-  | "unreachable"
-  | "auth"
-  | "rate_limited"
-  | "parse"
-  | "unknown";
+export type CTraderMcpSyncErrorKind = "unreachable" | "auth" | "rate_limited" | "parse" | "unknown";
 
 export class CTraderMcpSyncError extends Error {
   constructor(
@@ -22,10 +17,7 @@ export class CTraderMcpConnectError extends CTraderMcpSyncError {
   }
 }
 
-const ERROR_MESSAGES: Record<
-  CTraderMcpSyncErrorKind,
-  (ctx?: { endpoint?: string }) => string
-> = {
+const ERROR_MESSAGES: Record<CTraderMcpSyncErrorKind, (ctx?: { endpoint?: string }) => string> = {
   unreachable: ({ endpoint } = {}) =>
     endpoint
       ? `Can't reach cTrader MCP at ${endpoint}. Check the URL and that the desktop is running.`
@@ -44,11 +36,7 @@ export const classifyMcpError = (
   if (error instanceof CTraderMcpSyncError) return error;
   const message = error instanceof Error ? error.message : String(error);
   if (/ECONNREFUSED|ENOTFOUND|fetch failed|network/i.test(message)) {
-    return new CTraderMcpSyncError(
-      "unreachable",
-      ERROR_MESSAGES.unreachable(ctx),
-      error,
-    );
+    return new CTraderMcpSyncError("unreachable", ERROR_MESSAGES.unreachable(ctx), error);
   }
   if (/401|403|unauthor/i.test(message)) {
     return new CTraderMcpSyncError("auth", ERROR_MESSAGES.auth(), error);

@@ -57,7 +57,11 @@ const fetchCTraderBalanceForCredentials = async (
     typeof credentials.authHeader === "string" && credentials.authHeader
       ? credentials.authHeader
       : undefined;
-  const client = new CTraderMcpClient({ mode: "local", endpoint, ...(authHeader ? { authHeader } : {}) });
+  const client = new CTraderMcpClient({
+    mode: "local",
+    endpoint,
+    ...(authHeader ? { authHeader } : {}),
+  });
   try {
     await client.initialize();
     const balance = await getAccountBalance(client);
@@ -89,20 +93,13 @@ export const POST = handler(async (request: Request) => {
   // bad credentials shouldn't strand a half-created account.
   let initialBalance = body.initialBalance ?? 0;
   let currency = body.currency ?? "USD";
-  if (
-    body.kind === "sync" &&
-    body.broker === "ctrader-mcp" &&
-    body.credentials
-  ) {
+  if (body.kind === "sync" && body.broker === "ctrader-mcp" && body.credentials) {
     try {
       const fetched = await fetchCTraderBalanceForCredentials(body.credentials);
       if (!(initialBalance > 0)) initialBalance = fetched.balance;
       if (!body.currency) currency = fetched.currency;
     } catch (error) {
-      const err =
-        error instanceof CTraderMcpSyncError
-          ? error
-          : classifyMcpError(error);
+      const err = error instanceof CTraderMcpSyncError ? error : classifyMcpError(error);
       return bad(err.message, 502);
     }
   }

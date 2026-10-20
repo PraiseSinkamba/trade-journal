@@ -65,10 +65,7 @@ const creds = {
   ctraderAccountId: 42,
 };
 
-const addAccount = (
-  id: string,
-  extra: Partial<typeof accounts.$inferInsert> = {},
-) => {
+const addAccount = (id: string, extra: Partial<typeof accounts.$inferInsert> = {}) => {
   db.insert(accounts)
     .values({
       id,
@@ -190,17 +187,9 @@ describe("syncCTraderMcpAccount (Local)", () => {
     const out = await syncCTraderMcpAccount(accountId);
     expect(out.inserted).toBe(2);
 
-    const rows = db
-      .select()
-      .from(executions)
-      .where(eq(executions.accountId, accountId))
-      .all();
+    const rows = db.select().from(executions).where(eq(executions.accountId, accountId)).all();
     expect(rows.length).toBe(2);
-    const trade = db
-      .select()
-      .from(trades)
-      .where(eq(trades.accountId, accountId))
-      .get();
+    const trade = db.select().from(trades).where(eq(trades.accountId, accountId)).get();
     expect(trade).toBeTruthy();
     expect(trade!.status).toBe("loss");
     expect(trade!.grossPnl).toBeCloseTo(-10.79, 2);
@@ -372,9 +361,7 @@ describe("syncCTraderMcpAccount (Local)", () => {
   });
 
   it("throws when account not found", async () => {
-    await expect(syncCTraderMcpAccount("not-found")).rejects.toThrow(
-      "Account not found",
-    );
+    await expect(syncCTraderMcpAccount("not-found")).rejects.toThrow("Account not found");
   });
 
   it("throws when account is not broker-connected", async () => {
@@ -464,11 +451,7 @@ describe("syncCTraderMcpAccount (Local)", () => {
     const out = await syncCTraderMcpAccount(accountId);
     expect(out.inserted).toBe(2);
 
-    const trade = db
-      .select()
-      .from(trades)
-      .where(eq(trades.accountId, accountId))
-      .get();
+    const trade = db.select().from(trades).where(eq(trades.accountId, accountId)).get();
     expect(trade).toBeTruthy();
     expect(trade!.status).toBe("loss");
     // (14:01:25 - 13:30:00) in milliseconds = 1,885,056 ms
@@ -525,11 +508,7 @@ describe("syncCTraderMcpAccount (Local)", () => {
     const out = await syncCTraderMcpAccount(accountId);
     expect(out.inserted).toBe(2);
 
-    const trade = db
-      .select()
-      .from(trades)
-      .where(eq(trades.accountId, accountId))
-      .get();
+    const trade = db.select().from(trades).where(eq(trades.accountId, accountId)).get();
     expect(trade).toBeTruthy();
     expect(trade!.status).toBe("loss");
     // No order history → entry uses close time → durationMs=0

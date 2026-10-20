@@ -24,8 +24,7 @@ const RAW_HTTP_IN_CARVEOUT =
 
 // Identifier token for axios / node-fetch (catches imports + member-call forms like axios.get).
 // Negative lookbehind (?<![.\w$]) ensures myAxios or $.axios are not matched.
-const IDENT_AXIOS_IN_CARVEOUT =
-  /(?<![.\w$])(?:axios|node-fetch|nodeFetch)(?![.\w])/;
+const IDENT_AXIOS_IN_CARVEOUT = /(?<![.\w$])(?:axios|node-fetch|nodeFetch)(?![.\w])/;
 
 // Outside the carve-out: only axios, node-fetch, http.get/http.post are flagged.
 // fetch() is a legitimate Node 18+ global used throughout the codebase.
@@ -33,8 +32,7 @@ const RAW_HTTP_OUTSIDE_CARVEOUT =
   /(?<![.\w$])(?:axios|node-fetch)\(|(?<![.\w$])http\.(?:get|post)\(/;
 
 // Identifier token for axios / node-fetch outside the carve-out.
-const IDENT_AXIOS_OUTSIDE_CARVEOUT =
-  /(?<![.\w$])(?:axios|node-fetch|nodeFetch)(?![.\w])/;
+const IDENT_AXIOS_OUTSIDE_CARVEOUT = /(?<![.\w$])(?:axios|node-fetch|nodeFetch)(?![.\w])/;
 
 describe("ADR 0002 boundary", () => {
   it("forbids raw HTTP inside the cTrader MCP carve-out folder", async () => {
@@ -47,7 +45,7 @@ describe("ADR 0002 boundary", () => {
             file +
             ": " +
             JSON.stringify(bareMatches) +
-            ". Use @ai-sdk/mcp for MCP calls inside apps/web/src/server/ctrader-mcp/**."
+            ". Use @ai-sdk/mcp for MCP calls inside apps/web/src/server/ctrader-mcp/**.",
         );
       }
       const identMatches = src.match(IDENT_AXIOS_IN_CARVEOUT);
@@ -57,7 +55,7 @@ describe("ADR 0002 boundary", () => {
             file +
             ": " +
             JSON.stringify(identMatches) +
-            ". Use @ai-sdk/mcp for MCP calls inside apps/web/src/server/ctrader-mcp/**."
+            ". Use @ai-sdk/mcp for MCP calls inside apps/web/src/server/ctrader-mcp/**.",
         );
       }
     }
@@ -77,7 +75,7 @@ describe("ADR 0002 boundary", () => {
             file +
             ": " +
             JSON.stringify(bareMatches) +
-            ". Only fetch() (Node 18+ global) is permitted outside the carve-out."
+            ". Only fetch() (Node 18+ global) is permitted outside the carve-out.",
         );
       }
       const identMatches = src.match(IDENT_AXIOS_OUTSIDE_CARVEOUT);
@@ -87,7 +85,7 @@ describe("ADR 0002 boundary", () => {
             file +
             ": " +
             JSON.stringify(identMatches) +
-            ". Only fetch() (Node 18+ global) is permitted outside the carve-out."
+            ". Only fetch() (Node 18+ global) is permitted outside the carve-out.",
         );
       }
     }
@@ -136,7 +134,6 @@ describe("ADR 0002 boundary", () => {
   });
 
   // ---- End identifier scans ----
-
 
   // or cTrader-specific identifiers (CTraderMcpClient, CTraderMcpSyncError).
   // Allows Pepperstone/IC Markets format files that mention "cTrader" as a platform

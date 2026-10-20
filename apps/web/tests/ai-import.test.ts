@@ -22,11 +22,8 @@ const scratch = mkdtempSync(join(tmpdir(), "journal-ai-import-"));
 process.env.JOURNAL_DATA_DIR = scratch;
 const { db, accounts, executions, trades, settings } = await import("../src/db");
 const { setAiKey, setSetting } = await import("../src/server/settings");
-const {
-  parseStatementWithAi,
-  validateAiExtraction,
-  readAiImportPreview,
-} = await import("../src/server/ai-import");
+const { parseStatementWithAi, validateAiExtraction, readAiImportPreview } =
+  await import("../src/server/ai-import");
 const { AiRuntimeError } = await import("../src/server/ai-contracts");
 const { POST } = await import("../src/app/api/import/route");
 const valid = () => ({

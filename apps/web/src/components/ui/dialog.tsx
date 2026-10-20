@@ -1,17 +1,20 @@
-"use client"
+"use client";
 
-import * as React from "react"
-import * as DialogPrimitive from "@radix-ui/react-dialog"
-import { X } from "lucide-react"
-import { cn } from "@/lib/utils"
+import * as React from "react";
+import * as DialogPrimitive from "@radix-ui/react-dialog";
+import { X } from "lucide-react";
+import { cn } from "@/lib/utils";
 
-const Dialog = DialogPrimitive.Root
-const DialogTrigger = DialogPrimitive.Trigger
+const Dialog = DialogPrimitive.Root;
+const DialogTrigger = DialogPrimitive.Trigger;
 
 // DialogClose added (was missing in original, now exported from registry)
-const DialogClose = DialogPrimitive.Close
+const DialogClose = DialogPrimitive.Close;
 
-function DialogOverlay({ className, ...props }: React.ComponentProps<typeof DialogPrimitive.Overlay>) {
+function DialogOverlay({
+  className,
+  ...props
+}: React.ComponentProps<typeof DialogPrimitive.Overlay>) {
   return (
     <DialogPrimitive.Overlay
       className={cn(
@@ -20,7 +23,7 @@ function DialogOverlay({ className, ...props }: React.ComponentProps<typeof Dial
       )}
       {...props}
     />
-  )
+  );
 }
 
 function DialogContent({
@@ -46,11 +49,11 @@ function DialogContent({
         </DialogPrimitive.Close>
       </DialogPrimitive.Content>
     </DialogPrimitive.Portal>
-  )
+  );
 }
 
 function DialogHeader({ className, ...props }: React.ComponentProps<"div">) {
-  return <div className={cn("flex flex-col space-y-1.5", className)} {...props} />
+  return <div className={cn("flex flex-col space-y-1.5", className)} {...props} />;
 }
 
 // ponytail: original had small/uppercase title (matching CardTitle) — restored
@@ -63,29 +66,29 @@ function DialogTitle({ className, ...props }: React.ComponentProps<typeof Dialog
       )}
       {...props}
     />
-  )
+  );
 }
 
-function DialogDescription({ className, ...props }: React.ComponentProps<typeof DialogPrimitive.Description>) {
+function DialogDescription({
+  className,
+  ...props
+}: React.ComponentProps<typeof DialogPrimitive.Description>) {
   return (
     <DialogPrimitive.Description
       className={cn("text-sm text-muted-foreground", className)}
       {...props}
     />
-  )
+  );
 }
 
 // DialogFooter added (was missing in original, now exported from registry)
 function DialogFooter({ className, ...props }: React.ComponentProps<"div">) {
   return (
     <div
-      className={cn(
-        "flex flex-col-reverse gap-2 sm:flex-row sm:justify-end",
-        className,
-      )}
+      className={cn("flex flex-col-reverse gap-2 sm:flex-row sm:justify-end", className)}
       {...props}
     />
-  )
+  );
 }
 
 export {
@@ -97,4 +100,4 @@ export {
   DialogHeader,
   DialogTitle,
   DialogTrigger,
-}
+};

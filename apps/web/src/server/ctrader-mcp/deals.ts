@@ -1,10 +1,6 @@
 import type { ImportedExecution } from "@luxalgo/journal-importers";
 import type { CTraderMcpClient } from "./client";
-import {
-  cTraderDealsResponseSchema,
-  type AssetClass,
-  type CTraderDeal,
-} from "./schemas";
+import { cTraderDealsResponseSchema, type AssetClass, type CTraderDeal } from "./schemas";
 
 export interface FetchDealsArgs {
   count?: number;

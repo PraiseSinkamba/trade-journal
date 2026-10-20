@@ -1,14 +1,14 @@
-"use client"
+"use client";
 
-import * as React from "react"
-import * as SelectPrimitive from "@radix-ui/react-select"
-import { Check, ChevronDown, ChevronUp } from "lucide-react"
-import { cn } from "@/lib/utils"
+import * as React from "react";
+import * as SelectPrimitive from "@radix-ui/react-select";
+import { Check, ChevronDown, ChevronUp } from "lucide-react";
+import { cn } from "@/lib/utils";
 
 // ponytail: using @radix-ui/react-select (installed); --radix-* fallbacks retained as
 // comments for any consumer CSS that references them. Tailwind utilities take priority.
-const Select = SelectPrimitive.Root
-const SelectValue = SelectPrimitive.Value
+const Select = SelectPrimitive.Root;
+const SelectValue = SelectPrimitive.Value;
 
 // Original trigger: custom styling with --radix-* CSS vars. Registry Tailwind utilities
 // take priority; --radix-* references kept as no-op fallbacks for consumer CSS.
@@ -31,7 +31,7 @@ function SelectTrigger({
         <ChevronDown className="h-4 w-4 shrink-0 opacity-50" />
       </SelectPrimitive.Icon>
     </SelectPrimitive.Trigger>
-  )
+  );
 }
 
 // Original content used: journal-popup journal-menu-surface. Registry Tailwind classes
@@ -68,7 +68,7 @@ function SelectContent({
         </SelectPrimitive.ScrollDownButton>
       </SelectPrimitive.Content>
     </SelectPrimitive.Portal>
-  )
+  );
 }
 
 function SelectItem({
@@ -91,19 +91,16 @@ function SelectItem({
       </span>
       <SelectPrimitive.ItemText>{children}</SelectPrimitive.ItemText>
     </SelectPrimitive.Item>
-  )
+  );
 }
 
-function SelectLabel({
-  className,
-  ...props
-}: React.ComponentProps<typeof SelectPrimitive.Label>) {
+function SelectLabel({ className, ...props }: React.ComponentProps<typeof SelectPrimitive.Label>) {
   return (
     <SelectPrimitive.Label
       className={cn("px-1.5 py-1 text-xs text-muted-foreground", className)}
       {...props}
     />
-  )
+  );
 }
 
 function SelectSeparator({
@@ -111,11 +108,8 @@ function SelectSeparator({
   ...props
 }: React.ComponentProps<typeof SelectPrimitive.Separator>) {
   return (
-    <SelectPrimitive.Separator
-      className={cn("-mx-1 my-1 h-px bg-border", className)}
-      {...props}
-    />
-  )
+    <SelectPrimitive.Separator className={cn("-mx-1 my-1 h-px bg-border", className)} {...props} />
+  );
 }
 
 // ScrollUpButton / ScrollDownButton preserved from original — present in backup
@@ -133,7 +127,7 @@ function SelectScrollUpButton({
     >
       <ChevronUp className="size-3.5" />
     </SelectPrimitive.ScrollUpButton>
-  )
+  );
 }
 
 function SelectScrollDownButton({
@@ -150,15 +144,12 @@ function SelectScrollDownButton({
     >
       <ChevronDown className="size-3.5" />
     </SelectPrimitive.ScrollDownButton>
-  )
+  );
 }
 
 // SelectGroup added for parity with registry
-function SelectGroup({
-  className,
-  ...props
-}: React.ComponentProps<typeof SelectPrimitive.Group>) {
-  return <SelectPrimitive.Group className={cn("p-1", className)} {...props} />
+function SelectGroup({ className, ...props }: React.ComponentProps<typeof SelectPrimitive.Group>) {
+  return <SelectPrimitive.Group className={cn("p-1", className)} {...props} />;
 }
 
 export {
@@ -172,4 +163,4 @@ export {
   SelectSeparator,
   SelectTrigger,
   SelectValue,
-}
+};

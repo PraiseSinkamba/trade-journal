@@ -1,13 +1,7 @@
 import type { CTraderMcpClient } from "./client";
-import {
-  cTraderSymbolsResponseSchema,
-  type CTraderSymbol,
-  type AssetClass,
-} from "./schemas";
+import { cTraderSymbolsResponseSchema, type CTraderSymbol, type AssetClass } from "./schemas";
 
-export const fetchSymbols = async (
-  client: CTraderMcpClient,
-): Promise<CTraderSymbol[]> => {
+export const fetchSymbols = async (client: CTraderMcpClient): Promise<CTraderSymbol[]> => {
   const out = await client.callTool("get_symbols", {}, cTraderSymbolsResponseSchema);
   return out.symbols;
 };
@@ -57,10 +51,7 @@ export const classifySymbol = (symbolName: string, description: string): AssetCl
 };
 
 /** Lookup helper; avoids building an intermediate Map per sync. */
-export const findAssetClass = (
-  symbols: CTraderSymbol[],
-  symbolName: string,
-): AssetClass => {
+export const findAssetClass = (symbols: CTraderSymbol[], symbolName: string): AssetClass => {
   const sym = symbols.find((s) => s.name === symbolName);
   if (!sym) return "other";
   const direct = mapCTraderAssetClass(sym.assetClass);

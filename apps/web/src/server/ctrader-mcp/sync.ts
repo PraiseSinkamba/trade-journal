@@ -11,10 +11,7 @@ import { fetchAllDeals, mapClosedPositionToExecutions, mapDealToExecution } from
 import { getPendingOrders } from "./orders";
 import { getOpenPositions } from "./positions";
 import { fetchSymbols, findAssetClass } from "./symbols";
-import {
-  fetchOrderHistory,
-  openingTimeByPosition,
-} from "./order-history";
+import { fetchOrderHistory, openingTimeByPosition } from "./order-history";
 import {
   type AssetClass,
   type CTraderBalance,
@@ -94,18 +91,23 @@ export const syncCTraderMcpAccount = async (accountId: string): Promise<SyncOutc
       const prior = closedDealByPosition.get(String(deal.positionId));
       if (!prior || deal.time > prior.time) closedDealByPosition.set(String(deal.positionId), deal);
     }
-    const historyFrom = deals.length > 0
-      ? deals.reduce((min, d) => (d.time < min ? d.time : min), deals[0]!.time)
-      : new Date(Date.now() - ORDER_HISTORY_LOOKBACK_MS).toISOString();
+    const historyFrom =
+      deals.length > 0
+        ? deals.reduce((min, d) => (d.time < min ? d.time : min), deals[0]!.time)
+        : new Date(Date.now() - ORDER_HISTORY_LOOKBACK_MS).toISOString();
     let openingTimes = new Map<string, string>();
     try {
       const orders = await fetchOrderHistory(client, { fromTime: historyFrom, toTime: syncedAt });
-      openingTimes = openingTimeByPosition(orders, new Map(
-        [...closedDealByPosition.entries()].map(([id, d]) => [id, { side: d.side }]),
-      ));
+      openingTimes = openingTimeByPosition(
+        orders,
+        new Map([...closedDealByPosition.entries()].map(([id, d]) => [id, { side: d.side }])),
+      );
     } catch (historyErr) {
       // Non-fatal: fall through with empty openingTimes → existing durationMs: 0 behavior.
-      console.warn("[ctrader-mcp] get_order_history failed; closed trades will have durationMs=0", historyErr);
+      console.warn(
+        "[ctrader-mcp] get_order_history failed; closed trades will have durationMs=0",
+        historyErr,
+      );
     }
 
     // Group deals by positionId. A group with ≥ 2 deals means both sides of

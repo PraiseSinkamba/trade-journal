@@ -38,23 +38,13 @@ describe("mapDealToExecution (Local)", () => {
   });
 
   it("maps Sell to sell and remaps stock to equity", () => {
-    const ex = mapDealToExecution(
-      { ...localDeal, side: "Sell" as const },
-      "EURUSD",
-      "stock",
-      1,
-    );
+    const ex = mapDealToExecution({ ...localDeal, side: "Sell" as const }, "EURUSD", "stock", 1);
     expect(ex.side).toBe("sell");
     expect(ex.assetClass).toBe("equity");
   });
 
   it("falls back to other when asset class is unknown", () => {
-    const ex = mapDealToExecution(
-      { ...localDeal, symbolName: "FOO" },
-      "FOO",
-      "other",
-      0,
-    );
+    const ex = mapDealToExecution({ ...localDeal, symbolName: "FOO" }, "FOO", "other", 0);
     expect(ex.assetClass).toBe("other");
   });
 });
@@ -65,9 +55,7 @@ describe("dealExecutionId", () => {
   });
 
   it("differs when any of orderId/time/filledVolume/executionPrice changes", () => {
-    expect(dealExecutionId(localDeal)).not.toBe(
-      dealExecutionId({ ...localDeal, orderId: 99999 }),
-    );
+    expect(dealExecutionId(localDeal)).not.toBe(dealExecutionId({ ...localDeal, orderId: 99999 }));
     expect(dealExecutionId(localDeal)).not.toBe(
       dealExecutionId({ ...localDeal, time: "2026-09-30T12:00:01Z" }),
     );
@@ -84,9 +72,7 @@ describe("fetchAllDeals (Local)", () => {
   it("calls get_deals once and returns its deals", async () => {
     const callTool = vi.fn().mockResolvedValue({ deals: [localDeal] });
     const fake = { initialize: async () => undefined, close: async () => undefined, callTool };
-    const out = await fetchAllDeals(
-      fake as unknown as Parameters<typeof fetchAllDeals>[0],
-    );
+    const out = await fetchAllDeals(fake as unknown as Parameters<typeof fetchAllDeals>[0]);
     expect(out).toEqual([localDeal]);
     expect(callTool).toHaveBeenCalledWith(
       "get_deals",
@@ -98,10 +84,9 @@ describe("fetchAllDeals (Local)", () => {
   it("respects an optional symbolName filter", async () => {
     const callTool = vi.fn().mockResolvedValue({ deals: [] });
     const fake = { initialize: async () => undefined, close: async () => undefined, callTool };
-    await fetchAllDeals(
-      fake as unknown as Parameters<typeof fetchAllDeals>[0],
-      { symbolName: "EURUSD" },
-    );
+    await fetchAllDeals(fake as unknown as Parameters<typeof fetchAllDeals>[0], {
+      symbolName: "EURUSD",
+    });
     expect(callTool).toHaveBeenCalledWith(
       "get_deals",
       expect.objectContaining({ symbolName: "EURUSD" }),
@@ -215,9 +200,7 @@ describe("deal × symbol join (Local)", () => {
       deals: [{ ...localDeal, symbolName: "NAS100" }],
     });
     const fake = { initialize: async () => undefined, close: async () => undefined, callTool };
-    const deals = await fetchAllDeals(
-      fake as unknown as Parameters<typeof fetchAllDeals>[0],
-    );
+    const deals = await fetchAllDeals(fake as unknown as Parameters<typeof fetchAllDeals>[0]);
     const symbols = [
       { name: "NAS100", description: "US Tech 100", category: "Indices", assetClass: "Indices" },
     ];

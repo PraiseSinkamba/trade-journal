@@ -397,14 +397,73 @@ body.dashboard-is-dragging .journal-hover-card {
 }
 .journal-desktop-sidebar {
   z-index: 40;
-  width: 13rem;
   transition: width 280ms cubic-bezier(0.22, 1, 0.36, 1);
 }
 .journal-desktop-sidebar[data-ready="false"] {
   transition: none;
 }
-.journal-desktop-sidebar[data-collapsed="true"] {
-  width: 4rem;
+.journal-desktop-sidebar > [data-slot="sidebar-inner"] {
+  background: color-mix(in oklab, var(--card) 50%, transparent);
+}
+/* Keep the original shell variants without changing registry buttons elsewhere. */
+.journal-shell-controls button,
+.journal-sidebar-trigger {
+  translate: none;
+}
+.journal-shell-controls button:not([aria-pressed]) {
+  border-width: 0;
+  background: transparent;
+}
+.journal-shell-controls button:not([aria-pressed]):hover,
+.journal-shell-controls button[aria-pressed="false"]:hover,
+.journal-sidebar-trigger:hover {
+  background: var(--accent);
+  color: var(--accent-foreground);
+}
+.journal-shell-controls button[aria-pressed="false"],
+.journal-sidebar-trigger {
+  border-color: var(--input);
+  background: transparent;
+}
+.journal-sidebar-trigger {
+  background: var(--background);
+}
+.journal-shell-controls button[aria-pressed] {
+  --tw-shadow: var(--shadow-sm);
+  box-shadow: var(--tw-shadow);
+}
+.journal-shell-controls button[aria-pressed="true"] {
+  border-width: 0;
+  background: var(--secondary);
+  color: var(--secondary-foreground);
+}
+.journal-shell-controls button[aria-pressed="true"]:hover {
+  background: color-mix(in oklab, var(--secondary) 80%, transparent);
+}
+.journal-shell-controls button:focus-visible,
+.journal-sidebar-trigger:focus-visible {
+  --tw-ring-shadow: 0 0 0 1px var(--ring);
+  box-shadow: var(--tw-ring-shadow), var(--tw-shadow, 0 0 #0000);
+}
+.journal-shell-controls button > svg,
+.journal-sidebar-trigger > svg {
+  width: 1rem;
+  height: 1rem;
+}
+/* The old sm variant, not footer offsets, determines the footer's height. */
+[data-slot="sidebar-footer"].journal-shell-controls button {
+  height: 2rem;
+  gap: 0.5rem;
+  padding-inline: 0.75rem;
+  border-radius: var(--radius-md);
+  font-size: 0.75rem;
+  line-height: 1rem;
+}
+.journal-desktop-sidebar[data-collapsed="true"] .journal-shell-controls button {
+  width: 2.25rem;
+  height: 2.25rem;
+  padding-inline: 0;
+  border-radius: var(--radius-lg);
 }
 .journal-sidebar-home {
   width: 100%;
@@ -665,17 +724,36 @@ body.dashboard-is-dragging .journal-hover-card {
 .journal-nav-drawer {
   height: 100dvh;
   padding-bottom: env(safe-area-inset-bottom);
+  transition: none;
 }
-.journal-nav-drawer[data-state="open"] {
+.journal-nav-drawer[data-starting-style],
+.journal-nav-drawer[data-ending-style] {
+  opacity: 1;
+  translate: none;
+}
+.journal-nav-drawer[data-open] {
   animation: journal-nav-in 300ms cubic-bezier(0.22, 1, 0.36, 1);
 }
-.journal-nav-drawer[data-state="closed"] {
+.journal-nav-drawer[data-ending-style] {
   animation: journal-nav-out 190ms ease-in;
 }
-.journal-nav-overlay[data-state="open"] {
+/* Scope the Sheet backdrop to journal navigation without changing other sheets. */
+[data-slot="sheet-overlay"]:has(~ [data-sidebar="sidebar"][data-mobile="true"]) {
+  z-index: 40;
+  background: rgb(0 0 0 / 0.55);
+  backdrop-filter: blur(var(--blur-sm, 8px));
+  transition: none;
+}
+[data-slot="sheet-overlay"]:has(
+    ~ [data-sidebar="sidebar"][data-mobile="true"]
+  )[data-starting-style],
+[data-slot="sheet-overlay"]:has(~ [data-sidebar="sidebar"][data-mobile="true"])[data-ending-style] {
+  opacity: 1;
+}
+[data-slot="sheet-overlay"]:has(~ [data-sidebar="sidebar"][data-mobile="true"])[data-open] {
   animation: journal-fade-in 220ms ease-out;
 }
-.journal-nav-overlay[data-state="closed"] {
+[data-slot="sheet-overlay"]:has(~ [data-sidebar="sidebar"][data-mobile="true"])[data-ending-style] {
   animation: journal-fade-out 190ms ease-in;
 }
 @keyframes journal-nav-in {
@@ -818,26 +896,6 @@ body.dashboard-is-dragging .journal-hover-card {
 /* The compact calendar keeps all seven days visible; weekly totals get their own row. */
 .journal-calendar {
   container: calendar / inline-size;
-}
-
-/* Sidebar header toggle — absolute-positioned on the right edge of the sidebar
- * header so it stays visible regardless of collapsed state, half-on the sidebar
- * and half-on the main content (mirror the original .journal-sidebar-trigger).
- */
-.journal-sidebar-trigger {
-  right: 0;
-  top: 50%;
-  z-index: 10;
-  transform: translate(50%, -50%);
-  transition:
-    color 160ms ease,
-    background-color 160ms ease,
-    border-color 160ms ease,
-    box-shadow 160ms ease,
-    transform 220ms cubic-bezier(0.22, 1, 0.36, 1);
-}
-.journal-sidebar-trigger:hover {
-  transform: translate(50%, -50%) scale(1.06);
 }
 
 /* Root class for react-day-picker Calendar (journal-date- prefixed for specificity). */
@@ -1052,7 +1110,7 @@ body.dashboard-is-dragging .journal-hover-card {
 }
 @media (prefers-reduced-motion: reduce) {
   .journal-nav-drawer,
-  .journal-nav-overlay {
+  [data-slot="sheet-overlay"]:has(~ [data-sidebar="sidebar"][data-mobile="true"]) {
     animation: none !important;
   }
 }

@@ -23,7 +23,10 @@ export const POST = handler(async (request: Request) => {
     const recap = await runAi(buildDailyRecapPrompt({ date: d, ...context }));
     return ok({ recap, scope: scope.scope });
   } catch (e) {
-    if (e instanceof Error && e.message === "No closed trades match this day and the selected filters") {
+    if (
+      e instanceof Error &&
+      e.message === "No closed trades match this day and the selected filters"
+    ) {
       return bad(e.message);
     }
     throw e;

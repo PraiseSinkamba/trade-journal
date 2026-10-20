@@ -79,7 +79,9 @@ const startServer = async (): Promise<number> => {
   });
 
   // Expose toolResponse setter via closure
-  (server as http.Server & { setToolResponse?: (r: unknown) => void }).setToolResponse = (r) => { toolResponse = r as typeof toolResponse; };
+  (server as http.Server & { setToolResponse?: (r: unknown) => void }).setToolResponse = (r) => {
+    toolResponse = r as typeof toolResponse;
+  };
 
   return portPromise;
 };
@@ -116,12 +118,16 @@ describe("CTraderMcpClient", () => {
     server = http.createServer(async (req, res) => {
       lastAuthHeader = req.headers.authorization ?? null;
       const chunks: Buffer[] = [];
-      for await (const chunk of req) { chunks.push(chunk as Buffer); }
+      for await (const chunk of req) {
+        chunks.push(chunk as Buffer);
+      }
       let body: Record<string, unknown> = {};
       try {
         const raw = Buffer.concat(chunks);
         if (raw.length > 0) body = JSON.parse(raw.toString("utf8"));
-      } catch { /* ignore */ }
+      } catch {
+        /* ignore */
+      }
       const method = (body as { method?: string }).method ?? "";
       const reqId = (body as { id?: unknown }).id ?? 1;
       let response: unknown;
@@ -179,9 +185,7 @@ describe("CTraderMcpClient", () => {
     });
     await client.initialize();
     const schema = z.object({ value: z.number() });
-    await expect(
-      client.callTool("ping", {}, schema),
-    ).rejects.toMatchObject({ kind: "parse" });
+    await expect(client.callTool("ping", {}, schema)).rejects.toMatchObject({ kind: "parse" });
   });
 
   it("classifies ECONNREFUSED as unreachable", async () => {

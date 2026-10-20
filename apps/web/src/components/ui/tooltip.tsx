@@ -4,12 +4,8 @@ import * as React from "react";
 import { Tooltip as TooltipPrimitive } from "@base-ui/react/tooltip";
 import { PreviewCard as PreviewCardPrimitive } from "@base-ui/react/preview-card";
 import { CircleHelp } from "lucide-react";
-import { cn } from "cn";
-import {
-  HoverCard,
-  HoverCardContent,
-  HoverCardTrigger,
-} from "@/components/ui/hover-card";
+import { cn } from "@/lib/utils";
+import { HoverCard, HoverCardContent, HoverCardTrigger } from "@/components/ui/hover-card";
 
 function TooltipProvider({ delay = 0, ...props }: TooltipPrimitive.Provider.Props) {
   return <TooltipPrimitive.Provider data-slot="tooltip-provider" delay={delay} {...props} />;
@@ -58,40 +54,50 @@ function TooltipContent({
   );
 }
 
-// HoverHint: wraps trigger children with a tooltip, short-circuits when content is null
+/** Show rich hover/focus help on the caller's element without adding a DOM wrapper. */
 function HoverHint({
   children,
   heading,
   content,
   align,
-  side,
+  side = "top",
   delay: delayDuration,
 }: {
-  children: React.ReactNode;
+  children: React.ReactElement<{
+    children?: React.ReactNode;
+    "aria-describedby"?: string;
+  }>;
   heading?: string;
   content?: React.ReactNode | null;
-  align?: TooltipPrimitive.Positioner.Props["align"];
-  side?: TooltipPrimitive.Positioner.Props["side"];
+  align?: PreviewCardPrimitive.Positioner.Props["align"];
+  side?: PreviewCardPrimitive.Positioner.Props["side"];
   delay?: number;
 }) {
-  if (heading === undefined && (content === undefined || content === null)) return <>{children}</>;
+  const descriptionId = React.useId();
+  if (content === null || (heading === undefined && content === undefined)) return children;
+
+  // Compose the element directly so Base UI merges its ref/events without changing link/button semantics.
+  const trigger = React.cloneElement(children, {
+    "aria-describedby": [children.props["aria-describedby"], descriptionId]
+      .filter(Boolean)
+      .join(" "),
+  });
   return (
-    <TooltipProvider delay={delayDuration ?? 350}>
-      <Tooltip>
-        <TooltipTrigger>{children}</TooltipTrigger>
-        <TooltipContent align={align} side={side}>
-          {heading && content ? (
-            <>
-              <span className="font-semibold">{heading}</span>
-              <br />
-              {content}
-            </>
-          ) : (
-            (heading ?? content)
-          )}
-        </TooltipContent>
-      </Tooltip>
-    </TooltipProvider>
+    <HoverCard>
+      <HoverCardTrigger render={trigger} delay={delayDuration ?? 350} closeDelay={150} />
+      <HoverCardContent
+        id={descriptionId}
+        role="tooltip"
+        align={align}
+        side={side}
+        className="flex flex-col gap-1"
+      >
+        {heading && <div className="font-semibold leading-none">{heading}</div>}
+        {content !== undefined && (
+          <div className="text-muted-foreground text-pretty text-sm leading-snug">{content}</div>
+        )}
+      </HoverCardContent>
+    </HoverCard>
   );
 }
 
@@ -114,19 +120,28 @@ function HelpHint({
   side?: PreviewCardPrimitive.Positioner.Props["side"];
   delay?: number;
 }) {
+  const descriptionId = React.useId();
   const body = content ?? children;
   if (heading === undefined && (body === undefined || body === null)) return null;
   return (
     <HoverCard>
       <HoverCardTrigger
+        render={<button type="button" />}
         delay={delayDuration ?? 350}
         closeDelay={150}
         aria-label={heading ? `About ${heading}` : "More information"}
+        aria-describedby={descriptionId}
         className="inline-flex h-6 w-6 shrink-0 items-center justify-center rounded-md text-muted-foreground/70 transition-colors hover:bg-accent hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
       >
         <CircleHelp aria-hidden="true" className="h-3.5 w-3.5" />
       </HoverCardTrigger>
-      <HoverCardContent align={align} side={side} className="space-y-1">
+      <HoverCardContent
+        id={descriptionId}
+        role="tooltip"
+        align={align}
+        side={side}
+        className="flex flex-col gap-1"
+      >
         {heading && <div className="font-semibold leading-none">{heading}</div>}
         {body && (
           <div className="text-muted-foreground text-pretty text-sm leading-snug">{body}</div>

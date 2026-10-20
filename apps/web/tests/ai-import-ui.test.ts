@@ -123,9 +123,7 @@ it("shows all extracted rows and requires review before committing the frozen pr
   await act(async () => button("Preview with AI").click());
   // The browser preview request must never serialize an apiKey, provider,
   // or model: those are now resolved on the server.
-  const previewCall = state.post.mock.calls.find(
-    (call) => isImportCall(call[1], "preview"),
-  );
+  const previewCall = state.post.mock.calls.find((call) => isImportCall(call[1], "preview"));
   expect(previewCall).toBeDefined();
   const previewBody = previewCall![1] as Record<string, unknown>;
   expect(previewBody).toMatchObject({
@@ -150,9 +148,7 @@ it("shows all extracted rows and requires review before committing the frozen pr
   await act(async () => button("Import").click());
   // Commit must not call a model: the request body carries the reviewed
   // preview token and the boolean AI intent — no apiKey, provider, or model.
-  const commitCall = state.post.mock.calls.find(
-    (call) => isImportCall(call[1], "commit"),
-  );
+  const commitCall = state.post.mock.calls.find((call) => isImportCall(call[1], "commit"));
   expect(commitCall).toBeDefined();
   const commitBody = commitCall![1] as Record<string, unknown>;
   expect(commitBody).toMatchObject({

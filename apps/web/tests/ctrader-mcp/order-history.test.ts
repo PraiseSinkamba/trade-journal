@@ -1,8 +1,5 @@
 import { describe, expect, it, vi } from "vitest";
-import {
-  fetchOrderHistory,
-  openingTimeByPosition,
-} from "@/server/ctrader-mcp/order-history";
+import { fetchOrderHistory, openingTimeByPosition } from "@/server/ctrader-mcp/order-history";
 import type { CTraderHistoricalOrder } from "@/server/ctrader-mcp/schemas";
 
 const baseOrder = (overrides: Partial<CTraderHistoricalOrder> = {}): CTraderHistoricalOrder => ({
@@ -112,10 +109,14 @@ describe("fetchOrderHistory (Local)", () => {
   });
 
   it("splits ranges longer than 30 days into multiple 30-day windows", async () => {
-    const callTool = vi.fn().mockImplementation((_name: string, args: { fromTimestamp: string }) => {
-      const start = new Date(args.fromTimestamp).getTime();
-      return Promise.resolve({ trades: [baseOrder({ positionId: start, openTime: new Date(start).toISOString() })] });
-    });
+    const callTool = vi
+      .fn()
+      .mockImplementation((_name: string, args: { fromTimestamp: string }) => {
+        const start = new Date(args.fromTimestamp).getTime();
+        return Promise.resolve({
+          trades: [baseOrder({ positionId: start, openTime: new Date(start).toISOString() })],
+        });
+      });
     const fake = { callTool, initialize: async () => undefined, close: async () => undefined };
     const out = await fetchOrderHistory(
       fake as unknown as Parameters<typeof fetchOrderHistory>[0],
@@ -136,10 +137,11 @@ describe("fetchOrderHistory (Local)", () => {
   it("passes symbolName through to the tool when provided", async () => {
     const callTool = vi.fn().mockResolvedValue({ trades: [] });
     const fake = { callTool, initialize: async () => undefined, close: async () => undefined };
-    await fetchOrderHistory(
-      fake as unknown as Parameters<typeof fetchOrderHistory>[0],
-      { fromTime: "2026-10-01T00:00:00.000Z", toTime: "2026-10-15T00:00:00.000Z", symbolName: "NAS100" },
-    );
+    await fetchOrderHistory(fake as unknown as Parameters<typeof fetchOrderHistory>[0], {
+      fromTime: "2026-10-01T00:00:00.000Z",
+      toTime: "2026-10-15T00:00:00.000Z",
+      symbolName: "NAS100",
+    });
     expect(callTool).toHaveBeenCalledWith(
       "get_order_history",
       expect.objectContaining({ symbolName: "NAS100" }),

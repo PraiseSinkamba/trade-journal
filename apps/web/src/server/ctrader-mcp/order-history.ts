@@ -1,8 +1,5 @@
 import type { CTraderMcpClient } from "./client";
-import {
-  cTraderOrderHistoryResponseSchema,
-  type CTraderHistoricalOrder,
-} from "./schemas";
+import { cTraderOrderHistoryResponseSchema, type CTraderHistoricalOrder } from "./schemas";
 
 export interface FetchOrderHistoryArgs {
   /** ISO-8601 lower bound (inclusive). */

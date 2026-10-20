@@ -5,11 +5,7 @@ import {
   type ImportedExecution,
   type ParsedImport,
 } from "@luxalgo/journal-importers";
-import {
-  AI_IMPORT_MAX_BYTES,
-  AI_IMPORT_MAX_EXECUTIONS,
-  AI_IMPORT_MAX_TEXT,
-} from "@/lib/ai-import";
+import { AI_IMPORT_MAX_BYTES, AI_IMPORT_MAX_EXECUTIONS, AI_IMPORT_MAX_TEXT } from "@/lib/ai-import";
 import { AI_PROVIDER_NAMES } from "@/lib/ai-settings";
 import { requireValue } from "./api";
 import { resolveAiConfiguration } from "./settings";
@@ -174,10 +170,7 @@ export function validateAiExtraction(
   };
 }
 
-export async function parseStatementWithAi(
-  statement: AiStatement,
-  signal?: AbortSignal,
-) {
+export async function parseStatementWithAi(statement: AiStatement, signal?: AbortSignal) {
   const configuration = resolveAiConfiguration();
   requireValue(
     configuration.apiKey,

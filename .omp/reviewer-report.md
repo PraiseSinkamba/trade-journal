@@ -1,20 +1,23 @@
-# Reviewer Report — <slice-name>
+# Shell parity review
 
-## Verdict: PASS
+## Verdict
+PASS
 
-> Replace `<slice-name>` and the bullets below with this run's findings.
-> The reviewer overwrites this file each run (no append-only history).
-> The pre-hook `.omp/hooks/pre/reviewer-gate.ts` reads this file at
-> `git commit` time and refuses to allow the commit if Verdict is anything
-> other than PASS.
+## Scope reviewed
+- `apps/web/src/components/shell.tsx`
+- `apps/web/src/components/ui/sidebar.tsx`
+- `apps/web/src/hooks/use-mobile.ts`
+- relevant sidebar/control rules in `apps/web/src/app/globals.css`
+- `apps/web/src/components/ui/tooltip.tsx`
+- `apps/web/tests/sidebar-state.test.ts`
+- `CHANGELOG.md`
+- `.backup/components/shell.tsx` and `.backup/components-ui/button.tsx`
+- supplied parity contract and verification reports
 
 ## Findings
+No patch-introduced, actionable correctness defect found.
 
-- [PASS] format:check — no violations
-- [PASS] typecheck — no errors
-- [PASS] tests — invariants guard
-- [PASS] commit message — describes what was solved
+## Review evidence
+Storage hydration, controlled/uncontrolled state, persistence, storage-event cleanup, desktop breakpoint drawer closure, keyboard editor exclusions, route/same-route drawer close, Sheet Escape/backdrop behavior delegation, landmark ownership, and trigger/hint render composition were traced in the final sources. The sidebar-state test uses an isolated DOM/storage setup and directly exercises consumer-visible hydration, cross-tab clear/sync, editor-safe keyboard shortcuts, and unavailable storage behavior.
 
-## Summary
-
-1 PASS, 0 FAIL, 0 BLOCK
+The supplied verification report records the exercised browser checks and scoped checks: 14 regression tests, TypeScript typecheck, and scoped formatting. This review did not rerun tests, builds, linters, formatters, or browser checks, and does not claim pixel equivalence or a full-suite/build result.

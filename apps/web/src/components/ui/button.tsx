@@ -1,8 +1,8 @@
-import { Button as ButtonPrimitive } from "@base-ui/react/button"
-import { cva, type VariantProps } from "class-variance-authority"
-import { cn } from "cn"
-import * as React from "react"
-import { HoverHint } from "./tooltip"
+import { Button as ButtonPrimitive } from "@base-ui/react/button";
+import { cva, type VariantProps } from "class-variance-authority";
+import { cn } from "cn";
+import * as React from "react";
+import { HoverHint } from "./tooltip";
 
 const buttonVariants = cva(
   "group/button inline-flex shrink-0 items-center justify-center rounded-lg border border-transparent bg-clip-padding text-sm font-medium whitespace-nowrap transition-all outline-none select-none focus-visible:border-ring focus-visible:ring-3 focus-visible:ring-ring/50 active:not-aria-[haspopup]:translate-y-px disabled:pointer-events-none disabled:opacity-50 aria-invalid:border-destructive aria-invalid:ring-3 aria-invalid:ring-destructive/20 dark:aria-invalid:border-destructive/50 dark:aria-invalid:ring-destructive/40 [&_svg]:pointer-events-none [&_svg]:shrink-0 [&_svg:not([class*='size-'])]:size-4",
@@ -38,8 +38,8 @@ const buttonVariants = cva(
       variant: "default",
       size: "default",
     },
-  }
-)
+  },
+);
 
 function Button({
   className,
@@ -50,12 +50,13 @@ function Button({
   ...props
 }: ButtonPrimitive.Props &
   VariantProps<typeof buttonVariants> & {
-    asChild?: boolean
-    title?: string
+    asChild?: boolean;
+    title?: string;
   }) {
-  const iconOnly = size === "icon" || size === "icon-xs" || size === "icon-sm" || size === "icon-lg"
-  const ariaLabel = (props as React.ButtonHTMLAttributes<HTMLButtonElement>)["aria-label"]
-  const needsHint = title != null || (iconOnly && !ariaLabel)
+  const iconOnly =
+    size === "icon" || size === "icon-xs" || size === "icon-sm" || size === "icon-lg";
+  const ariaLabel = (props as React.ButtonHTMLAttributes<HTMLButtonElement>)["aria-label"];
+  const needsHint = title != null || (iconOnly && !ariaLabel);
 
   // Bridge asChild → base-ui render prop (best-effort: only when children is a single ReactElement)
   if (asChild && React.isValidElement(props.children)) {
@@ -68,7 +69,7 @@ function Button({
         }
         {...props}
       />
-    )
+    );
   }
 
   let inner = (
@@ -77,17 +78,13 @@ function Button({
       className={cn(buttonVariants({ variant, size, className }))}
       {...props}
     />
-  )
+  );
 
   if (needsHint) {
-    return (
-      <HoverHint content={title ?? ariaLabel ?? null}>
-        {inner}
-      </HoverHint>
-    )
+    return <HoverHint content={title ?? ariaLabel ?? null}>{inner}</HoverHint>;
   }
 
-  return inner
+  return inner;
 }
 
-export { Button, buttonVariants }
+export { Button, buttonVariants };

@@ -28,9 +28,9 @@ beforeEach(() => {
   fake.toolResponses = {};
   fake.initialize.mockReset().mockResolvedValue(undefined);
   fake.close.mockReset().mockResolvedValue(undefined);
-  fake.callTool.mockReset().mockImplementation((name: string) =>
-    Promise.resolve(fake.toolResponses[name]),
-  );
+  fake.callTool
+    .mockReset()
+    .mockImplementation((name: string) => Promise.resolve(fake.toolResponses[name]));
   syncStub.mockReset().mockResolvedValue({
     accountId: "",
     inserted: 0,

@@ -12,7 +12,7 @@ export const GET = handler(() => {
         displayName: "cTrader (MCP)",
         credentials: [],
         readOnlySetup:
-            "Enable the MCP server in cTrader Desktop → Settings → MCP Server. The journal connects to http://127.0.0.1:9876/mcp/.",
+          "Enable the MCP server in cTrader Desktop → Settings → MCP Server. The journal connects to http://127.0.0.1:9876/mcp/.",
         supportsBars: false,
       },
     ],
