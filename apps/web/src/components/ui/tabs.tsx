@@ -1,42 +1,51 @@
-"use client";
+"use client"
 
-import * as React from "react";
-import * as TabsPrimitive from "@radix-ui/react-tabs";
-import { cn } from "@/lib/utils";
+import * as React from "react"
+import * as TabsPrimitive from "@radix-ui/react-tabs"
+import { cn } from "@/lib/utils"
 
-const Tabs = TabsPrimitive.Root;
+const Tabs = TabsPrimitive.Root
 
+// ponytail: original TabsList wrapped in overflow-x-auto so triggers stack on narrow widths
 function TabsList({ className, ...props }: React.ComponentProps<typeof TabsPrimitive.List>) {
   return (
-    <TabsPrimitive.List
-      className={cn(
-        "inline-flex h-9 max-w-full items-center justify-start overflow-x-auto rounded-lg bg-muted p-1 text-muted-foreground",
-        className,
-      )}
-      {...props}
-    />
-  );
+    <div className="overflow-x-auto">
+      <TabsPrimitive.List
+        data-slot="tabs-list"
+        className={cn(
+          "inline-flex h-9 max-w-full items-center justify-start rounded-lg bg-muted p-1 text-muted-foreground",
+          className,
+        )}
+        {...props}
+      />
+    </div>
+  )
 }
 
-function TabsTrigger({ className, ...props }: React.ComponentProps<typeof TabsPrimitive.Trigger>) {
+function TabsTrigger({
+  className,
+  ...props
+}: React.ComponentProps<typeof TabsPrimitive.Trigger>) {
   return (
     <TabsPrimitive.Trigger
+      data-slot="tabs-trigger"
       className={cn(
-        "inline-flex shrink-0 items-center justify-center whitespace-nowrap rounded-md px-3 py-1 text-sm font-medium transition-all focus-visible:outline-none disabled:pointer-events-none disabled:opacity-50 data-[state=active]:bg-background data-[state=active]:text-foreground data-[state=active]:shadow",
+        "inline-flex shrink-0 items-center justify-center whitespace-nowrap rounded-md px-3 py-1 text-sm font-medium transition-all focus-visible:outline-none focus-visible:ring-[3px] focus-visible:ring-ring/50 disabled:pointer-events-none disabled:opacity-50 data-[state=active]:bg-background data-[state=active]:text-foreground data-[state=active]:shadow",
         className,
       )}
       {...props}
     />
-  );
+  )
 }
 
 function TabsContent({ className, ...props }: React.ComponentProps<typeof TabsPrimitive.Content>) {
   return (
     <TabsPrimitive.Content
-      className={cn("mt-2 min-w-0 focus-visible:outline-none", className)}
+      data-slot="tabs-content"
+      className={cn("mt-2 min-w-0 flex-1 focus-visible:outline-none", className)}
       {...props}
     />
-  );
+  )
 }
 
-export { Tabs, TabsList, TabsTrigger, TabsContent };
+export { Tabs, TabsList, TabsTrigger, TabsContent }
