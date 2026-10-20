@@ -1,10 +1,10 @@
-"use client";
+"use client"
 
-import * as React from "react";
-import { Slot } from "@radix-ui/react-slot";
-import { cva, type VariantProps } from "class-variance-authority";
-import { cn } from "@/lib/utils";
-import { HoverHint } from "./tooltip";
+import * as React from "react"
+import { Slot } from "@radix-ui/react-slot"
+import { cva, type VariantProps } from "class-variance-authority"
+import { cn } from "@/lib/utils"
+import { HoverHint } from "./tooltip"
 
 const buttonVariants = cva(
   "inline-flex items-center justify-center gap-2 whitespace-nowrap rounded-md text-sm font-medium transition-colors focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring disabled:pointer-events-none disabled:opacity-50 [&_svg]:pointer-events-none [&_svg]:size-4 [&_svg]:shrink-0",
@@ -28,26 +28,23 @@ const buttonVariants = cva(
     },
     defaultVariants: { variant: "default", size: "default" },
   },
-);
+)
 
-function Button({
-  className,
-  variant,
-  size,
-  asChild = false,
-  title,
-  ...props
-}: React.ComponentProps<"button"> & VariantProps<typeof buttonVariants> & { asChild?: boolean }) {
-  const Comp = asChild ? Slot : "button";
-  const hint = title || (size === "icon" ? props["aria-label"] : undefined);
+type ButtonProps = React.ComponentProps<"button"> &
+  VariantProps<typeof buttonVariants> & { asChild?: boolean }
+
+function Button({ className, variant, size, asChild = false, title, ...props }: ButtonProps) {
+  const Comp = asChild ? Slot : "button"
+  const ariaLabel: string | undefined = props["aria-label"]
+  const hint = title || (size === "icon" ? ariaLabel : undefined)
   const button = (
     <Comp
-      aria-label={props["aria-label"] ?? (size === "icon" ? title : undefined)}
+      aria-label={ariaLabel ?? (size === "icon" ? title : undefined)}
       className={cn(buttonVariants({ variant, size, className }))}
       {...props}
     />
-  );
-  return hint ? <HoverHint content={hint}>{button}</HoverHint> : button;
+  )
+  return hint ? <HoverHint content={hint}>{button}</HoverHint> : button
 }
 
-export { Button, buttonVariants };
+export { Button, buttonVariants }
