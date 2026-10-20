@@ -45,3 +45,6 @@ coverage/
 /.github/skills/
 /browse-test.mjs
 /apps/web/.impeccable/
+
+# Local-only worktrees
+.worktrees/
