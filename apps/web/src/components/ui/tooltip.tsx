@@ -2,8 +2,14 @@
 
 import * as React from "react";
 import { Tooltip as TooltipPrimitive } from "@base-ui/react/tooltip";
+import { PreviewCard as PreviewCardPrimitive } from "@base-ui/react/preview-card";
 import { CircleHelp } from "lucide-react";
 import { cn } from "cn";
+import {
+  HoverCard,
+  HoverCardContent,
+  HoverCardTrigger,
+} from "@/components/ui/hover-card";
 
 function TooltipProvider({ delay = 0, ...props }: TooltipPrimitive.Provider.Props) {
   return <TooltipPrimitive.Provider data-slot="tooltip-provider" delay={delay} {...props} />;
@@ -89,9 +95,10 @@ function HoverHint({
   );
 }
 
-// HelpHint: icon-trigger tooltip using CircleHelp.
-// `children` is the tooltip BODY (not the trigger). The trigger is always the
-// CircleHelp icon button so the description never renders inline by accident.
+// HelpHint: icon-trigger rich popover using CircleHelp.
+// Built on top of the shadcn HoverCard primitives for richer styling
+// (card-style heading + body, larger padding, shadow, ring).
+// `children` is the body content; the trigger is always the icon button.
 function HelpHint({
   children,
   heading,
@@ -103,34 +110,29 @@ function HelpHint({
   children?: React.ReactNode;
   heading?: string;
   content?: React.ReactNode | null;
-  align?: TooltipPrimitive.Positioner.Props["align"];
-  side?: TooltipPrimitive.Positioner.Props["side"];
+  align?: PreviewCardPrimitive.Positioner.Props["align"];
+  side?: PreviewCardPrimitive.Positioner.Props["side"];
   delay?: number;
 }) {
   const body = content ?? children;
   if (heading === undefined && (body === undefined || body === null)) return null;
   return (
-    <TooltipProvider delay={delayDuration ?? 350}>
-      <Tooltip>
-        <TooltipTrigger
-          aria-label={heading ? `About ${heading}` : "More information"}
-          className="inline-flex h-6 w-6 shrink-0 items-center justify-center rounded-md text-muted-foreground/70 transition-colors hover:bg-accent hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
-        >
-          <CircleHelp aria-hidden="true" className="h-3.5 w-3.5" />
-        </TooltipTrigger>
-        <TooltipContent align={align} side={side}>
-          {heading && body ? (
-            <>
-              <span className="font-semibold">{heading}</span>
-              <br />
-              {body}
-            </>
-          ) : (
-            (heading ?? body)
-          )}
-        </TooltipContent>
-      </Tooltip>
-    </TooltipProvider>
+    <HoverCard>
+      <HoverCardTrigger
+        delay={delayDuration ?? 350}
+        closeDelay={150}
+        aria-label={heading ? `About ${heading}` : "More information"}
+        className="inline-flex h-6 w-6 shrink-0 items-center justify-center rounded-md text-muted-foreground/70 transition-colors hover:bg-accent hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+      >
+        <CircleHelp aria-hidden="true" className="h-3.5 w-3.5" />
+      </HoverCardTrigger>
+      <HoverCardContent align={align} side={side} className="space-y-1">
+        {heading && <div className="font-semibold leading-none">{heading}</div>}
+        {body && (
+          <div className="text-muted-foreground text-pretty text-sm leading-snug">{body}</div>
+        )}
+      </HoverCardContent>
+    </HoverCard>
   );
 }
 
