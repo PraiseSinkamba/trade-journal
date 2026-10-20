@@ -104,7 +104,7 @@ export function AppSidebar() {
                 Trade Journal
               </span>
             </SidebarMenuButton>
-            <SidebarTrigger className="ml-auto h-7 w-7 rounded-md shadow-sm group-data-[collapsible=icon]:hidden [&_svg]:size-4" />
+            <SidebarTrigger className="ml-auto h-7 w-7 rounded-md shadow-sm [&_svg]:size-4" />
           </SidebarMenuItem>
         </SidebarMenu>
       </SidebarHeader>
