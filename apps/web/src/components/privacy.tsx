@@ -99,7 +99,13 @@ export function PrivacyToggle({
 }
 
 export function MonetaryValue({ children }: { children: ReactNode }) {
-  return usePrivacy() ? <span aria-label="Monetary value hidden">••••</span> : children;
+  return usePrivacy() ? (
+    <HoverHint content="Turn off privacy mode to reveal this value">
+      <span aria-label="Monetary value hidden">••••</span>
+    </HoverHint>
+  ) : (
+    children
+  );
 }
 
 export function MonetaryField({
