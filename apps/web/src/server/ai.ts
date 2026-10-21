@@ -1,6 +1,6 @@
 import type { AnnotatedTrade } from "@luxalgo/journal-core";
 import { jsonSchema, tool, type ToolSet } from "ai";
-import { AI_PROVIDER_NAMES } from "@/lib/ai-settings";
+import { AI_PROVIDER_NAMES, type AiProvider } from "@/lib/ai-settings";
 import { listExecutions } from "./executions";
 import { AI_PROMPT_VERSIONS, AiRuntimeError } from "./ai-contracts";
 import {
@@ -14,7 +14,7 @@ import {
   runTextAi,
 } from "./ai-runtime";
 import type { FrozenApprovedScope } from "./ai-scope";
-import { getAiKey, getAiProvider, resolveAiConfiguration } from "./settings";
+import { aiProviderConfigured, getAiProvider, resolveAiConfiguration } from "./settings";
 import { queryTrades } from "./trades-query";
 import { reportContext, type ReportMode } from "./ai-report-context";
 
@@ -246,15 +246,19 @@ export function createAskJournalTools(
  * encrypted settings store (or the selected provider's environment variable).
  * Requests go straight from this server to the selected provider.
  */
-export const aiConfigured = (): boolean => getAiKey(getAiProvider()) !== null;
+export const aiConfigured = (): boolean => aiProviderConfigured(getAiProvider());
+
+/** Provider-aware "not configured" message. */
+const notConfiguredMessage = (provider: AiProvider): string =>
+  provider === "compatible"
+    ? "AI is not configured — add your OpenAI-compatible server URL and model in Settings."
+    : `AI is not configured — add your ${AI_PROVIDER_NAMES[provider]} API key in Settings.`;
 
 /** Run a direct reflection without tools for recap and trade-critique workflows. */
-export const runAi = async (prompt: string): Promise<string> => {
+export const runAi = async (prompt: string, maxOutputTokens?: number): Promise<string> => {
   const configuration = resolveAiConfiguration();
-  if (!configuration.apiKey) {
-    throw new Error(
-      `AI is not configured — add your ${AI_PROVIDER_NAMES[configuration.provider]} API key in Settings.`,
-    );
+  if (!aiProviderConfigured(configuration.provider)) {
+    throw new Error(notConfiguredMessage(configuration.provider));
   }
   try {
     const result = await runTextAi({
@@ -263,10 +267,12 @@ export const runAi = async (prompt: string): Promise<string> => {
         provider: configuration.provider,
         modelId: configuration.modelId,
         apiKey: configuration.apiKey,
+        baseUrl: configuration.baseUrl,
       },
       promptVersion: AI_PROMPT_VERSIONS.reflection,
       system: REFLECTION_SYSTEM_PROMPT,
       prompt,
+      ...(maxOutputTokens === undefined ? {} : { maxOutputTokens }),
     });
     if (!result.output.trim())
       throw new Error("AI returned no text. Check the model or try again.");
@@ -280,10 +286,8 @@ export const runAi = async (prompt: string): Promise<string> => {
 /** Run the single bounded Ask Journal tool loop over a route-created frozen scope. */
 export const runAskJournalAi = async (scope: FrozenApprovedScope, context: string) => {
   const configuration = resolveAiConfiguration();
-  if (!configuration.apiKey) {
-    throw new Error(
-      `AI is not configured — add your ${AI_PROVIDER_NAMES[configuration.provider]} API key in Settings.`,
-    );
+  if (!aiProviderConfigured(configuration.provider)) {
+    throw new Error(notConfiguredMessage(configuration.provider));
   }
   try {
     const result = await runAskAgentAi({
@@ -292,6 +296,7 @@ export const runAskJournalAi = async (scope: FrozenApprovedScope, context: strin
         provider: configuration.provider,
         modelId: configuration.modelId,
         apiKey: configuration.apiKey,
+        baseUrl: configuration.baseUrl,
       },
       promptVersion: AI_PROMPT_VERSIONS.askJournalAgent,
       system: REFLECTION_SYSTEM_PROMPT,
@@ -309,10 +314,8 @@ export const runAskJournalAi = async (scope: FrozenApprovedScope, context: strin
 /** Run the Reports agent: bounded tool loop with switch_report_mode available. */
 export const runReportsAgentAi = async (scope: FrozenApprovedScope, context: string) => {
   const configuration = resolveAiConfiguration();
-  if (!configuration.apiKey) {
-    throw new Error(
-      `AI is not configured — add your ${AI_PROVIDER_NAMES[configuration.provider]} API key in Settings.`,
-    );
+  if (!aiProviderConfigured(configuration.provider)) {
+    throw new Error(notConfiguredMessage(configuration.provider));
   }
   try {
     const result = await runReportsAgentAiRuntime({
@@ -321,6 +324,7 @@ export const runReportsAgentAi = async (scope: FrozenApprovedScope, context: str
         provider: configuration.provider,
         modelId: configuration.modelId,
         apiKey: configuration.apiKey,
+        baseUrl: configuration.baseUrl,
       },
       promptVersion: AI_PROMPT_VERSIONS.reportsAgent,
       system: REFLECTION_SYSTEM_PROMPT,

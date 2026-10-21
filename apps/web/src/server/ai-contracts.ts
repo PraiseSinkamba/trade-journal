@@ -1,3 +1,5 @@
+import type { AiProvider } from "@/lib/ai-settings";
+
 export type AiFeature = "reflection" | "askJournalAgent" | "reportsAgent" | "statementImport";
 
 export type AiExecutionPolicy = Readonly<{
@@ -10,7 +12,7 @@ export type AiExecutionPolicy = Readonly<{
 
 export type AiExecutionMeta = Readonly<{
   feature: AiFeature;
-  provider: "anthropic" | "openai";
+  provider: AiProvider;
   modelId: string;
   promptVersion: string;
   durationMs: number;

@@ -31,6 +31,7 @@ import { AiImportToggle } from "@/components/ai-import-options";
 import { AI_PROVIDER_NAMES, type AiSettingsPayload } from "@/lib/ai-settings";
 import { AI_IMPORT_MAX_BYTES, AI_IMPORT_MAX_TEXT } from "@/lib/ai-import";
 import { readHeaders, type SkippedReason } from "@luxalgo/journal-importers";
+import { XLSX_MAX_BYTES } from "@/lib/xlsx-import";
 import { Checkbox } from "@/components/ui/checkbox";
 import {
   cTraderMcpBrokerId,
@@ -157,7 +158,7 @@ function FileImport() {
   const [mapping, setMapping] = useState<Record<string, string>>({});
   const [busy, setBusy] = useState(false);
   const [aiEnabled, setAiEnabled] = useState(false);
-  const [encoding, setEncoding] = useState<"text" | "pdf">("text");
+  const [encoding, setEncoding] = useState<"text" | "pdf" | "xlsx">("text");
   const [aiReviewed, setAiReviewed] = useState(false);
   const { data: formatData } = useApi<{ formats: { id: string; label: string }[] }>("/api/import");
   const { data: settingsData, error: settingsError } = useApi<
@@ -171,10 +172,21 @@ function FileImport() {
   const validTimeZone = isTimeZone(timeZone);
   const displayTimeZone = settingsData?.timeZone ?? "UTC";
   const selectedAiProvider = settingsData?.aiProvider ?? "openai";
-  const aiReady = Boolean(settingsData?.aiConnections[selectedAiProvider].configured);
-  const aiConfigError = aiEnabled && !aiReady
-    ? `Add your ${AI_PROVIDER_NAMES[selectedAiProvider]} API key in Settings to parse with AI.`
-    : null;
+  const aiConnections = settingsData?.aiConnections;
+  // Statement parsing runs on the hosted providers: a compatible server may not
+  // accept PDFs or strict schemas. When the global provider is compatible, a
+  // configured hosted provider still serves the import.
+  const importProvider =
+    selectedAiProvider === "compatible"
+      ? (["openai", "anthropic"] as const).find((provider) =>
+          aiConnections?.[provider]?.configured,
+        )
+      : selectedAiProvider;
+  const aiReady = Boolean(importProvider && aiConnections?.[importProvider]?.configured);
+  const aiUnavailableMessage = importProvider
+    ? `Add your ${AI_PROVIDER_NAMES[importProvider]} API key in Settings to parse with AI.`
+    : "Statement parsing needs OpenAI or Anthropic. Choose the AI provider in Settings.";
+  const aiConfigError = aiEnabled && !aiReady ? aiUnavailableMessage : null;
   const invalidateAiPreview = () => {
     setPreview(null);
     setAiReviewed(false);
@@ -198,16 +210,24 @@ function FileImport() {
     setBusy(true);
     try {
       const pdf = /\.pdf$/i.test(file.name);
+      const xlsx = /\.xlsx$/i.test(file.name);
       if (pdf && !aiEnabled) throw new Error("Enable AI parsing to upload a PDF statement.");
+      if (xlsx && aiEnabled)
+        throw new Error(
+          "Turn off AI parsing for an XTB Excel report. The XTB importer reads it directly.",
+        );
       if (aiEnabled && file.size > AI_IMPORT_MAX_BYTES)
         throw new Error("AI uploads must be 8 MB or smaller.");
+      if (xlsx && file.size > XLSX_MAX_BYTES)
+        throw new Error("Excel uploads must be a .xlsx file of 5 MB or less.");
       if (aiEnabled && !/\.(csv|tsv|txt|html?|xml|pdf)$/i.test(file.name))
         throw new Error(
-          "Choose a CSV, TSV, HTML, XML, TXT or PDF file. Export spreadsheets as CSV first.",
+          "Choose a CSV, TSV, HTML, XML, TXT or PDF file. XTB Excel reports use the XTB importer with AI turned off.",
         );
       const buffer = await file.arrayBuffer();
       let text: string;
-      if (pdf) {
+      // Binary statements travel as base64; the server reads them.
+      if (pdf || xlsx) {
         const bytes = new Uint8Array(buffer);
         let binary = "";
         for (let i = 0; i < bytes.length; i += 8192)
@@ -220,7 +240,8 @@ function FileImport() {
             "Use a smaller export: AI text parsing supports up to 150,000 characters.",
           );
       }
-      setEncoding(pdf ? "pdf" : "text");
+      const fileEncoding = pdf ? "pdf" : xlsx ? "xlsx" : "text";
+      setEncoding(fileEncoding);
       setContent(text);
       // Choosing a file alone never sends it to an AI provider.
       if (aiEnabled) return;
@@ -232,6 +253,7 @@ function FileImport() {
           review: {},
           fileName: file.name,
           timeZone,
+          ...(fileEncoding === "xlsx" ? { encoding: fileEncoding } : {}),
         }),
       );
     } catch (cause) {
@@ -310,6 +332,7 @@ function FileImport() {
         symbol,
         // Commit with the exact parsing zone used by the reviewed preview.
         timeZone: preview.timeZone,
+        ...(encoding === "xlsx" ? { encoding } : {}),
         ...(preview.aiPreviewToken
           ? {
               ai: true,
@@ -353,7 +376,7 @@ function FileImport() {
                   setFileName("");
                   setMappingApplied(false);
                 }}
-                provider={selectedAiProvider}
+                provider={importProvider ?? selectedAiProvider}
                 disabled={busy}
               />
             ) : (
@@ -361,8 +384,7 @@ function FileImport() {
                 href="/settings#ai-settings"
                 className="text-xs text-muted-foreground underline hover:text-foreground"
               >
-                {aiConfigError ??
-                  `Add your ${AI_PROVIDER_NAMES[selectedAiProvider]} API key in Settings to parse with AI.`}
+                {aiConfigError ?? aiUnavailableMessage}
               </a>
             )}
           </div>
@@ -409,7 +431,7 @@ function FileImport() {
               {fileName ||
                 (aiEnabled
                   ? "Choose a statement for AI parsing"
-                  : "Choose a CSV / HTML / XML statement")}
+                  : "Choose a CSV / HTML / XML statement or an XTB Excel report")}
             </span>
             <span className="text-xs text-muted-foreground">
               {aiEnabled ? (
@@ -417,15 +439,22 @@ function FileImport() {
               ) : (
                 <>
                   Auto-detected:{" "}
-                  {formatData?.formats.map((format) => format.label.split(" (")[0]).join(", ")} —
-                  anything else via column mapping.
+                  {[
+                    ...new Set(
+                      formatData?.formats.map((format) => format.label.split(" (")[0]) ?? [],
+                    ),
+                  ].join(", ")}{" "}
+                  — anything else via column mapping. XTB: one .xlsx per account. Closed positions
+                  and open holdings are imported; cash operations are left out.
                 </>
               )}
             </span>
             <input
               type="file"
               accept={
-                aiEnabled ? ".csv,.txt,.htm,.html,.tsv,.xml,.pdf" : ".csv,.txt,.htm,.html,.tsv,.xml"
+                aiEnabled
+                  ? ".csv,.txt,.htm,.html,.tsv,.xml,.pdf"
+                  : ".csv,.txt,.htm,.html,.tsv,.xml,.xlsx"
               }
               disabled={busy || !settingsData || !validTimeZone}
               className="hidden"
@@ -1034,7 +1063,7 @@ function BrokerConnect() {
                 {settingsError
                   ? "Could not load the import timezone. Refresh and try again."
                   : settingsData
-                    ? `Statement timezone: ${settingsData.importTimeZone}. Used for Flex timestamps without an offset. Change it in Settings → Journal before connecting.`
+                    ? `Statement timezone: ${settingsData.importTimeZone}. Used for Flex timestamps without an offset, and required for Flex XML files uploaded into this account. Change it in Settings → Journal before connecting.`
                     : "Loading statement timezone…"}
               </p>
             )}

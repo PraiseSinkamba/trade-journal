@@ -8,7 +8,7 @@ import {
 import { AI_IMPORT_MAX_BYTES, AI_IMPORT_MAX_EXECUTIONS, AI_IMPORT_MAX_TEXT } from "@/lib/ai-import";
 import { AI_PROVIDER_NAMES } from "@/lib/ai-settings";
 import { requireValue } from "./api";
-import { resolveAiConfiguration } from "./settings";
+import { resolveAiImportConfiguration } from "./settings";
 import { AiRuntimeError, AI_PROMPT_VERSIONS } from "./ai-contracts";
 import { runObjectAi } from "./ai-runtime";
 import { encryptJson, decryptJson } from "./crypto";
@@ -171,7 +171,8 @@ export function validateAiExtraction(
 }
 
 export async function parseStatementWithAi(statement: AiStatement, signal?: AbortSignal) {
-  const configuration = resolveAiConfiguration();
+  const configuration = resolveAiImportConfiguration();
+  requireValue(configuration, "Choose OpenAI or Anthropic.");
   requireValue(
     configuration.apiKey,
     `Add your ${AI_PROVIDER_NAMES[configuration.provider]} API key in Settings.`,

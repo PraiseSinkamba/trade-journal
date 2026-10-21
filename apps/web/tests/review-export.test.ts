@@ -1,9 +1,11 @@
 import { it, expect, vi } from "vitest";
 import { readFileSync, writeFileSync } from "node:fs";
 
-// Fork pool overhead: when this file runs 4th in the suite the accumulated
-// startup cost pushes the PDF build close to 5 s; give it headroom.
-vi.setConfig({ testTimeout: 8000 });
+// Fork pool overhead: when this file runs late in the suite the accumulated
+// startup cost pushes the PDF build past 8 s; give it headroom. Post-merge
+// the importers + AI providers lengthen the cold-start, so the merge test
+// needs to allow for it.
+vi.setConfig({ testTimeout: 30000 });
 import { PDFDocument } from "pdf-lib";
 import { buildReviewPdf } from "../src/lib/export-review";
 const font = readFileSync(new URL("../public/fonts/NotoSans-Regular.ttf", import.meta.url));

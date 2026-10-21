@@ -157,6 +157,14 @@ it("returns the safe configuration error when no saved or environment key is con
   expect(mockRunObjectAi).not.toHaveBeenCalled();
   expect(db.select().from(executions).all()).toHaveLength(0);
 });
+it("keeps statement parsing on hosted providers that accept PDFs and strict schemas", async () => {
+  setSetting("compatibleBaseUrl", "http://localhost:11434/v1");
+  setSetting("aiProvider", "compatible");
+  const response = await request({ ...base, mode: "preview", ai: true });
+  expect(response.status).toBe(400);
+  expect((await response.json()).error).toBe("Choose OpenAI or Anthropic.");
+  expect(mockRunObjectAi).not.toHaveBeenCalled();
+});
 it("commits exactly the reviewed result without calling AI again and preserves zero fees", async () => {
   setAiKey("openai", "settings-openai-key");
   setSetting(

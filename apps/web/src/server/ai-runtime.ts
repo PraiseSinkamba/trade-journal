@@ -1,7 +1,8 @@
 import { createAnthropic } from "@ai-sdk/anthropic";
 import { createOpenAI } from "@ai-sdk/openai";
+import { createOpenAICompatible } from "@ai-sdk/openai-compatible";
 import { APICallError, LoadAPIKeyError, RetryError, generateText, isStepCount } from "ai";
-import type { ToolSet } from "ai";
+import type { LanguageModel, ToolSet } from "ai";
 import {
   AI_FEATURE_POLICIES,
   type AiExecutionMeta,
@@ -13,7 +14,10 @@ import type { AiProvider } from "@/lib/ai-settings";
 export interface AiRuntimeConfiguration {
   provider: AiProvider;
   modelId: string;
-  apiKey: string;
+  /** Null only for a keyless OpenAI-compatible server. */
+  apiKey: string | null;
+  /** Server URL of the OpenAI-compatible provider; null for hosted providers. */
+  baseUrl?: string | null;
 }
 
 export interface TextAiRequest {
@@ -22,6 +26,8 @@ export interface TextAiRequest {
   promptVersion: string;
   system: string;
   prompt: string;
+  /** Overrides the feature policy cap when the caller knows the budget. */
+  maxOutputTokens?: number;
 }
 
 export interface AskAgentAiRequest {
@@ -58,12 +64,31 @@ export interface AiRunResult<OUTPUT> {
 }
 
 /**
+ * One model factory for every provider. Compatible servers speak Chat
+ * Completions, so only the key saved for that server is sent; this adapter
+ * never reads provider environment variables.
+ */
+const buildModel = (configuration: AiRuntimeConfiguration): LanguageModel => {
+  const { provider, modelId, apiKey, baseUrl } = configuration;
+  if (provider === "compatible") {
+    return createOpenAICompatible({
+      name: "compatible",
+      baseURL: baseUrl ?? "",
+      apiKey: apiKey ?? undefined,
+    })(modelId);
+  }
+  return provider === "openai"
+    ? createOpenAI({ apiKey: apiKey! }).responses(modelId)
+    : createAnthropic({ apiKey: apiKey! })(modelId);
+};
+
+/**
  * Provider error → safe user-facing message. Mirrors the legacy categories
  * (`missing_key`, `authentication`, `billing`, `rate_limited`,
  * `model_unavailable`, `timeout`, `provider`) and never relays the raw
  * provider response text.
  */
-export const mapAiRuntimeError = (error: unknown): AiRuntimeError => {
+export const mapAiRuntimeError = (error: unknown, provider?: AiProvider): AiRuntimeError => {
   const cause = RetryError.isInstance(error) ? error.lastError : error;
   if (LoadAPIKeyError.isInstance(cause)) {
     return new AiRuntimeError("missing_key", "AI is not configured — add an API key in Settings.");
@@ -101,6 +126,20 @@ export const mapAiRuntimeError = (error: unknown): AiRuntimeError => {
       "AI request timed out. Check your connection or try a smaller request.",
     );
   }
+  // No status code means no HTTP response: the server is down or the URL is wrong.
+  if (provider === "compatible") {
+    const responded =
+      typeof cause === "object" &&
+      cause !== null &&
+      "statusCode" in cause &&
+      cause.statusCode !== undefined;
+    if (!responded) {
+      return new AiRuntimeError(
+        "provider",
+        "AI server unreachable: check the server URL in Settings and that the server is running.",
+      );
+    }
+  }
   return new AiRuntimeError(
     "provider",
     "AI request failed. Check your provider settings or try again shortly.",
@@ -129,18 +168,15 @@ const buildMeta = (
 
 export const runTextAi = async (request: TextAiRequest): Promise<AiRunResult<string>> => {
   const policy = AI_FEATURE_POLICIES[request.feature];
-  const { provider, modelId, apiKey } = request.configuration;
-  const model =
-    provider === "openai"
-      ? createOpenAI({ apiKey }).responses(modelId)
-      : createAnthropic({ apiKey })(modelId);
+  const { provider } = request.configuration;
+  const model = buildModel(request.configuration);
   const startedAt = performance.now();
   try {
     const result = await generateText({
       model,
       system: request.system,
       prompt: request.prompt,
-      maxOutputTokens: policy.maxOutputTokens,
+      maxOutputTokens: request.maxOutputTokens ?? policy.maxOutputTokens,
       maxRetries: policy.maxRetries,
       ...(provider === "openai" ? { providerOptions: { openai: { store: false } } } : {}),
     });
@@ -149,7 +185,7 @@ export const runTextAi = async (request: TextAiRequest): Promise<AiRunResult<str
       meta: buildMeta(request, policy, result, startedAt),
     };
   } catch (error) {
-    throw mapAiRuntimeError(error);
+    throw mapAiRuntimeError(error, provider);
   }
 };
 
@@ -161,7 +197,7 @@ export const runTextAi = async (request: TextAiRequest): Promise<AiRunResult<str
  */
 export const runAskAgentAi = async (request: AskAgentAiRequest) => {
   const policy = AI_FEATURE_POLICIES[request.feature];
-  const { provider, modelId, apiKey } = request.configuration;
+  const { provider } = request.configuration;
   const maxSteps = policy.maxSteps;
   const maxToolCalls = policy.maxToolCalls;
   if (maxSteps === undefined || maxToolCalls === undefined) {
@@ -181,10 +217,7 @@ export const runAskAgentAi = async (request: AskAgentAiRequest) => {
     toolCallCount += 1;
     return true;
   };
-  const model =
-    provider === "openai"
-      ? createOpenAI({ apiKey }).responses(modelId)
-      : createAnthropic({ apiKey })(modelId);
+  const model = buildModel(request.configuration);
   const startedAt = performance.now();
   try {
     const result = await generateText({
@@ -214,7 +247,7 @@ export const runAskAgentAi = async (request: AskAgentAiRequest) => {
       meta: buildMeta(request, policy, result, startedAt, { stepCount, toolCallCount }),
     };
   } catch (error) {
-    throw error instanceof AiRuntimeError ? error : mapAiRuntimeError(error);
+    throw error instanceof AiRuntimeError ? error : mapAiRuntimeError(error, provider);
   }
 };
 
@@ -224,7 +257,7 @@ export const runAskAgentAi = async (request: AskAgentAiRequest) => {
  */
 export const runReportsAgentAi = async (request: ReportsAgentAiRequest) => {
   const policy = AI_FEATURE_POLICIES[request.feature];
-  const { provider, modelId, apiKey } = request.configuration;
+  const { provider } = request.configuration;
   const maxSteps = policy.maxSteps;
   const maxToolCalls = policy.maxToolCalls;
   if (maxSteps === undefined || maxToolCalls === undefined) {
@@ -244,10 +277,7 @@ export const runReportsAgentAi = async (request: ReportsAgentAiRequest) => {
     toolCallCount += 1;
     return true;
   };
-  const model =
-    provider === "openai"
-      ? createOpenAI({ apiKey }).responses(modelId)
-      : createAnthropic({ apiKey })(modelId);
+  const model = buildModel(request.configuration);
   const startedAt = performance.now();
   try {
     const result = await generateText({
@@ -277,17 +307,14 @@ export const runReportsAgentAi = async (request: ReportsAgentAiRequest) => {
       meta: buildMeta(request, policy, result, startedAt, { stepCount, toolCallCount }),
     };
   } catch (error) {
-    throw error instanceof AiRuntimeError ? error : mapAiRuntimeError(error);
+    throw error instanceof AiRuntimeError ? error : mapAiRuntimeError(error, provider);
   }
 };
 
 export const runObjectAi = async <T>(request: ObjectAiRequest): Promise<AiRunResult<T>> => {
   const policy = AI_FEATURE_POLICIES[request.feature];
-  const { provider, modelId, apiKey } = request.configuration;
-  const model =
-    provider === "openai"
-      ? createOpenAI({ apiKey }).responses(modelId)
-      : createAnthropic({ apiKey })(modelId);
+  const { provider } = request.configuration;
+  const model = buildModel(request.configuration);
   const startedAt = performance.now();
   const abortSignal = request.abortSignal
     ? AbortSignal.any([request.abortSignal, AbortSignal.timeout(policy.timeoutMs ?? 120_000)])
@@ -308,6 +335,6 @@ export const runObjectAi = async <T>(request: ObjectAiRequest): Promise<AiRunRes
       meta: buildMeta(request, policy, result, startedAt),
     };
   } catch (error) {
-    throw mapAiRuntimeError(error);
+    throw mapAiRuntimeError(error, provider);
   }
 };
