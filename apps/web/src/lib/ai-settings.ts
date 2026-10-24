@@ -4,7 +4,7 @@ export type AiProvider = (typeof AI_PROVIDERS)[number];
 /** OpenAI-compatible servers host different models, so that provider has no default. */
 export const AI_DEFAULT_MODELS: Record<AiProvider, string> = {
   anthropic: "claude-opus-5",
-  openai: "gpt-4.1-mini",
+  openai: "gpt-6-luna",
   compatible: "",
 };
 

@@ -118,7 +118,7 @@ describe("AI provider settings", () => {
     vi.stubEnv("OPENAI_API_KEY", "fixture-env-openai");
     expect(await state()).toMatchObject({
       aiProvider: "openai",
-      aiModel: "gpt-4.1-mini",
+      aiModel: "gpt-6-luna",
       aiConnections: { openai: { configured: true, source: "environment" } },
     });
     vi.stubEnv("ANTHROPIC_API_KEY", "fixture-env-anthropic");
@@ -199,7 +199,7 @@ describe("OpenAI-compatible provider", () => {
       aiModel: "llama-fixture",
       aiConnections: {
         compatible: { configured: true, source: null, baseUrl: server },
-        openai: { model: "gpt-4.1-mini", baseUrl: null },
+        openai: { model: "gpt-6-luna", baseUrl: null },
       },
     });
     expect(aiConfigured()).toBe(true);
@@ -291,7 +291,7 @@ describe("AI provider requests through the real SDK adapters", () => {
       Response.json({
         id: "resp_fixture",
         created_at: 1,
-        model: "gpt-4.1-mini",
+        model: "gpt-6-luna",
         status: "completed",
         output: [
           {
@@ -311,7 +311,7 @@ describe("AI provider requests through the real SDK adapters", () => {
     expect(new Headers(init.headers).get("Authorization")).toBe("Bearer fixture-openai");
     expect(JSON.stringify(init)).not.toContain("fixture-anthropic");
     const body = JSON.parse(init.body as string);
-    expect(body).toMatchObject({ model: "gpt-4.1-mini", max_output_tokens: 1200, store: false });
+    expect(body).toMatchObject({ model: "gpt-6-luna", max_output_tokens: 1200, store: false });
     expect(JSON.stringify(body.input)).toContain("Fixture journal question");
   });
 
@@ -364,7 +364,7 @@ describe("AI provider requests through the real SDK adapters", () => {
           ? {
               id: "resp_fixture",
               created_at: 1,
-              model: "gpt-4.1-mini",
+              model: "gpt-6-luna",
               status: "completed",
               output: [
                 {
