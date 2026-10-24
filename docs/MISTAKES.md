@@ -1,8 +1,8 @@
 # Mistakes
 
 Open ledger of every mistake we've made and currently believe we understand.
-Promote an entry to [LEARNINGS.md](./LEARNINGS.md) once we know the *general
-principle* behind the fix, not just the patch. If the same mistake recurs after
+Promote an entry to [LEARNINGS.md](./LEARNINGS.md) once we know the _general
+principle_ behind the fix, not just the patch. If the same mistake recurs after
 promotion, escalate to a hard rule (skill, hook, or AGENTS.md invariant).
 
 Format: one entry per mistake, newest on top. Reference the conversation
@@ -10,6 +10,12 @@ turn or commit if you have it; if not, describe the symptom precisely enough
 to recognize the next time.
 
 ---
+
+## 2026-10-22 — Shell-specific file expansion
+
+- **Symptom:** Architecture inspection stopped at a PowerShell parser error before reading files.
+- **Cause:** Used Bash brace expansion in a PowerShell command.
+- **Fix:** See LEARNINGS.md → "Match file selection to the active shell".
 
 ## Tauri / desktop packaging
 
@@ -59,7 +65,7 @@ to recognize the next time.
   Whichever Node runs the dev server must match whichever ABI the binding
   was downloaded for. Symptom: every API route returns 500 with
   `NODE_MODULE_VERSION 127/137` error. Fix: `prebuild-install
-  --target=<node-version>` to force a specific prebuild, or always install
+--target=<node-version>` to force a specific prebuild, or always install
   with the same Node on PATH.
 
 - **Windows extended-length path prefix (`\\?\`)** caused `realpathSync`
@@ -157,6 +163,7 @@ Format to add a new entry:
 
 ```md
 ## <short title>
+
 - **Symptom**: <what you saw>
 - **Cause**: <why it happened>
 - **Fix**: <what to do>

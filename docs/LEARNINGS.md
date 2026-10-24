@@ -6,7 +6,7 @@ mistake(s) that produced the learning.
 
 **Promotion rules** (enforced by `AGENTS.md`):
 
-- A mistake moves here once we know the *general* principle, not just
+- A mistake moves here once we know the _general_ principle, not just
   the patch that fixed the symptom.
 - If a learning's underlying mistake recurs after promotion, it
   escalates to a hard rule: a pre-commit hook, an `AGENTS.md`
@@ -15,6 +15,14 @@ mistake(s) that produced the learning.
 - Each entry names the upstream mistake(s) that produced it.
 
 ---
+
+## Tooling
+
+### Match file selection to the active shell
+
+Use `rg` directory searches with `-g` filters or explicit PowerShell path arrays
+instead of Bash brace expansion when the execution shell is PowerShell.
+Source: [2026-10-22 inspection failure](./MISTAKES.md#2026-10-22--shell-specific-file-expansion).
 
 ## Tauri / desktop packaging
 
@@ -133,5 +141,5 @@ They now have a permanent guard:
 - (none yet)
 
 To add a hard rule: extract the pattern from a `MISTAKES.md` entry,
-  add the rule's text here, and link the codification (skill, hook,
-  or AGENTS.md invariant) in the entry.
+add the rule's text here, and link the codification (skill, hook,
+or AGENTS.md invariant) in the entry.
