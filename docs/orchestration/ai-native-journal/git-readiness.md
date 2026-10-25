@@ -1,5 +1,7 @@
 # Git readiness and dispatch pinning
 
+**Final-prompt amendment:** The committed `orca-execution-prompt.md` supplies the execution entry point and explicitly authorizes T-001 when pasted into parent OMP. For a fresh Run, resolve the commit introducing that file using the command inside the prompt and record its full SHA as `EXECUTION_DOCS_SHA`. It must descend from original handoff commit `d6ff06d4305d0c47a0edcba7aafbac4aee403914`. Use `validate-package.cjs --require-committed --ref` with that full SHA. The validator defaults to the prompt's introducing commit when present, otherwise the original manifest's introducing commit. This deliberately selects the documentation amendment; it does not change task dependencies or feature behavior. The original baseline resolution below remains provenance, not the fresh Run's final-prompt base.
+
 Observed source baseline: main, 548656bde1925afa8b1d66322e0fbd805eee60da, clean before preparation. All referenced spec/plan/phase/ADRs/discovery documents are already tracked at this baseline. Do not use older Prompt 00's copy-uncommitted-docs procedure.
 
 The authoritative handoff start is the documentation commit that INTRODUCES this package's execution-manifest.json. A commit cannot embed its own SHA without changing that SHA; use this deterministic Git query and freeze its full result in the future Run record:

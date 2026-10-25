@@ -28,6 +28,8 @@ Compared with the original e45707b baseline, current committed changes are plann
 
 ## Navigation
 
+- [Ready-to-paste parent OMP execution prompt](orca-execution-prompt.md): independent native workers, initial T-001 dispatch and nonblocking coordination. This is the execution entry point; its committed revision includes the original handoff.
+
 - [Machine-readable manifest](execution-manifest.json): 21 stable tasks, sources/hashes, dependencies, waves and placement.
 - [Dependency graph](dependency-graph.md): critical path and conservative concurrency.
 - [Integration plan](integration-plan.md): ownership, quality gates, recovery and approval boundaries.

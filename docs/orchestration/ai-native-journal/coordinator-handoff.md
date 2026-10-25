@@ -2,6 +2,8 @@
 
 This is the coordinator's reference, not the final orchestration launch prompt. Do not start execution merely by reading it. The next user instruction supplies execution authorization.
 
+The [final execution prompt](orca-execution-prompt.md) is now the entry point. When submitted by the user, it authorizes setup and T-001 dispatch. Its nonblocking coordination lifecycle supersedes the completion-wait guidance below: dispatch, verify readiness/start with bounded inspection, checkpoint and return control; resume coordination on a subsequent user pass. Use an active wait loop only if explicitly requested.
+
 All phase tasks are siblings in one Run, ordered by dependencies; this is not a 21-level nested worker hierarchy. Keep any delegated phase subtask at one child level. The conservative serial phase chain follows the normative plan despite generic orchestration advice favoring shallower dependency graphs.
 
 You coordinate; worker OMP sessions implement. Read README.md, execution-manifest.json, git-readiness.md, dependency-graph.md and integration-plan.md, then the authorized task packet. Stable T-NNN IDs must map to native Orca Task IDs; never pass stable IDs where native IDs are required. Maintain one Run and a coordinator-owned runtime mapping under docs/superpowers/reports/ai-native-journal-worktrees.json with repo/worktree paths, branch/start/candidate/merge SHAs, task/dispatch IDs, authorization and accepted integration state. Do not put secrets in reports.

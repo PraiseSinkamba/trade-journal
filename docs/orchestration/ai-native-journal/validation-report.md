@@ -12,6 +12,8 @@ node node_modules/prettier/bin/prettier.cjs --check docs/orchestration/ai-native
 
 The second command is the post-commit dispatch-readiness check. It resolves the introducing documentation commit, checks ancestry and required committed files, and rejects an uncommitted package. Resolve the authoritative SHA using git-readiness.md rather than the moving main ref.
 
+With the final execution prompt present, the default revision is the commit introducing that prompt. `--ref` accepts an explicitly pinned revision; the validator compares package contents against it as well as checking committed availability. The final prompt changes coordinator lifecycle to bounded dispatch/checkpoint/return and authorizes initial T-001 execution when submitted to OMP. No runtime orchestration was invoked while authoring it.
+
 ## Coverage reviewed
 
 - 21 unique implementation packets and 21 serial waves; all 13 detailed plan tasks allocated, including split migration consumers and every mutation class.

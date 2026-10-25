@@ -134,19 +134,31 @@ for (const file of fs.readdirSync(__dirname).filter((p) => p.endsWith(".md"))) {
 let committed = false;
 if (process.argv.includes("--require-committed")) {
   try {
-    const ref = git(
-      "log",
-      "--diff-filter=A",
-      "-1",
-      "--format=%H",
-      "--",
-      base + "/execution-manifest.json",
-    );
+    const refIndex = process.argv.indexOf("--ref");
+    const explicitRef = refIndex >= 0 ? process.argv[refIndex + 1] : undefined;
+    if (refIndex >= 0 && (!explicitRef || explicitRef.startsWith("--"))) {
+      throw new Error("--ref requires an explicit committed revision");
+    }
+    const promptPath = base + "/orca-execution-prompt.md";
+    const promptCommit = git("log", "--diff-filter=A", "-1", "--format=%H", "--", promptPath);
+    const ref = explicitRef
+      ? git("rev-parse", "--verify", explicitRef + "^{commit}")
+      : promptCommit ||
+        git("log", "--diff-filter=A", "-1", "--format=%H", "--", base + "/execution-manifest.json");
     assert(/^[a-f0-9]{40}$/.test(ref), "No handoff commit exists");
     if (ref) {
       git("merge-base", "--is-ancestor", m.sourceBaseline, ref);
       const files = git("ls-files", base).split("\n").filter(Boolean);
-      for (const p of files) git("cat-file", "-e", ref + ":" + p);
+      for (const p of files) {
+        const committedText = cp.execFileSync("git", ["show", ref + ":" + p], {
+          cwd: repo,
+          encoding: "utf8",
+        });
+        assert(
+          hash(read(p)) === hash(committedText),
+          "Package differs from selected revision: " + p,
+        );
+      }
       for (const s of m.sources) git("cat-file", "-e", ref + ":" + s.path);
       assert(git("status", "--porcelain", "--", base) === "", "Package has uncommitted changes");
       committed = true;
