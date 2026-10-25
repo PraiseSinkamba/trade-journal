@@ -1,7 +1,7 @@
 {
   "schemaVersion": 1,
   "feature": "ai-native-journal",
-  "updatedAt": "2026-10-25T15:05:00Z",
+  "updatedAt": "2026-10-25T15:12:00Z",
   "owner": "parent OMP coordinator (exclusive owner of this record)",
   "repository": {
     "name": "trade-journal",
@@ -33,8 +33,10 @@
       "errors": []
     },
     "featureBranch": "codex/ai-native-journal",
-    "featureBootstrapSha": null,
-    "featureHeadSha": null,
+    "featureBootstrapSha": "0a278503fd67c0f9e82138dfecb744f4bfd307ad",
+    "featureHeadSha": "0a278503fd67c0f9e82138dfecb744f4bfd307ad",
+    "featureHeadShaNote": "feature branch HEAD at Phase 01 dispatch and the exact base of the Phase 01 worktree; each later coordinator checkpoint advances this branch and appends to featureCheckpointCommits",
+    "featureCheckpointCommits": ["0a278503fd67c0f9e82138dfecb744f4bfd307ad"],
     "featureBranchNote": "Orca slugified the requested name to codex-ai-native-journal at creation; the coordinator renamed the newly created, exclusively owned branch to the contract-required codex/ai-native-journal. Orca reads the renamed ref live (refs/heads/codex/ai-native-journal). No pre-existing branch was overwritten."
   },
   "orchestration": {
@@ -63,10 +65,23 @@
       "relationship": "child of the main repo worktree (explicit --parent-worktree); Git ancestry is the explicit executionDocsSha base, not the lineage",
       "setupPolicy": "--setup run; repository setup hook script is empty, so no setup hook reads live data"
     },
-    "phases": []
+    "phases": [
+      {
+        "phase": "01",
+        "stableTask": "T-001",
+        "orcaWorktreeId": "aa54a522-a9af-4cb4-9de7-f1d9a349c0fd::E:/4004/orca/workspaces/trade-journal/codex-ai-native-journal-p01",
+        "path": "E:/4004/orca/workspaces/trade-journal/codex-ai-native-journal-p01",
+        "branch": "codex/ai-native-journal-p01",
+        "startSha": "0a278503fd67c0f9e82138dfecb744f4bfd307ad",
+        "orcaParentWorktreeId": "aa54a522-a9af-4cb4-9de7-f1d9a349c0fd::E:/4004/orca/workspaces/trade-journal/codex-ai-native-journal",
+        "relationship": "child of the feature worktree; Git ancestry is the explicit verified feature bootstrap SHA, not the Orca lineage",
+        "setup": "pnpm install --frozen-lockfile completed in the worker checkout; working tree clean; Node v24.20.0, pnpm 11.0.8",
+        "state": "dispatched"
+      }
+    ]
   },
   "taskMap": [
-    { "stable": "T-001", "native": "task_2acef5be58ee", "phase": "01", "wave": 1, "branch": "codex/ai-native-journal-p01", "deps": [], "status": "ready", "state": "created" },
+    { "stable": "T-001", "native": "task_2acef5be58ee", "phase": "01", "wave": 1, "branch": "codex/ai-native-journal-p01", "deps": [], "status": "dispatched", "state": "dispatched", "nativeDispatch": "ctx_c398a01cfc05", "nativeHandle": "term_08d447b7-7492-48b5-8904-a519d134302b", "evidence": "separate OMP session with its own Dispatch ID and worktree; transcript proves task receipt and execution at base 0a27850" },
     { "stable": "T-002", "native": "task_4424551d3c6c", "phase": "02", "wave": 2, "branch": "codex/ai-native-journal-p02", "deps": ["task_2acef5be58ee"], "status": "pending", "state": "created" },
     { "stable": "T-003", "native": "task_f9e9b7567e6c", "phase": "03", "wave": 3, "branch": "codex/ai-native-journal-p03", "deps": ["task_4424551d3c6c"], "status": "pending", "state": "created" },
     { "stable": "T-004", "native": "task_6bda9ef55d84", "phase": "04", "wave": 4, "branch": "codex/ai-native-journal-p04", "deps": ["task_f9e9b7567e6c"], "status": "pending", "state": "created" },
@@ -88,7 +103,31 @@
     { "stable": "T-020", "native": "task_16692d8c9708", "phase": "20", "wave": 20, "branch": "codex/ai-native-journal-p20", "deps": ["task_9eb1b8b7ab2f"], "status": "pending", "state": "created" },
     { "stable": "T-021", "native": "task_d136aa634289", "phase": "21", "wave": 21, "branch": "codex/ai-native-journal-p21", "deps": ["task_16692d8c9708"], "status": "pending", "state": "created" }
   ],
-  "dispatches": [],
+  "dispatches": [
+    {
+      "stableTask": "T-001",
+      "nativeTask": "task_2acef5be58ee",
+      "dispatchId": "ctx_c398a01cfc05",
+      "agentTerminalHandle": "term_08d447b7-7492-48b5-8904-a519d134302b",
+      "agentPaneKey": "b03ae1af-c279-4dad-be26-a7d60f4d2fd4:d4a721cc-4671-4269-8a32-4a5277cdd53f",
+      "agent": "omp",
+      "provider": "omp",
+      "model": "minimax-code/MiniMax-M3",
+      "mode": "terminal",
+      "worktreeId": "aa54a522-a9af-4cb4-9de7-f1d9a349c0fd::E:/4004/orca/workspaces/trade-journal/codex-ai-native-journal-p01",
+      "processIncarnation": "aa54a522-a9af-4cb4-9de7-f1d9a349c0fd::E:/4004/orca/workspaces/trade-journal/codex-ai-native-journal-p01@@f0241fa6:bfde12e3-ead1-405f-93a0-a9bdcf9f6e2c",
+      "startedAt": "2026-10-25T15:07:30Z",
+      "deliveryReceipt": "worker-start state=ready stage=input_accepted; dispatch_input accepted into terminal term_08d447b7-7492-48b5-8904-a519d134302b; turn_start unsupported for the omp provider, so execution is proven from the transcript instead",
+      "executionProof": "worker-read source=transcript provider=omp: the worker received the injected brief carrying task ID task_2acef5be58ee, read docs/orchestration/ai-native-journal/tasks/T-001.md and verified branch codex/ai-native-journal-p01 at HEAD 0a27850 before editing",
+      "coordinatorFollowupMessageId": "msg_f5d061f4f575",
+      "followupSubject": "Phase 01 resolved checkout, base SHA, setup state and completion contract",
+      "state": "actively executing",
+      "candidate": null,
+      "reviewed": false,
+      "integrated": false,
+      "verified": false
+    }
+  ],
   "integration": {
     "destinationBranch": "codex/ai-native-journal",
     "strategy": "serialized local non-fast-forward phase-to-feature merge by the coordinator; no push, no PR, no main merge, no destructive reset, no shared-history rewrite, no automatic worktree deletion",
