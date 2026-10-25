@@ -18,6 +18,13 @@ mistake(s) that produced the learning.
 
 ## Tooling
 
+### Validate planned paths against their source contract
+
+An absent future file is valid only when it is a deliberate output. Copy planned
+test names from the authoritative plan and validate them separately from existing
+paths; labeling a guessed path "planned" does not make it authoritative.
+Source: [2026-10-25 handoff reference drift](./MISTAKES.md#2026-10-25--handoff-test-reference-drift).
+
 ### Match file selection to the active shell
 
 Use `rg` directory searches with `-g` filters or explicit PowerShell path arrays
