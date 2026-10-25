@@ -1,0 +1,113 @@
+{
+  "schemaVersion": 1,
+  "feature": "ai-native-journal",
+  "updatedAt": "2026-10-25T15:05:00Z",
+  "owner": "parent OMP coordinator (exclusive owner of this record)",
+  "repository": {
+    "name": "trade-journal",
+    "orcaRepoId": "aa54a522-a9af-4cb4-9de7-f1d9a349c0fd",
+    "sourcePath": "E:/4004/orca/trade-journal",
+    "origin": "https://github.com/PraiseSinkamba/trade-journal.git",
+    "upstream": "https://github.com/LuxAlgo/trade-journal",
+    "modules": ["packages/core", "packages/importers", "apps/web", "desktop"],
+    "submodules": [],
+    "executionHost": "local",
+    "topologyRecheck": "single Git monorepo; no .gitmodules and no mode-160000 gitlinks in the index; broker SDK is a locked external package and cTrader MCP an existing integration; no external repository edits authorized"
+  },
+  "git": {
+    "sourceBaseline": "548656bde1925afa8b1d66322e0fbd805eee60da",
+    "handoffCommit": "d6ff06d4305d0c47a0edcba7aafbac4aee403914",
+    "executionDocsSha": "4ae868dbbb72f975f9767efb4e212884ecca7803",
+    "executionDocsShaResolution": "git log --diff-filter=A -1 --format=%H -- docs/orchestration/ai-native-journal/orca-execution-prompt.md",
+    "ancestryVerified": "executionDocsSha descends from handoffCommit (git merge-base --is-ancestor returned 0)",
+    "interveningDiffScope": "docs/orchestration/ai-native-journal/README.md, coordinator-handoff.md, git-readiness.md, orca-execution-prompt.md, validate-package.cjs, validation-report.md — prompt plus documentation/validation support only; no source or task-packet changes",
+    "packageValidation": {
+      "command": "node docs/orchestration/ai-native-journal/validate-package.cjs --require-committed --ref 4ae868dbbb72f975f9767efb4e212884ecca7803",
+      "tasks": 21,
+      "waves": 21,
+      "dependencyEdges": 20,
+      "sources": 12,
+      "localLinks": 78,
+      "acyclic": true,
+      "committed": true,
+      "errors": []
+    },
+    "featureBranch": "codex/ai-native-journal",
+    "featureBootstrapSha": null,
+    "featureHeadSha": null,
+    "featureBranchNote": "Orca slugified the requested name to codex-ai-native-journal at creation; the coordinator renamed the newly created, exclusively owned branch to the contract-required codex/ai-native-journal. Orca reads the renamed ref live (refs/heads/codex/ai-native-journal). No pre-existing branch was overwritten."
+  },
+  "orchestration": {
+    "runId": "run_7a7c8b5c2ffa",
+    "runObjective": "AI-native Journal Architecture Modernization: 21-phase implementation (T-001..T-021) on branch codex/ai-native-journal, base 4ae868dbbb72f975f9767efb4e212884ecca7803, repository trade-journal. Authorized scope this pass: Phase 01 / T-001 only.",
+    "coordinatorHandle": "term_be3e17cd-d192-4fd4-8a5f-143d03720fc0",
+    "orcaCli": "orca 1.4.237 (C:/Users/4004/AppData/Local/Programs/orca/resources/bin/orca.cmd)",
+    "runtimeId": "c79da73a-53a2-43bc-9349-32d539edaf93",
+    "implementationAgentId": "omp",
+    "taskTopology": "21 sibling native Tasks in one Run; each depends on its immediate predecessor; T-001 depends on bootstrap only. No nested 21-agent hierarchy."
+  },
+  "authorization": {
+    "grantedBy": "user pasted committed orca-execution-prompt.md (revision 4ae868dbbb72f975f9767efb4e212884ecca7803)",
+    "authorizedPhases": ["01"],
+    "authorizedTasks": ["T-001"],
+    "awaitingContinuation": ["T-002", "T-003", "T-004", "T-005", "T-006", "T-007", "T-008", "T-009", "T-010", "T-011", "T-012", "T-013", "T-014", "T-015", "T-016", "T-017", "T-018", "T-019", "T-020", "T-021"],
+    "note": "Each later phase requires an explicit user continuation instruction after its predecessor is integrated and verified. A status request does not authorize starting another phase."
+  },
+  "worktrees": {
+    "feature": {
+      "orcaWorktreeId": "aa54a522-a9af-4cb4-9de7-f1d9a349c0fd::E:/4004/orca/workspaces/trade-journal/codex-ai-native-journal",
+      "path": "E:/4004/orca/workspaces/trade-journal/codex-ai-native-journal",
+      "branch": "codex/ai-native-journal",
+      "startSha": "4ae868dbbb72f975f9767efb4e212884ecca7803",
+      "orcaParentWorktreeId": "aa54a522-a9af-4cb4-9de7-f1d9a349c0fd::E:/4004/orca/trade-journal",
+      "relationship": "child of the main repo worktree (explicit --parent-worktree); Git ancestry is the explicit executionDocsSha base, not the lineage",
+      "setupPolicy": "--setup run; repository setup hook script is empty, so no setup hook reads live data"
+    },
+    "phases": []
+  },
+  "taskMap": [
+    { "stable": "T-001", "native": "task_2acef5be58ee", "phase": "01", "wave": 1, "branch": "codex/ai-native-journal-p01", "deps": [], "status": "ready", "state": "created" },
+    { "stable": "T-002", "native": "task_4424551d3c6c", "phase": "02", "wave": 2, "branch": "codex/ai-native-journal-p02", "deps": ["task_2acef5be58ee"], "status": "pending", "state": "created" },
+    { "stable": "T-003", "native": "task_f9e9b7567e6c", "phase": "03", "wave": 3, "branch": "codex/ai-native-journal-p03", "deps": ["task_4424551d3c6c"], "status": "pending", "state": "created" },
+    { "stable": "T-004", "native": "task_6bda9ef55d84", "phase": "04", "wave": 4, "branch": "codex/ai-native-journal-p04", "deps": ["task_f9e9b7567e6c"], "status": "pending", "state": "created" },
+    { "stable": "T-005", "native": "task_a871bc6be4cd", "phase": "05", "wave": 5, "branch": "codex/ai-native-journal-p05", "deps": ["task_6bda9ef55d84"], "status": "pending", "state": "created" },
+    { "stable": "T-006", "native": "task_756e02a00efc", "phase": "06", "wave": 6, "branch": "codex/ai-native-journal-p06", "deps": ["task_a871bc6be4cd"], "status": "pending", "state": "created" },
+    { "stable": "T-007", "native": "task_816b57885f53", "phase": "07", "wave": 7, "branch": "codex/ai-native-journal-p07", "deps": ["task_756e02a00efc"], "status": "pending", "state": "created" },
+    { "stable": "T-008", "native": "task_1b9ab56eef54", "phase": "08", "wave": 8, "branch": "codex/ai-native-journal-p08", "deps": ["task_816b57885f53"], "status": "pending", "state": "created" },
+    { "stable": "T-009", "native": "task_5b7ff94b51b9", "phase": "09", "wave": 9, "branch": "codex/ai-native-journal-p09", "deps": ["task_1b9ab56eef54"], "status": "pending", "state": "created" },
+    { "stable": "T-010", "native": "task_b00115dce3c4", "phase": "10", "wave": 10, "branch": "codex/ai-native-journal-p10", "deps": ["task_5b7ff94b51b9"], "status": "pending", "state": "created" },
+    { "stable": "T-011", "native": "task_3b1725afcaa2", "phase": "11", "wave": 11, "branch": "codex/ai-native-journal-p11", "deps": ["task_b00115dce3c4"], "status": "pending", "state": "created" },
+    { "stable": "T-012", "native": "task_107db7662f7e", "phase": "12", "wave": 12, "branch": "codex/ai-native-journal-p12", "deps": ["task_3b1725afcaa2"], "status": "pending", "state": "created" },
+    { "stable": "T-013", "native": "task_96e133343b74", "phase": "13", "wave": 13, "branch": "codex/ai-native-journal-p13", "deps": ["task_107db7662f7e"], "status": "pending", "state": "created" },
+    { "stable": "T-014", "native": "task_53e2b3da13f7", "phase": "14", "wave": 14, "branch": "codex/ai-native-journal-p14", "deps": ["task_96e133343b74"], "status": "pending", "state": "created" },
+    { "stable": "T-015", "native": "task_3956a51d9794", "phase": "15", "wave": 15, "branch": "codex/ai-native-journal-p15", "deps": ["task_53e2b3da13f7"], "status": "pending", "state": "created" },
+    { "stable": "T-016", "native": "task_0ca236ab5428", "phase": "16", "wave": 16, "branch": "codex/ai-native-journal-p16", "deps": ["task_3956a51d9794"], "status": "pending", "state": "created" },
+    { "stable": "T-017", "native": "task_00be9f35e203", "phase": "17", "wave": 17, "branch": "codex/ai-native-journal-p17", "deps": ["task_0ca236ab5428"], "status": "pending", "state": "created" },
+    { "stable": "T-018", "native": "task_ed0e380a3fa9", "phase": "18", "wave": 18, "branch": "codex/ai-native-journal-p18", "deps": ["task_00be9f35e203"], "status": "pending", "state": "created" },
+    { "stable": "T-019", "native": "task_9eb1b8b7ab2f", "phase": "19", "wave": 19, "branch": "codex/ai-native-journal-p19", "deps": ["task_ed0e380a3fa9"], "status": "pending", "state": "created" },
+    { "stable": "T-020", "native": "task_16692d8c9708", "phase": "20", "wave": 20, "branch": "codex/ai-native-journal-p20", "deps": ["task_9eb1b8b7ab2f"], "status": "pending", "state": "created" },
+    { "stable": "T-021", "native": "task_d136aa634289", "phase": "21", "wave": 21, "branch": "codex/ai-native-journal-p21", "deps": ["task_16692d8c9708"], "status": "pending", "state": "created" }
+  ],
+  "dispatches": [],
+  "integration": {
+    "destinationBranch": "codex/ai-native-journal",
+    "strategy": "serialized local non-fast-forward phase-to-feature merge by the coordinator; no push, no PR, no main merge, no destructive reset, no shared-history rewrite, no automatic worktree deletion",
+    "phaseReports": "docs/superpowers/reports/ai-native-journal-phase-NN.md (worker owned)",
+    "integrationReports": "docs/superpowers/reports/ai-native-journal-integration-NN.md (coordinator owned)"
+  },
+  "gates": {
+    "G-BOOTSTRAP": "passed: resolved executionDocsSha, validated committed package, topology rechecked, authorized phase recorded, starting refs pinned",
+    "G-A": "after T-011",
+    "G-B": "after T-019",
+    "G-FINAL": "after T-021"
+  },
+  "toolingGaps": [
+    {
+      "tool": "hub",
+      "status": "not found on PATH on this Windows host",
+      "impact": "repository AGENTS.md requires hub for long-running processes/watchers; Phase 01 needs no long-running server, so T-001 is unaffected. Any later phase that must start a long-lived server must resolve hub first or report the gap.",
+      "blocking": false
+    }
+  ],
+  "secretsPolicy": "this record contains no credentials, keys, tokens or provider payloads"
+}
