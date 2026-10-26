@@ -357,3 +357,15 @@ export const propAudit = sqliteTable(
   },
   (table) => [index("prop_audit_entity").on(table.entityType, table.entityId)],
 );
+
+/**
+ * Applied migration ledger. The runner in `./migrations.ts` owns this table;
+ * the mirror exists for typed access. The `CHECK (version > 0)` constraint lives
+ * in the runner's DDL, not here.
+ */
+export const journalMigrations = sqliteTable("journal_migrations", {
+  version: integer("version").primaryKey(),
+  name: text("name").notNull(),
+  checksum: text("checksum").notNull(),
+  appliedAt: integer("applied_at").notNull(),
+});

@@ -7,7 +7,9 @@
     "dev": "next dev --turbopack",
     "build": "next build && node scripts/copy-static-build.js",
     "start": "next start",
-    "typecheck": "next typegen && tsc --noEmit"
+    "typecheck": "next typegen && tsc --noEmit",
+    "migrations:build": "node scripts/build-migration-manifest.mjs",
+    "migrations:check": "node scripts/build-migration-manifest.mjs --check"
   },
   "dependencies": {
     "@ai-sdk/anthropic": "^4.0.41",

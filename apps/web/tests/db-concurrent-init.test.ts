@@ -7,6 +7,12 @@ import { join } from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
 import { promisify } from "node:util";
 import { BOOTSTRAP_SQL } from "../src/db/bootstrap";
+import checksumManifest from "../src/db/migration-checksums.json" with { type: "json" };
+
+const MANIFEST = checksumManifest as {
+  migrations: Record<string, { file: string; name: string; checksum: string }>;
+};
+const BASELINE_CHECKSUM = MANIFEST.migrations["1"]?.checksum ?? "";
 
 // `next build` opens the journal from several worker processes at once. Each child
 // here loads the real bootstrap module and spins until a shared start time, so their
@@ -58,6 +64,11 @@ async function openConcurrently(file: string) {
     expect(columns("executions")).toContain("import_metadata_json");
     expect(columns("folders")).toContain("deleted_at");
     expect(sqlite.prepare("SELECT count(*) AS n FROM folders").get()).toEqual({ n: 5 });
+    // Exactly one process applied the baseline; the others found it applied.
+    const ledger = sqlite
+      .prepare("SELECT version, name, checksum FROM journal_migrations ORDER BY version")
+      .all();
+    expect(ledger).toEqual([{ version: 1, name: "legacy-baseline", checksum: BASELINE_CHECKSUM }]);
   } finally {
     sqlite.close();
   }
@@ -80,6 +91,10 @@ it("upgrades a legacy rollback-journal database from concurrent processes", asyn
       "",
     ),
   );
+  // A journal from before the migration ledger existed, without the column the
+  // folders repair adds.
+  legacy.exec("ALTER TABLE folders DROP COLUMN deleted_at");
+  legacy.exec("DROP TABLE journal_migrations");
   expect(legacy.pragma("journal_mode", { simple: true })).toBe("delete");
   legacy.close();
   await openConcurrently(file);
