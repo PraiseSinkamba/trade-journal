@@ -1,7 +1,7 @@
 {
   "schemaVersion": 1,
   "feature": "ai-native-journal",
-  "updatedAt": "2026-10-27T00:50:00Z",
+  "updatedAt": "2026-10-27T01:05:00Z",
   "owner": "parent OMP coordinator (exclusive owner of this record)",
   "repository": {
     "name": "trade-journal",
@@ -34,8 +34,8 @@
     },
     "featureBranch": "codex/ai-native-journal",
     "featureBootstrapSha": "0a278503fd67c0f9e82138dfecb744f4bfd307ad",
-    "featureHeadSha": "349c06157e694503c9c5230070c2a202c61683d3",
-    "featureHeadShaNote": "feature branch HEAD after the Phase 03 non-fast-forward merge; this coordinator record commit advances the branch by one commit and is appended to featureCheckpointCommits",
+    "featureHeadSha": "f4e4ffe4841f2ddf7532643ea6e7f4bb23373d6e",
+    "featureHeadShaNote": "feature branch HEAD at the Phase 04 dispatch; the Phase 04 worktree base is the merge commit 52ccb52, one coordinator-record commit behind. Each coordinator checkpoint advances this branch and is appended to featureCheckpointCommits",
     "featureCheckpointCommits": [
       "0a278503fd67c0f9e82138dfecb744f4bfd307ad",
       "80d53ccb62fda801897852a6f4e5d2aab8b0d58b",
@@ -60,10 +60,9 @@
   },
   "authorization": {
     "grantedBy": "user pasted committed orca-execution-prompt.md (revision 4ae868dbbb72f975f9767efb4e212884ecca7803)",
-    "authorizedPhases": ["01", "02", "03"],
-    "authorizedTasks": ["T-001", "T-002", "T-003"],
+    "authorizedPhases": ["01", "02", "03", "04"],
+    "authorizedTasks": ["T-001", "T-002", "T-003", "T-004"],
     "awaitingContinuation": [
-      "T-004",
       "T-005",
       "T-006",
       "T-007",
@@ -128,6 +127,17 @@
         "relationship": "child of the feature worktree; Git ancestry is the explicit verified feature HEAD after the Phase 02 integration, not the Orca lineage",
         "setup": "pnpm install --frozen-lockfile completed in the worker checkout; working tree clean; Node v24.20.0, pnpm 11.0.8; own node_modules and own pnpm virtual store, only the download cache is shared",
         "state": "integrated into codex/ai-native-journal at 349c061 and verified on the destination branch; worktree and branch retained for inspection"
+      },
+      {
+        "phase": "04",
+        "stableTask": "T-004",
+        "orcaWorktreeId": "aa54a522-a9af-4cb4-9de7-f1d9a349c0fd::E:/4004/orca/workspaces/trade-journal/codex-ai-native-journal-p04",
+        "path": "E:/4004/orca/workspaces/trade-journal/codex-ai-native-journal-p04",
+        "branch": "codex/ai-native-journal-p04",
+        "startSha": "52ccb529227b250c75506431c2a210cb5ced57a8",
+        "orcaParentWorktreeId": "aa54a522-a9af-4cb4-9de7-f1d9a349c0fd::E:/4004/orca/workspaces/trade-journal/codex-ai-native-journal",
+        "setup": "pnpm install --frozen-lockfile completed; working tree clean; Node v24.20.0, pnpm 11.0.8; own node_modules and own pnpm virtual store",
+        "state": "dispatched"
       }
     ]
   },
@@ -181,8 +191,10 @@
       "wave": 4,
       "branch": "codex/ai-native-journal-p04",
       "deps": ["task_f9e9b7567e6c"],
-      "status": "pending",
-      "state": "created"
+      "status": "dispatched",
+      "state": "dispatched",
+      "nativeDispatch": "ctx_8e4bf88a2a92",
+      "nativeHandle": "term_4fe68a37-fbcd-4ba1-83c4-f191315789f1"
     },
     {
       "stable": "T-005",
@@ -420,6 +432,23 @@
       "reviewed": true,
       "integrated": true,
       "verified": true
+    },
+    {
+      "task": "T-004",
+      "native": "task_6bda9ef55d84",
+      "dispatch": "ctx_8e4bf88a2a92",
+      "handle": "term_4fe68a37-fbcd-4ba1-83c4-f191315789f1",
+      "agent": "omp",
+      "provider": "omp",
+      "worktree": "aa54a522-a9af-4cb4-9de7-f1d9a349c0fd::E:/4004/orca/workspaces/trade-journal/codex-ai-native-journal-p04",
+      "started": "2026-10-27T01:05:00Z",
+      "base": "52ccb529227b250c75506431c2a210cb5ced57a8",
+      "purpose": "Phase 04 - outbox, durable jobs and fenced worker mechanics, exercised in tests only",
+      "state": "actively executing",
+      "candidate": null,
+      "reviewed": false,
+      "integrated": false,
+      "verified": false
     }
   ],
   "integration": {
