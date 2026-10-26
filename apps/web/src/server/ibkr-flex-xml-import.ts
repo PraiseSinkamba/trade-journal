@@ -3,7 +3,7 @@ import { parseFlexStatement } from "@luxalgo/broker-sdk/adapters";
 import type { ParsedImport, SkippedReason } from "@luxalgo/journal-importers";
 import { eq } from "drizzle-orm";
 import { accounts, db } from "@/db";
-import { RequestError, requireValue } from "./api";
+import { RequestError, requireValue } from "./request-error";
 import { brokerTradesToExecutions, untimedFillsReason } from "./broker-trades";
 import {
   assertIbkrSyncTimeZone,

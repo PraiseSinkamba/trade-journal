@@ -1,7 +1,7 @@
 import { and, eq } from "drizzle-orm";
 import { xtbWorkbookToStatement, type ImportedExecution } from "@luxalgo/journal-importers";
 import { db, executions } from "@/db";
-import { requireValue } from "./api";
+import { requireValue } from "./request-error";
 import { XLSX_MAX_BYTES } from "@/lib/xlsx-import";
 import { executionHash } from "./ids";
 
