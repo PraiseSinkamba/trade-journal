@@ -357,45 +357,30 @@
   ],
   "dispatches": [
     {
-      "stableTask": "T-001",
-      "nativeTask": "task_2acef5be58ee",
-      "dispatchId": "ctx_c398a01cfc05",
-      "agentTerminalHandle": "term_08d447b7-7492-48b5-8904-a519d134302b",
-      "agentPaneKey": "b03ae1af-c279-4dad-be26-a7d60f4d2fd4:d4a721cc-4671-4269-8a32-4a5277cdd53f",
+      "task": "T-001",
+      "native": "task_2acef5be58ee",
+      "dispatch": "ctx_c398a01cfc05",
+      "handle": "term_08d447b7-7492-48b5-8904-a519d134302b",
       "agent": "omp",
       "provider": "omp",
-      "model": "minimax-code/MiniMax-M3",
-      "mode": "terminal",
-      "worktreeId": "aa54a522-a9af-4cb4-9de7-f1d9a349c0fd::E:/4004/orca/workspaces/trade-journal/codex-ai-native-journal-p01",
-      "processIncarnation": "aa54a522-a9af-4cb4-9de7-f1d9a349c0fd::E:/4004/orca/workspaces/trade-journal/codex-ai-native-journal-p01@@f0241fa6:bfde12e3-ead1-405f-93a0-a9bdcf9f6e2c",
-      "startedAt": "2026-10-25T15:07:30Z",
-      "deliveryReceipt": "worker-start state=ready stage=input_accepted; dispatch_input accepted into terminal term_08d447b7-7492-48b5-8904-a519d134302b; turn_start unsupported for the omp provider, so execution is proven from the transcript instead",
-      "executionProof": "worker-read source=transcript provider=omp: the worker received the injected brief carrying task ID task_2acef5be58ee, read docs/orchestration/ai-native-journal/tasks/T-001.md and verified branch codex/ai-native-journal-p01 at HEAD 0a27850 before editing",
-      "coordinatorFollowupMessageId": "msg_f5d061f4f575",
-      "followupSubject": "Phase 01 resolved checkout, base SHA, setup state and completion contract",
+      "worktree": "aa54a522-a9af-4cb4-9de7-f1d9a349c0fd::E:/4004/orca/workspaces/trade-journal/codex-ai-native-journal-p01",
+      "started": "2026-10-25T15:07:30Z",
       "state": "failed by orchestration recovery, work committed anyway",
-      "heartbeatObserved": "2026-10-25T16:17:52Z phase=planning (delivery_5d8003713e47, acknowledged)",
-      "outcome": "capability revoked 2026-10-25T22:27:29Z by an Orca runtime restart; the worker process survived and completed the phase but could not send worker_done because its check addressed the coordinator inbox instead of its own Dispatch mailbox and returned consumer_fenced",
       "candidate": ["e3b4df3", "4b361d3", "f3575ee"],
       "reviewed": true,
       "integrated": true,
       "verified": true
     },
     {
-      "stableTask": "T-001",
-      "nativeTask": "task_2acef5be58ee",
-      "dispatchId": "ctx_aefaf725742a",
-      "agentTerminalHandle": "term_b6126860-ddd0-47c5-86d5-130840512672",
+      "task": "T-001",
+      "native": "task_2acef5be58ee",
+      "dispatch": "ctx_aefaf725742a",
+      "handle": "term_b6126860-ddd0-47c5-86d5-130840512672",
       "agent": "omp",
       "provider": "omp",
-      "model": "minimax-code/MiniMax-M3",
-      "mode": "terminal",
-      "worktreeId": "aa54a522-a9af-4cb4-9de7-f1d9a349c0fd::E:/4004/orca/workspaces/trade-journal/codex-ai-native-journal-p01",
-      "startedAt": "2026-10-26T12:05:00Z",
+      "worktree": "aa54a522-a9af-4cb4-9de7-f1d9a349c0fd::E:/4004/orca/workspaces/trade-journal/codex-ai-native-journal-p01",
+      "started": "2026-10-26T12:05:00Z",
       "purpose": "replacement attempt authorised with worker-start --retry-of after the failed attempt was recorded; its only assignment was the formatting-gate defect and the missing worker_done",
-      "coordinatorBriefMessageId": "msg_3b99040204ef",
-      "deliveryReceipt": "worker-start state=ready stage=input_accepted into terminal term_b6126860-ddd0-47c5-86d5-130840512672; the brief was read before any edit",
-      "outcome": "worker_done with outcome succeeded, three-sentence summary, real report path and files modified",
       "state": "settled",
       "candidate": ["477b102", "fdde475", "f0edcc3"],
       "reviewed": true,
@@ -403,22 +388,16 @@
       "verified": true
     },
     {
-      "stableTask": "T-002",
-      "nativeTask": "task_4424551d3c6c",
-      "dispatchId": "ctx_07e3d196e0d4",
-      "agentTerminalHandle": "term_cd0018da-005e-4138-b7b4-c08b4ac425f2",
+      "task": "T-002",
+      "native": "task_4424551d3c6c",
+      "dispatch": "ctx_07e3d196e0d4",
+      "handle": "term_cd0018da-005e-4138-b7b4-c08b4ac425f2",
       "agent": "omp",
       "provider": "omp",
-      "mode": "terminal",
-      "worktreeId": "aa54a522-a9af-4cb4-9de7-f1d9a349c0fd::E:/4004/orca/workspaces/trade-journal/codex-ai-native-journal-p02",
-      "startedAt": "2026-10-26T12:30:00Z",
-      "baseSha": "e5352acd39c1d03f240b4b797c9ca021d97679f0",
+      "worktree": "aa54a522-a9af-4cb4-9de7-f1d9a349c0fd::E:/4004/orca/workspaces/trade-journal/codex-ai-native-journal-p02",
+      "started": "2026-10-26T12:30:00Z",
+      "base": "e5352acd39c1d03f240b4b797c9ca021d97679f0",
       "purpose": "Phase 02 - versioned migration runner and legacy baseline",
-      "coordinatorBriefMessageId": "msg_bb066640c4e4",
-      "deliveryReceipt": "worker-start state=ready stage=input_accepted into terminal term_cd0018da-005e-4138-b7b4-c08b4ac425f2; the resolved brief was read before any edit",
-      "clarificationMessageId": "msg_045f3892e2a4",
-      "steeringMessageId": "msg_b274d6bb819e",
-      "outcome": "worker_done with outcome succeeded, a three-sentence summary, real report path and files modified",
       "state": "settled",
       "candidate": ["919a9f4", "cf51fe8", "1a93a46"],
       "reviewed": true,
@@ -426,21 +405,16 @@
       "verified": true
     },
     {
-      "stableTask": "T-003",
-      "nativeTask": "task_f9e9b7567e6c",
-      "dispatchId": "ctx_9a33af924baf",
-      "agentTerminalHandle": "term_03f8e096-e7bf-4984-8fed-94c596aad166",
+      "task": "T-003",
+      "native": "task_f9e9b7567e6c",
+      "dispatch": "ctx_9a33af924baf",
+      "handle": "term_03f8e096-e7bf-4984-8fed-94c596aad166",
       "agent": "omp",
       "provider": "omp",
-      "mode": "terminal",
-      "worktreeId": "aa54a522-a9af-4cb4-9de7-f1d9a349c0fd::E:/4004/orca/workspaces/trade-journal/codex-ai-native-journal-p03",
-      "startedAt": "2026-10-26T17:05:00Z",
-      "baseSha": "2e818946022b777e3f62f35b3a05fc1613e91fcf",
+      "worktree": "aa54a522-a9af-4cb4-9de7-f1d9a349c0fd::E:/4004/orca/workspaces/trade-journal/codex-ai-native-journal-p03",
+      "started": "2026-10-26T17:05:00Z",
+      "base": "2e818946022b777e3f62f35b3a05fc1613e91fcf",
       "purpose": "Phase 03 - projection identity, fingerprints and immutable revisions, not wired to routes",
-      "coordinatorBriefMessageId": "msg_635fcb1eaa12",
-      "deliveryReceipt": "worker-start state=ready stage=input_accepted into terminal term_03f8e096-e7bf-4984-8fed-94c596aad166; the brief was read before any edit",
-      "providerOutage": "the first 16 model calls failed with 402 insufficient_balance_error and then 401 invalid api key, exhausting the retry budget at 15:02Z; the worker recovered and completed the phase once the provider balance was restored, delivering worker_done at 22:33Z",
-      "outcome": "worker_done with outcome succeeded, a three-sentence summary, real report path and files modified",
       "state": "settled",
       "candidate": ["ed02b57", "e0f84d2", "2d62c57"],
       "reviewed": true,
@@ -468,113 +442,6 @@
       "blocking": false
     }
   ],
-  "phase01Status": {
-    "stableTask": "T-001",
-    "nativeTask": "task_2acef5be58ee",
-    "dispatchId": "ctx_aefaf725742a",
-    "state": "integrated into codex/ai-native-journal and verified on the destination branch",
-    "observedAt": "2026-10-26T12:25:00Z",
-    "candidateCommits": ["e3b4df3", "4b361d3", "f3575ee", "477b102", "fdde475", "f0edcc3"],
-    "integration": {
-      "destinationBefore": "912948536ab8094bfb6aa792f15796ab36ebe665",
-      "mergeSha": "40011b47fdd57396b7097847fac4fdce3dbe42f2",
-      "mergeParents": [
-        "912948536ab8094bfb6aa792f15796ab36ebe665",
-        "f0edcc3963fafcc726dfc3d649301e1891451c2c"
-      ],
-      "strategy": "serialized local non-fast-forward merge in the feature checkout; no push, no PR, no main merge, no history rewrite, no worktree deletion",
-      "conflictCheck": "git merge-tree --write-tree returned a clean tree before the merge, and the merge itself reported no conflicts",
-      "postMergeChecks": {
-        "targetedVitest": "4 files, 62 passed | 1 skipped, exit 0",
-        "fullPnpmTest": "86 files, 850 passed | 1 skipped, exit 0",
-        "typecheckWeb": "exit 0",
-        "typecheckCore": "exit 0",
-        "typecheckImporters": "exit 0",
-        "license": "Dependency licenses OK",
-        "prettierPhaseFiles": "clean after the formatting repair at 477b102",
-        "rootTypecheck": "exit 101, desktop workspace only, RC2175 on the git-ignored generated icon; zero desktop files changed by the phase, so it is blocked host evidence and not a phase failure"
-      },
-      "reviewed": true,
-      "integrated": true,
-      "verified": true,
-      "integrationReport": "docs/superpowers/reports/ai-native-journal-integration-01.md"
-    },
-    "planPath": "docs/superpowers/plans/ai-native-journal/phase-01.md",
-    "planStatus": "committed at e3b4df3 before implementation, as the packet requires",
-    "lifecycleAnomaly": {
-      "attempt1Dispatch": "ctx_c398a01cfc05",
-      "attempt1Outcome": "revoked by an Orca runtime restart, not a worker failure: capability_revoked_at 2026-10-25T22:27:29Z, last_failure 'The assigned worker terminal is no longer live after orchestration recovery', worker state abandoned/terminal_missing, Task auto-reset to ready",
-      "consequence": "the worker process survived the revocation and completed the phase, but could not send worker_done. Its orchestration check addressed the coordinator inbox instead of its own Dispatch mailbox, which returned consumer_fenced; it correctly obeyed and stopped",
-      "recovery": "task-update recorded the failed attempt with the full evidence, then worker-start --retry-of authorised the replacement attempt",
-      "attempt2Dispatch": "ctx_aefaf725742a",
-      "attempt2Handle": "term_b6126860-ddd0-47c5-86d5-130840512672"
-    },
-    "coordinatorReview": {
-      "verdict": "PASS on the implementation and its tests; one stop-condition defect found and routed to a worker",
-      "checks": {
-        "targetedVitest": "4 files, 62 passed | 1 skipped, exit 0 - reproduced independently by the coordinator",
-        "fullPnpmTest": "86 files, 850 passed | 1 skipped, exit 0 - the coordinator acted as phase verification owner and re-ran it",
-        "typecheckWeb": "exit 0",
-        "typecheckCore": "exit 0",
-        "typecheckImporters": "exit 0",
-        "rootTypecheck": "exit 101, desktop workspace only, RC2175 on the git-ignored generated icon. git diff --name-only 0a27850..HEAD -- desktop/ is empty, so the failure cannot be phase-caused. Blocked host evidence, never mocked and never fixed inside the phase",
-        "license": "Dependency licenses OK, exit 0",
-        "nextReachingServerModules": "16 to 0; only server/api.ts remains, the permitted request boundary",
-        "requestErrorClass": "exactly one class definition in server/request-error.ts, re-exported by api.ts, so instanceof and the 400/500 mapping are unchanged",
-        "adrBasis": "ADR 0007 line 40 forbids deleting live WAL sidecars, which is the documented basis for removing the old cleanWalFiles unlink",
-        "testQuality": "the new tests are non-vacuous: unlinkSync is spied to assert the WAL sidecar rule platform-independently, the callable-thenable guard is mutation-proved, and the @ts-expect-error directive makes the compile-time async rejection a typecheck-gated assertion"
-      },
-      "openDefect": "docs/superpowers/plans/ai-native-journal/phase-01.md fails prettier --check (exit 1). Every other phase file is prettier-clean and the other 75 repo-wide violations are pre-existing. This violates the phase stop condition and would fail the repo format:check CI gate.",
-      "defectDisposition": "routed to replacement attempt ctx_aefaf725742a with an explicit fix brief; the coordinator does not edit worker deliverables"
-    }
-  },
-  "phase02Status": {
-    "stableTask": "T-002",
-    "nativeTask": "task_4424551d3c6c",
-    "dispatchId": "ctx_07e3d196e0d4",
-    "state": "integrated into codex/ai-native-journal and verified on the destination branch",
-    "observedAt": "2026-10-26T16:25:00Z",
-    "candidateCommits": ["919a9f4", "cf51fe8", "1a93a46"],
-    "integration": {
-      "destinationBefore": "ff3173f3dbce1dda5e7a2e8e7bfa3ec71e4fb6f7",
-      "mergeSha": "3047fe3e4163afe09c1b1802380719efeb6a4068",
-      "mergeParents": [
-        "ff3173f3dbce1dda5e7a2e8e7bfa3ec71e4fb6f7",
-        "1a93a469d20917e37ab681e9bf95587853cf44c4"
-      ],
-      "conflictCheck": "git merge-tree --write-tree returned a clean tree before the merge, and the merge itself reported no conflicts",
-      "postMergeChecks": {
-        "prettierPhaseFiles": "exit 0",
-        "typecheckWeb": "exit 0",
-        "typecheckCore": "exit 0",
-        "typecheckImporters": "exit 0",
-        "targetedVitest": "4 files, 35 passed, exit 0",
-        "fullPnpmTest": "87 files, 864 passed | 1 skipped, exit 0",
-        "license": "Dependency licenses OK",
-        "migrationsCheck": "migration-checksums.json is up to date, exit 0",
-        "packagesBuild": "exit 0",
-        "appBuild": "Next production build exit 0",
-        "rootTypecheck": "exit 101, desktop workspace only, RC2175 on the git-ignored generated icon; zero desktop files changed by the phase, so it is blocked host evidence and not a phase failure"
-      },
-      "reviewed": true,
-      "integrated": true,
-      "verified": true,
-      "integrationReport": "docs/superpowers/reports/ai-native-journal-integration-02.md"
-    },
-    "coordinatorReview": {
-      "verdict": "PASS",
-      "confirmed": [
-        "migrate() is deleted from bootstrap.ts and nothing calls it: startup runs the migration runner only, so there is no second competing startup migration mechanism",
-        "the checksum is a SHA-256 of canonical migration source text read from the build artifact, never Function.prototype.toString()",
-        "the runner owns the ledger and creates the table only when absent",
-        "history is validated read-only before any write, then re-read and re-validated inside the immediate write lock",
-        "a pre-ledger journal is not treated as already migrated: the baseline convergence runs first and version 1 is recorded afterwards",
-        "each migration's up() and its ledger row are written in the same immediate transaction, so a failure never advances the ledger",
-        "a future version, a tampered name, a tampered checksum, a missing applied version, a non-contiguous history and a non-contiguous registry each raise a distinct MigrationError"
-      ],
-      "findingRaisedAndWithdrawn": "The coordinator flagged the explicit .ts import specifiers and the added allowImportingTsExtensions option in apps/web/tsconfig.json as a convention deviation, because the repository holds zero .ts-extension imports elsewhere and tsconfig.json is not in the phase guide's modify list. Verification confirmed the worker's stated reason: db-concurrent-init.test.ts spawns child Node processes with --experimental-strip-types that await import() the real TypeScript modules, and Node's ESM resolver does not search for extensions, so the explicit specifier is functionally required. The option is legal because tsconfig.base.json already sets noEmit true. The worker had recorded it as deviation 1 and amended the plan before the implementation commit. No defect; the observation was withdrawn."
-    }
-  },
   "dispatchGuidance": {
     "raisedBy": "user, 2026-10-26, after the Phase 01 and Phase 02 dispatches",
     "problem": "Phase 01 burned about 3 hours in six plan-review rounds chasing wording defects and produced no code; the worker later said the plan was sound after round 2 and that the looping was its own wrong call. Phase 02 then spent 45+ minutes in a parallel reviewer-subagent round before its implementation commit and needed an active coordinator nudge to start working.",
@@ -590,43 +457,69 @@
     ],
     "alsoLearned": "the worker-read transcript source can serve a stale bounded window and make a live worker look hung; the terminal source is the reliable view of what the agent is actually doing"
   },
-  "phase03Status": {
-    "stableTask": "T-003",
-    "nativeTask": "task_f9e9b7567e6c",
-    "dispatchId": "ctx_9a33af924baf",
-    "state": "integrated into codex/ai-native-journal and verified on the destination branch",
-    "observedAt": "2026-10-27T00:50:00Z",
-    "candidateCommits": ["ed02b57", "e0f84d2", "2d62c57"],
-    "integration": {
-      "destinationBefore": "5e3651be54b1adb27962847bc1543f6485fb77b7",
+  "secretsPolicy": "this record contains no credentials, keys, tokens or provider payloads",
+  "integrations": [
+    {
+      "phase": "01",
+      "task": "T-001",
+      "native": "task_2acef5be58ee",
+      "dispatch": "ctx_aefaf725742a",
+      "base": "0a278503fd67c0f9e82138dfecb744f4bfd307ad",
+      "mergeSha": "40011b47fdd57396b7097847fac4fdce3dbe42f2",
+      "mergeParents": [
+        "912948536ab8094bfb6aa792f15796ab36ebe665",
+        "f0edcc3963fafcc726dfc3d649301e1891451c2c"
+      ],
+      "commits": ["e3b4df3", "4b361d3", "f3575ee", "477b102", "fdde475", "f0edcc3"],
+      "checks": "targeted 4 files 62 passed/1 skipped; full pnpm test 86 files 850 passed/1 skipped; typecheck web/core/importers 0; prettier 0; license OK; next build 0",
+      "review": "PASS. One formatting-gate defect (phase plan failed prettier --check) was routed to a replacement attempt and fixed at 477b102.",
+      "note": "Attempt 1 (ctx_c398a01cfc05) was revoked by an Orca runtime restart, not a worker failure: capability revoked 2026-10-25T22:27:29Z, worker abandoned/terminal_missing. The worker completed the phase but could not send worker_done because its check addressed the coordinator inbox instead of its own Dispatch mailbox. Recorded as a failed attempt, then authorised a --retry-of replacement.",
+      "report": "docs/superpowers/reports/ai-native-journal-integration-01.md",
+      "reviewed": true,
+      "integrated": true,
+      "verified": true
+    },
+    {
+      "phase": "02",
+      "task": "T-002",
+      "native": "task_4424551d3c6c",
+      "dispatch": "ctx_07e3d196e0d4",
+      "base": "e5352acd39c1d03f240b4b797c9ca021d97679f0",
+      "mergeSha": "3047fe3e4163afe09c1b1802380719efeb6a4068",
+      "mergeParents": [
+        "ff3173f3dbce1dda5e7a2e8e7bfa3ec71e4fb6f7",
+        "1a93a469d20917e37ab681e9bf95587853cf44c4"
+      ],
+      "commits": ["919a9f4", "cf51fe8", "1a93a46"],
+      "checks": "targeted 4 files 35 passed; full pnpm test 87 files 864 passed/1 skipped; typecheck web/core/importers 0; prettier 0; migrations:check OK; license OK; packages build 0; next build 0",
+      "review": "PASS. The coordinator raised one finding (explicit .ts import specifiers plus an added allowImportingTsExtensions) and withdrew it after verification: db-concurrent-init.test.ts spawns child Node processes with --experimental-strip-types that import the real TypeScript modules, so the explicit specifier is required and noEmit is inherited from tsconfig.base.json.",
+      "deviations": "Two: the .ts import specifier above, and the T-002 packet/phase-guide file-list wording reconciled in the phase plan.",
+      "report": "docs/superpowers/reports/ai-native-journal-integration-02.md",
+      "reviewed": true,
+      "integrated": true,
+      "verified": true
+    },
+    {
+      "phase": "03",
+      "task": "T-003",
+      "native": "task_f9e9b7567e6c",
+      "dispatch": "ctx_9a33af924baf",
+      "base": "2e818946022b777e3f62f35b3a05fc1613e91fcf",
       "mergeSha": "349c06157e694503c9c5230070c2a202c61683d3",
       "mergeParents": [
         "5e3651be54b1adb27962847bc1543f6485fb77b7",
         "2d62c57b3a22357b7d54d0e4950adcffc65dd626"
       ],
-      "conflictCheck": "git merge-tree --write-tree returned a clean tree before the merge, and the merge itself reported no conflicts",
+      "commits": ["ed02b57", "e0f84d2", "2d62c57"],
+      "checks": "targeted 5 files 62 passed; full pnpm test 88 files 887 passed/1 skipped; typecheck web/core/importers 0; prettier 0; migrations:check OK; license OK; packages build 0; next build 0",
+      "review": "PASS. Core key generation untouched (packages/core diff empty). Annotations excluded from the fingerprint; ambiguity never yields a winner; transfers require exact execution-membership equality; shared-execution overlap refuses continuity.",
+      "deviations": "Three, recorded in the phase report: epoch-millisecond timestamps; execution_evidence created but unwritten (its producer belongs to later importer mapping work); two review-driven tightenings.",
+      "note": "The first 16 model calls failed with 402 insufficient_balance_error then 401 invalid api key, exhausting the retry budget at 15:02Z. The coordinator diagnosed this from the worker session transcript. The worker recovered and completed unaided once the provider balance was restored.",
+      "report": "docs/superpowers/reports/ai-native-journal-integration-03.md",
       "reviewed": true,
       "integrated": true,
-      "verified": true,
-      "integrationReport": "docs/superpowers/reports/ai-native-journal-integration-03.md"
-    },
-    "coordinatorReview": {
-      "verdict": "PASS",
-      "confirmed": [
-        "core key generation is untouched: git diff --name-only 2e81894..HEAD -- packages/core/ is empty, so ADR 0006's 'preserve derived trade keys' and the detailed plan's 'no change to core key generation' both hold",
-        "the fingerprint covers an explicit computed-field list only: annotations are accepted on ProjectionInput but absent from fingerprintPayload, so a label or note change leaves the fingerprint equal while a changed fee, avgExit or exit attribution changes it",
-        "canonical JSON sorts object keys, drops undefined, writes numbers unambiguously and orders exits by execution id then pnl then quantity, so a canonical JSON reorder is equal",
-        "ambiguity never resolves to a winner: the ambiguous variant of IdentityResolution carries candidateIds and no tradeId",
-        "an explicit transfer requires an exact set match of execution membership, and a shared execution proves nothing - crossing-flat fills return candidates instead of continuity, as ADR 0006 requires",
-        "a key owned by another account resolves to ambiguous rather than moving the trade between accounts",
-        "revisions are append-only: recordProjectionRevision requires the revision to be exactly identity.revision + 1, and only a proven explicit transfer may move an identity to another account",
-        "retireIdentity tombstones the identity and releases current_key, so the partial unique index then admits a new active key and a removed key that reappears gets a new identity",
-        "migration 0002 creates trade_identities, trade_projection_revisions, trade_revision_executions, trade_identity_links and execution_evidence with the required unique constraints and indexes, and the registry appends 0002 without touching 0001",
-        "trade_revision_executions deliberately has no foreign key to executions, so revision membership survives the deletion of source fills"
-      ],
-      "notedDeviations": "The phase report records three. Timestamps are UTC epoch milliseconds rather than ISO-8601 text, following the contract review's durable-storage rule and the journal_migrations.applied_at precedent. execution_evidence is created but has no writer yet, because the evidence sidecar belongs to the later cTrader and importer mapping work and inventing a producer would be worse than an honestly empty table. Two review-driven tightenings beyond the literal plan text are pinned by tests.",
-      "providerOutage": "the first 16 model calls failed with 402 insufficient_balance_error and then 401 invalid api key, exhausting the retry budget at 15:02Z and leaving the worker unable to act for 7.5 hours. The coordinator diagnosed this from the worker's own session transcript, not from a guess. The worker recovered and completed once the provider balance was restored. No coordinator nudge was needed for the delay; the earlier bounded-review rules did apply to the work itself, which ran two diff reviews and fixed ten substantive findings."
+      "verified": true
     }
-  },
-  "secretsPolicy": "this record contains no credentials, keys, tokens or provider payloads"
+  ],
+  "recordShape": "This file is the index: stable/native task mapping, worktree and dispatch identifiers, and one compact entry per integrated phase. Narrative, findings, deviations and command output live in the per-phase reports under docs/superpowers/reports/. Keep this file compact - one entry per phase, no duplicated prose."
 }
