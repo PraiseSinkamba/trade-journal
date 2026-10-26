@@ -16,7 +16,7 @@
 | Branch                   | `codex/ai-native-journal-p03` (child of the feature worktree)                         |
 | Base SHA                 | `2e818946022b777e3f62f35b3a05fc1613e91fcf` (feature HEAD after the T-002 integration) |
 | Plan commit              | `ed02b57` — `docs: add Phase 03 projection identity plan`                             |
-| Implementation tip       | see §5 — `feat: version trade projection evidence without changing keys`              |
+| Implementation tip       | `e0f84d2` — `feat: version trade projection evidence without changing keys`           |
 | Integration destination  | `codex/ai-native-journal` (not merged by this worker)                                 |
 
 **Scope completed.** A computed projection can now be fingerprinted, and a projection can be
