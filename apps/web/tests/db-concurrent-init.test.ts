@@ -64,11 +64,19 @@ async function openConcurrently(file: string) {
     expect(columns("executions")).toContain("import_metadata_json");
     expect(columns("folders")).toContain("deleted_at");
     expect(sqlite.prepare("SELECT count(*) AS n FROM folders").get()).toEqual({ n: 5 });
-    // Exactly one process applied the baseline; the others found it applied.
+    // Exactly one process applied the migrations; the others found them applied.
     const ledger = sqlite
       .prepare("SELECT version, name, checksum FROM journal_migrations ORDER BY version")
       .all();
-    expect(ledger).toEqual([{ version: 1, name: "legacy-baseline", checksum: BASELINE_CHECKSUM }]);
+    expect(ledger).toEqual(
+      Object.entries(MANIFEST.migrations)
+        .map(([version, entry]) => ({
+          version: Number(version),
+          name: entry.name,
+          checksum: entry.checksum,
+        }))
+        .sort((left, right) => left.version - right.version),
+    );
   } finally {
     sqlite.close();
   }

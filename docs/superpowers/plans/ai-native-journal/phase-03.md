@@ -4,8 +4,8 @@
 > implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 > Implement only this phase. Do not begin Phase 04.
 
-**Goal:** Give every journal trade a stable *immutable identity* beside its rebuild-stable key, a
-deterministic *fingerprint* of its computed projection, and an append-only *revision history* with
+**Goal:** Give every journal trade a stable _immutable identity_ beside its rebuild-stable key, a
+deterministic _fingerprint_ of its computed projection, and an append-only _revision history_ with
 normalized execution membership — without touching the public key, the routes, or the financial
 engine.
 
@@ -108,10 +108,10 @@ export declare function resolveIdentity(tx: JournalTx, input: IdentityInput): Id
 
 Resolution rules:
 
-1. **Exact key** — an *active* identity already maps this key: it keeps its ID
+1. **Exact key** — an _active_ identity already maps this key: it keeps its ID
    (`kind: "exact_key"`, `nextRevision = revision + 1`).
 2. **Proven explicit transfer** — the caller names `explicitTransferSourceId`; the source identity's
-   *current* execution membership must equal the projection's membership **exactly**, and no other
+   _current_ execution membership must equal the projection's membership **exactly**, and no other
    identity in that account may share that membership. Then the identity is retained
    (`kind: "explicit_transfer"`). This is the only way an identity survives a key change.
 3. **Ambiguity** — a claimed transfer that cannot be proven (membership differs, or more than one
@@ -119,7 +119,7 @@ Resolution rules:
    A claimed transfer whose source shares no execution at all is an actionable conflict, not a
    silent fallback.
 4. **New** — no active key mapping and no proven transfer: a fresh identity ID
-   (`kind: "new"`, `nextRevision = 1`). Shared execution overlap is *never* continuity: it only
+   (`kind: "new"`, `nextRevision = 1`). Shared execution overlap is _never_ continuity: it only
    produces candidate evidence.
 
 Supporting seams (same module):
@@ -146,13 +146,13 @@ The DDL lives in `apps/web/src/db/migrations/0002-trade-projections.ts` as an ex
 is reused verbatim by the final-schema snapshot in `bootstrap.ts`, so the migrated schema and the
 declared schema cannot drift.
 
-| Table | Columns | Keys / indexes |
-| --- | --- | --- |
-| `trade_identities` | `id` PK, `account_id` → accounts (cascade), `current_key` (nullable), `revision`, `state` (`active`/`tombstoned`), `created_at`, `updated_at` | unique `current_key` where not null; index `account_id` |
-| `trade_projection_revisions` | `id` PK, `trade_id` → trade_identities (cascade), `account_id` → accounts (cascade), `revision`, `trade_key`, `fingerprint`, `resolution` (check), `snapshot_json`, `recorded_at` | unique `(trade_id, revision)`; index `account_id` |
-| `trade_revision_executions` | `revision_id` → trade_projection_revisions (cascade), `execution_id` | PK `(revision_id, execution_id)`; index `execution_id` |
-| `trade_identity_links` | `old_id`, `new_id` → trade_identities (cascade), `operation_id`, `reason`, `recorded_at` | PK `(old_id, new_id, operation_id)`; index `new_id` |
-| `execution_evidence` | `execution_id` PK, `timing_quality` (check), `source_kind`, `evidence_version`, `recorded_at` | — |
+| Table                        | Columns                                                                                                                                                                           | Keys / indexes                                          |
+| ---------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------- |
+| `trade_identities`           | `id` PK, `account_id` → accounts (cascade), `current_key` (nullable), `revision`, `state` (`active`/`tombstoned`), `created_at`, `updated_at`                                     | unique `current_key` where not null; index `account_id` |
+| `trade_projection_revisions` | `id` PK, `trade_id` → trade_identities (cascade), `account_id` → accounts (cascade), `revision`, `trade_key`, `fingerprint`, `resolution` (check), `snapshot_json`, `recorded_at` | unique `(trade_id, revision)`; index `account_id`       |
+| `trade_revision_executions`  | `revision_id` → trade_projection_revisions (cascade), `execution_id`                                                                                                              | PK `(revision_id, execution_id)`; index `execution_id`  |
+| `trade_identity_links`       | `old_id`, `new_id` → trade_identities (cascade), `operation_id`, `reason`, `recorded_at`                                                                                          | PK `(old_id, new_id, operation_id)`; index `new_id`     |
+| `execution_evidence`         | `execution_id` PK, `timing_quality` (check), `source_kind`, `evidence_version`, `recorded_at`                                                                                     | —                                                       |
 
 Column-level notes (the phase report repeats them):
 
@@ -171,21 +171,21 @@ Column-level notes (the phase report repeats them):
 
 ## File ownership (exclusive — this phase has one implementation writer)
 
-| Path                                                        | Action                                     |
-| ----------------------------------------------------------- | ------------------------------------------ |
-| `apps/web/src/server/trading/projection.ts`                 | create                                     |
-| `apps/web/src/server/trading/identity.ts`                   | create                                     |
-| `apps/web/tests/trade-projection-identity.test.ts`          | create                                     |
-| `apps/web/src/db/migrations/0002-trade-projections.ts`      | create                                     |
-| `apps/web/src/db/migrations.ts`                             | modify (registry append)                   |
-| `apps/web/src/db/migration-checksums.json`                  | regenerate                                 |
-| `apps/web/src/db/schema.ts`                                 | modify (typed mirror)                      |
-| `apps/web/src/db/bootstrap.ts`                              | modify (final-schema snapshot)             |
-| `apps/web/src/server/ids.ts`                                | modify (`newUuid` for durable entities)     |
-| `apps/web/tests/intelligence-migrations.test.ts`            | modify (registry-driven expectations)      |
-| `apps/web/tests/db-concurrent-init.test.ts`                 | modify (registry-driven expectations)      |
-| `docs/superpowers/plans/ai-native-journal/phase-03.md`      | this file                                  |
-| `docs/superpowers/reports/ai-native-journal-phase-03.md`    | phase report                               |
+| Path                                                     | Action                                  |
+| -------------------------------------------------------- | --------------------------------------- |
+| `apps/web/src/server/trading/projection.ts`              | create                                  |
+| `apps/web/src/server/trading/identity.ts`                | create                                  |
+| `apps/web/tests/trade-projection-identity.test.ts`       | create                                  |
+| `apps/web/src/db/migrations/0002-trade-projections.ts`   | create                                  |
+| `apps/web/src/db/migrations.ts`                          | modify (registry append)                |
+| `apps/web/src/db/migration-checksums.json`               | regenerate                              |
+| `apps/web/src/db/schema.ts`                              | modify (typed mirror)                   |
+| `apps/web/src/db/bootstrap.ts`                           | modify (final-schema snapshot)          |
+| `apps/web/src/server/ids.ts`                             | modify (`newUuid` for durable entities) |
+| `apps/web/tests/intelligence-migrations.test.ts`         | modify (registry-driven expectations)   |
+| `apps/web/tests/db-concurrent-init.test.ts`              | modify (registry-driven expectations)   |
+| `docs/superpowers/plans/ai-native-journal/phase-03.md`   | this file                               |
+| `docs/superpowers/reports/ai-native-journal-phase-03.md` | phase report                            |
 
 Read-only for this phase: `packages/**`, `apps/web/src/server/{rebuild,executions,sync,ai*}.ts`,
 `apps/web/src/app/**`, `apps/web/src/db/{connection,transaction,index}.ts`,
