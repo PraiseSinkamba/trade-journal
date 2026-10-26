@@ -467,8 +467,20 @@
     {
       "tool": "hub",
       "status": "not found on PATH on this Windows host",
-      "impact": "repository AGENTS.md requires hub for long-running processes/watchers; Phase 01 needs no long-running server, so T-001 is unaffected. Any later phase that must start a long-lived server must resolve hub first or report the gap.",
+      "impact": "repository AGENTS.md requires hub for long-running processes/watchers. No phase so far needs a long-running server. Any later phase that must start one must resolve hub first or report the gap.",
       "blocking": false
+    },
+    {
+      "tool": "desktop cargo check (root pnpm typecheck)",
+      "status": "diagnosed 2026-10-27. The Windows SDK IS installed (10.0.22621.0); rc.exe is not on PATH but the SDK is present. Three distinct problems, only the first of which was a host artifact.",
+      "findings": [
+        "RESOLVED by the coordinator: a stale shared cargo target artifact at E:/build-cache/target/debug/build/trade-journal-desktop-119a88e22edbe3fa/out/resource.rc hardcoded the ICON path of the now-deleted Phase 01 worktree (codex-ai-native-journal-p01). rc.exe cannot read a file that no longer exists and reports it as 'RC2175 resource file is not in 3.00 format', which is a misleading message for a missing file. Clearing the stale trade-journal-desktop-* build dirs in the shared target removed the RC2175 entirely.",
+        "REPO DEFECT: desktop/scripts/run-sidecar-setup.js uses CommonJS require() while desktop/package.json declares type: module, so the repository's own 'pnpm --filter desktop setup:sidecar' fails with 'ReferenceError: require is not defined in ES module scope'. The sidecar binaries/node-x86_64-pc-windows-msvc.exe is therefore never produced, and cargo check then fails with \"resource path binaries/node-x86_64-pc-windows-msvc.exe doesn't exist\". Fix is a one-line import conversion.",
+        "REPO DEFECT: desktop/src-tauri/scripts/gen_icons/src/main.rs write_ico emits an invalid ICO despite its comment claiming Windows rc.exe compatibility. The generated icon.ico has ICONDIR type=0 (must be 1 for an icon), count=1 where six sizes were written, entry width=6 height=0, and entry size/offset values (73924640 / 6684672) that point far beyond the end of the 370072-byte file."
+      ],
+      "impact": "The root pnpm typecheck fails in the desktop workspace for reasons independent of the AI-native journal work: this is pre-existing on main and blocks the CI typecheck step and the G-FINAL whole-project gate. The per-phase gate is unaffected - web, core and importers typecheck all exit 0.",
+      "decision": "The coordinator diagnosed but did not fix the two repository defects: desktop tooling is outside the AI-native journal scope and is owned by the later operational phase. They need an explicitly scoped change, not silent scope creep.",
+      "blocking": "blocks the root pnpm typecheck element of the whole-project gate only"
     }
   ],
   "dispatchGuidance": {
