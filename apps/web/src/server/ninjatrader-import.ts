@@ -19,7 +19,7 @@ import {
 } from "@/db";
 import type { ImportReview, ImportReviewOptions } from "@/lib/import-review";
 import { defaultFee } from "@/lib/journal-defaults";
-import { requireValue } from "./api";
+import { requireValue } from "./request-error";
 import { executionHash, newId, nowIso } from "./ids";
 import { getMultipliers, getJournalDefaults, getTimeZone } from "./settings";
 import { rebuildAccount } from "./rebuild";

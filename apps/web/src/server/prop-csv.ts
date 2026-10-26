@@ -3,7 +3,7 @@ import { and, eq } from "drizzle-orm";
 import { parseCsv } from "@luxalgo/journal-importers";
 import { db, propEntries, propAudit } from "@/db";
 import { mutateProp } from "./prop-firms";
-import { requireValue, RequestError } from "./api";
+import { requireValue, RequestError } from "./request-error";
 import { newId, nowIso } from "./ids";
 const hash = (value: string) => createHash("sha256").update(value).digest("hex");
 class PreviewRollback extends Error {

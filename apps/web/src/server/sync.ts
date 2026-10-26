@@ -7,7 +7,7 @@ import { nowIso } from "./ids";
 import { brokerTradesToExecutions, untimedFillsReason } from "./broker-trades";
 import { insertExecutions, type InsertResult } from "./executions";
 import { getImportTimeZone } from "./settings";
-import { requireValue } from "./api";
+import { requireValue } from "./request-error";
 import {
   assertIbkrSyncTimeZone,
   canonicalImportTimeZone,

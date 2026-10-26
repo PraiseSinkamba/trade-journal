@@ -6,7 +6,7 @@ import {
 } from "@luxalgo/journal-core";
 import { db, accounts, playbooks } from "@/db";
 import { describeFilters } from "@/lib/filter-description";
-import { requireValue } from "./api";
+import { requireValue } from "./request-error";
 import { getTimeZone } from "./settings";
 
 /** Recursively freeze a value in place. */

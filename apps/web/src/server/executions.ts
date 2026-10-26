@@ -5,7 +5,7 @@ import { executionHash, newId, nowIso } from "./ids";
 import { rebuildAccount } from "./rebuild";
 import { getJournalDefaults } from "./settings";
 import { defaultFee } from "@/lib/journal-defaults";
-import { requireValue } from "./api";
+import { requireValue } from "./request-error";
 import { positionImportErrors } from "./position-import";
 
 export interface InsertResult {
