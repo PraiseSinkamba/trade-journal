@@ -12,7 +12,7 @@ Next-coupled request module so server-side domain code no longer pulls Next in t
 (the app singleton and `openConnection(directory)`); `apps/web/src/db/transaction.ts` owns the
 transaction seam (`JournalTx`, `withJournalTransaction`); `apps/web/src/db/index.ts` stays the
 public `@/db` barrel. `apps/web/src/server/request-error.ts` owns the request-failure type and
-the assertion helper; `apps/web/src/server/api.ts` re-exports the *same* class and function so
+the assertion helper; `apps/web/src/server/api.ts` re-exports the _same_ class and function so
 route handlers and their response contracts are untouched.
 
 **Tech Stack:** Existing TypeScript (strict, `noUncheckedIndexedAccess`), Next.js 15, Drizzle +
@@ -36,13 +36,13 @@ These bind every task in this phase. Copy them verbatim into any review dispatch
 - **Never edit an applied migration.** Phase 01 applies none.
 - **Route response behaviour is unchanged.** `RequestError` still maps to HTTP 400; every other
   exception still maps to HTTP 500. `requireValue` still throws `RequestError`.
-- **`RequestError` identity is preserved.** `api.ts` re-exports the *same* class object, so
+- **`RequestError` identity is preserved.** `api.ts` re-exports the _same_ class object, so
   `error instanceof RequestError` is true on both import paths.
 - **Worker boundary.** No module under `apps/web/src/server/` other than the request boundary
   `apps/web/src/server/api.ts` may reach `next/*`, `react`, `react-dom` or an
   `apps/web/src/app/**` route file.
 - **Synchronous transactions only.** A transaction callback that returns a promise is rejected at
-  compile time *and* at runtime; the discarded promise's rejection is consumed so it never
+  compile time _and_ at runtime; the discarded promise's rejection is consumed so it never
   surfaces as an unhandled rejection.
 - **The public import path for every new seam is `@/db`.** `openConnection`, `JournalDb`,
   `JournalTx` and `withJournalTransaction` are all reachable from `@/db`; `apps/web/src/db/index.ts`
@@ -63,7 +63,9 @@ Task 1) and the contract review
 ```ts
 // apps/web/src/db/connection.ts
 export type JournalDb = BetterSQLite3Database<typeof schema> & { $client: Database.Database };
-export const openConnection = (directory: string): JournalDb => { /* ... */ };
+export const openConnection = (directory: string): JournalDb => {
+  /* ... */
+};
 
 // apps/web/src/db/transaction.ts
 // derives the real Drizzle transaction type, not JournalDb
@@ -88,18 +90,18 @@ transaction rolls back.
 
 ## File ownership (exclusive — no two tasks may touch the same file)
 
-| Path | Owner subtask |
-|---|---|
-| `apps/web/src/db/connection.ts` (new) | 1 — journal seams |
-| `apps/web/src/db/transaction.ts` (new) | 1 — journal seams |
-| `apps/web/src/db/index.ts` (modify — the only barrel) | 1 — journal seams |
-| `apps/web/tests/db-connection-lifecycle.test.ts` (new) | 1 — journal seams |
-| `apps/web/src/server/request-error.ts` (new) | 2 — error boundary |
-| `apps/web/src/server/api.ts` (modify) | 2 — error boundary |
+| Path                                                                                                                                                                              | Owner subtask      |
+| --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------ |
+| `apps/web/src/db/connection.ts` (new)                                                                                                                                             | 1 — journal seams  |
+| `apps/web/src/db/transaction.ts` (new)                                                                                                                                            | 1 — journal seams  |
+| `apps/web/src/db/index.ts` (modify — the only barrel)                                                                                                                             | 1 — journal seams  |
+| `apps/web/tests/db-connection-lifecycle.test.ts` (new)                                                                                                                            | 1 — journal seams  |
+| `apps/web/src/server/request-error.ts` (new)                                                                                                                                      | 2 — error boundary |
+| `apps/web/src/server/api.ts` (modify)                                                                                                                                             | 2 — error boundary |
 | `apps/web/src/server/{ai-import,ai-scope,executions,ibkr-flex-xml-import,ibkr-sync-timezone,ninjatrader-import,prop-csv,prop-firms,sync,xtb-import}.ts` (modify import line only) | 2 — error boundary |
-| `apps/web/tests/intelligence-boundaries.test.ts` (new) | 3 — import guard |
-| `docs/superpowers/plans/ai-native-journal/phase-01.md` (this file) | phase owner |
-| `docs/superpowers/reports/ai-native-journal-phase-01.md` | phase owner |
+| `apps/web/tests/intelligence-boundaries.test.ts` (new)                                                                                                                            | 3 — import guard   |
+| `docs/superpowers/plans/ai-native-journal/phase-01.md` (this file)                                                                                                                | phase owner        |
+| `docs/superpowers/reports/ai-native-journal-phase-01.md`                                                                                                                          | phase owner        |
 
 The Subtask 2 file set is **derived, not guessed**: it is exactly the set of files under
 `apps/web/src/server/` that import from `"./api"`. Verified on the base commit, that set is the
@@ -159,32 +161,32 @@ assigned here and no other subtask may edit `apps/web/src/db/index.ts`.
 
   Create `apps/web/tests/db-connection-lifecycle.test.ts`. It must cover:
 
-  1. *Two independently opened connections see committed state.* Open two connections with
+  1. _Two independently opened connections see committed state._ Open two connections with
      `openConnection(dir)` against one scratch directory, insert an `accounts` row through one
      and read it back through the other. Use `mkdtempSync` scratch directories under the OS temp
      dir; never touch a live journal directory.
-  2. *Closing one connection leaves the other's WAL sidecars alone.* After a write through
+  2. _Closing one connection leaves the other's WAL sidecars alone._ After a write through
      connection A, close A and assert `journal.db-wal` and `journal.db-shm` still exist in that
      directory, that B still reads the committed row, and that B can still write.
-  3. *The app singleton reset does not delete a live connection's WAL sidecars.* Set
+  3. _The app singleton reset does not delete a live connection's WAL sidecars._ Set
      `JOURNAL_DATA_DIR` to scratch directory A and `await import("../src/db")` (fresh module
      registry via `vi.resetModules()`), open an **independent** connection to A with
      `openConnection(A)`, write a row through it so A has WAL sidecars, then point
      `JOURNAL_DATA_DIR` at scratch directory B, `vi.resetModules()`, and `await
-     import("../src/db")` again. Assert A's `-wal` and `-shm` still exist and that the
+import("../src/db")` again. Assert A's `-wal` and `-shm` still exist and that the
      independent connection still reads its row.
      **Current behaviour to expect when this fails:** re-importing `../src/db` after the data
      directory changed throws `TypeError [ERR_INVALID_ARG_TYPE]: The "path" argument must be of
-     type string. Received undefined` from the existing `join(currentDataDir!, "journal.db")`
+type string. Received undefined` from the existing `join(currentDataDir!, "journal.db")`
      call, because `currentDataDir` is module-scoped and resets to `undefined` on re-evaluation
      while `globalThis.__journalDb` survives. The fix (Step 3) makes the reset path work and
      keeps another connection's sidecars intact. Record the actual failure text; do not assume a
      particular message.
-  4. *`withJournalTransaction` commits on success and rolls back on failure.* Insert a row
+  4. _`withJournalTransaction` commits on success and rolls back on failure._ Insert a row
      inside the transaction and read it back; throw inside the transaction and assert the row was
      not persisted.
-  5. *A promise-returning callback is rejected at runtime, rolls back, and consumes its
-     rejection.* The callback writes a row inside the transaction and returns a promise that
+  5. _A promise-returning callback is rejected at runtime, rolls back, and consumes its
+     rejection._ The callback writes a row inside the transaction and returns a promise that
      **rejects asynchronously** (reject on a later tick, so the rejection lands after the
      transaction has already returned). Assert that the call throws an error matching
      `/synchronous/i`, that the row written inside the transaction was **rolled back**, and that
@@ -197,7 +199,7 @@ assigned here and no other subtask may edit `apps/web/src/db/index.ts`.
      followed by `withJournalTransaction(callback)`. Keep the escape hatch in one clearly
      commented place so a reviewer can see the compile-time guard is exercised separately in
      case 6.
-  6. *Compile-time rejection.* Keep a never-executed function whose body calls
+  6. _Compile-time rejection._ Keep a never-executed function whose body calls
      `withJournalTransaction(async () => undefined)` under a `// @ts-expect-error` comment on the
      immediately preceding line. `apps/web/tsconfig.json` includes `**/*.ts`, so
      `pnpm --filter web typecheck` proves the directive is used; an unused directive is itself a
@@ -285,7 +287,7 @@ re-exported unchanged from `apps/web/src/server/api.ts`.
   ```
 
   The `handler` error mapping (`error instanceof RequestError ? 400 : 500`) must keep using that
-  same class, so import it into `api.ts` as well. Re-exporting the *same* class object (not a
+  same class, so import it into `api.ts` as well. Re-exporting the _same_ class object (not a
   copy or a subclass) is what keeps `error instanceof RequestError` true on both import paths.
 
 - [ ] **Step 3 — Repoint the domain helpers at `./request-error`.**
@@ -367,9 +369,9 @@ subtasks 1 and 2.
      - the **application** of the detector to the real `apps/web/src/server/intelligence/` tree,
        which is a `describe.skipIf(...)` block that reports as skipped until that directory
        exists, so the dormant rule is visibly dormant rather than silently passing.
-     The rule itself: a module in one intelligence domain may import only `contracts/` from its
-     siblings (never another domain's private files and never `infrastructure/`), and only
-     `composition.ts` may wire concrete infrastructure adapters.
+       The rule itself: a module in one intelligence domain may import only `contracts/` from its
+       siblings (never another domain's private files and never `infrastructure/`), and only
+       `composition.ts` may wire concrete infrastructure adapters.
 
   Rules 1–4 are live today. Rule 5 must be visibly dormant, never silently passing.
 
@@ -384,9 +386,9 @@ Both test files exist by now (subtask 1 Step 1 and subtask 3 Step 1) and no prod
 been touched. Run the combined command once, and record its output as the phase's red evidence:
 
 - [ ] Run: `pnpm exec vitest run apps/web/tests/db-connection-lifecycle.test.ts apps/web/tests/intelligence-boundaries.test.ts`
-  Expected: FAIL in both files — the connection seams do not exist yet and the server layer still
-  reaches Next through `api.ts`. The rule-5 detector self-test passes; the rule-5 application
-  block reports as skipped. Record the exact output.
+      Expected: FAIL in both files — the connection seams do not exist yet and the server layer still
+      reaches Next through `api.ts`. The rule-5 detector self-test passes; the rule-5 application
+      block reports as skipped. Record the exact output.
 
 Do not run either test file on its own before this point, and do not run either one again before
 the implementation lands — this single run is the pre-implementation evidence.
@@ -432,6 +434,7 @@ that gate.
 Phase 01 is done when **all** of the following hold.
 
 **Implementation and tests**
+
 - [ ] The combined red run was executed before any production edit and its failure output is
       recorded.
 - [ ] The four targeted test files pass:
@@ -444,24 +447,20 @@ Phase 01 is done when **all** of the following hold.
 - [ ] `pnpm format:check` reports no new violation in the files this phase touched.
 
 **Review**
+
 - [ ] A fresh spec-compliance and code-quality review of this phase's diff has run, and every
       Critical or Important finding is fixed and re-reviewed clean.
 - [ ] The repo's reviewer gate is satisfied: `.omp/reviewer-report.md` records this phase's
       verdict as `## Verdict: PASS`.
 
 **Report**
+
 - [ ] `docs/superpowers/reports/ai-native-journal-phase-01.md` is written and committed, and
-      contains every item the phase guide requires:
-      1. phase ID, start/end commit or working-tree baseline, exact scope completed and remaining;
-      2. changed files and exported interfaces, and the compatibility behaviour preserved;
-      3. migration version/table/column/index changes — **none in Phase 01** — plus the
-         backup/rollback impact statement;
-      4. the exact commands run, their exit codes, counts and runtimes — including the combined
-         red run, the final targeted run, the baseline `pnpm typecheck` run and
-         `pnpm --filter web typecheck` — and every environment-limited check with its reason;
-      5. deviations and evidence, the review findings raised against this phase and how each was
-         resolved, plus unresolved risks and whether they block the next phase or release;
-      6. a next-phase handoff listing the required inputs for Phase 02, without starting it.
+      contains every item the phase guide requires: 1. phase ID, start/end commit or working-tree baseline, exact scope completed and remaining; 2. changed files and exported interfaces, and the compatibility behaviour preserved; 3. migration version/table/column/index changes — **none in Phase 01** — plus the
+      backup/rollback impact statement; 4. the exact commands run, their exit codes, counts and runtimes — including the combined
+      red run, the final targeted run, the baseline `pnpm typecheck` run and
+      `pnpm --filter web typecheck` — and every environment-limited check with its reason; 5. deviations and evidence, the review findings raised against this phase and how each was
+      resolved, plus unresolved risks and whether they block the next phase or release; 6. a next-phase handoff listing the required inputs for Phase 02, without starting it.
 - [ ] The report states the source/base SHA and the tip SHA of this phase's commits.
 - [ ] The report records which gates remain with the coordinator and are **not** claimed by this
       phase: the full `pnpm test` phase gate, the serialized phase→feature merge, and
