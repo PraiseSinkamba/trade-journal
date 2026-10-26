@@ -163,25 +163,37 @@ invalid registry must fail _before_ writes, not after.
    against drift.
 8. **The registry binds checksums from the artifact**, not from the source at runtime. The runtime
    never reads the migration source file: a packaged build has no source tree.
+9. **The db modules are loadable by plain Node.** `apps/web/tests/db-concurrent-init.test.ts`
+   spawns child processes that open the journal exactly like `next build` workers do, and those
+   children load the real TypeScript modules with Node's own type stripping. Node's ESM resolver
+   does not search for extensions, so the new relative imports inside `apps/web/src/db/` carry an
+   explicit `.ts` extension and `apps/web/tsconfig.json` sets `allowImportingTsExtensions: true`
+   (the option requires `noEmit`, which the base config already sets). This is the only file
+   outside the phase's file list that changes, and it changes no runtime behaviour.
+10. **The checksum artifact is imported with an import attribute.**
+    `import checksumManifest from "./migration-checksums.json" with { type: "json" };` — Node's ESM
+    loader refuses a JSON module without the attribute, and Vite, webpack 5.98 (the version Next
+    15.5 bundles) and `tsc` all accept it.
 
 ---
 
 ## File ownership (exclusive — this phase has one implementation writer)
 
-| Path                                                     | Action                |
-| -------------------------------------------------------- | --------------------- |
-| `apps/web/src/db/migrations.ts`                          | create                |
-| `apps/web/src/db/migrations/0001-legacy-baseline.ts`     | create                |
-| `apps/web/src/db/migration-checksums.json`               | create (generated)    |
-| `apps/web/scripts/build-migration-manifest.mjs`          | create                |
-| `apps/web/src/db/bootstrap.ts`                           | modify                |
-| `apps/web/src/db/schema.ts`                              | modify                |
-| `apps/web/tests/intelligence-migrations.test.ts`         | create                |
-| `apps/web/tests/db-concurrent-init.test.ts`              | modify                |
-| `apps/web/package.json`                                  | modify (scripts only) |
-| `docs/database-migrations.md`                            | create                |
-| `docs/superpowers/plans/ai-native-journal/phase-02.md`   | this file             |
-| `docs/superpowers/reports/ai-native-journal-phase-02.md` | phase report          |
+| Path                                                     | Action                                       |
+| -------------------------------------------------------- | -------------------------------------------- |
+| `apps/web/src/db/migrations.ts`                          | create                                       |
+| `apps/web/src/db/migrations/0001-legacy-baseline.ts`     | create                                       |
+| `apps/web/src/db/migration-checksums.json`               | create (generated)                           |
+| `apps/web/scripts/build-migration-manifest.mjs`          | create                                       |
+| `apps/web/src/db/bootstrap.ts`                           | modify                                       |
+| `apps/web/src/db/schema.ts`                              | modify                                       |
+| `apps/web/tests/intelligence-migrations.test.ts`         | create                                       |
+| `apps/web/tests/db-concurrent-init.test.ts`              | modify                                       |
+| `apps/web/package.json`                                  | modify (scripts only)                        |
+| `apps/web/tsconfig.json`                                 | modify (one compiler option, see decision 9) |
+| `docs/database-migrations.md`                            | create                                       |
+| `docs/superpowers/plans/ai-native-journal/phase-02.md`   | this file                                    |
+| `docs/superpowers/reports/ai-native-journal-phase-02.md` | phase report                                 |
 
 **Parallel candidate, conditional only.** The phase guide allows a documentation writer to run
 independently once the migration contract is fixed. The coordinator has **not** committed an exact
@@ -221,10 +233,20 @@ lists. Use `mkdtempSync` scratch files under the OS temp dir; never a live journ
 - _empty_ — a fresh file, no tables.
 - _pre-ledger current_ — `BOOTSTRAP_SQL` then `DROP TABLE journal_migrations`.
 - _older missing-column_ — `BOOTSTRAP_SQL` then
+  `ALTER TABLE folders DROP COLUMN deleted_at`,
   `ALTER TABLE accounts DROP COLUMN ibkr_sync_time_zone`,
   `ALTER TABLE executions DROP COLUMN import_metadata_json`,
-  `ALTER TABLE market_csv_datasets DROP COLUMN bar_count`,
   and `DROP TABLE journal_migrations`.
+- _older missing the CSV-bounds columns_ — `BOOTSTRAP_SQL` then
+  `ALTER TABLE market_csv_datasets DROP COLUMN bar_count`,
+  `ALTER TABLE market_csv_datasets DROP COLUMN first_time`,
+  `ALTER TABLE market_csv_datasets DROP COLUMN last_time`,
+  and `DROP TABLE journal_migrations`.
+
+  SQLite can only add a `NOT NULL` column to a table that holds rows when the column carries a
+  default, so this journal ends up with `DEFAULT 0` on the three bounds columns where a fresh
+  journal carries none. The parity comparison therefore ignores column defaults for this fixture
+  and asserts the difference explicitly instead of hiding it.
 
 **Cases.**
 
@@ -255,10 +277,13 @@ lists. Use `mkdtempSync` scratch files under the OS temp dir; never a live journ
     `future-version`, and the database must be unchanged (no new tables, ledger untouched).
 12. _Registry integrity_ — `validateMigrationHistory` rejects a registry whose versions are not
     positive, unique and contiguous from 1 (`registry-invalid`).
-13. _Fresh and legacy parity_ — the schema fingerprint of the upgraded legacy database equals the
-    schema fingerprint of the freshly migrated database, and both equal the fingerprint of a
-    database built from `BOOTSTRAP_SQL`. The fingerprint lists every user table with its columns
-    (name, type, not-null, default) and every index (name, table, unique, columns).
+13. _Fresh and legacy parity_ — the schema fingerprint of the freshly migrated database equals
+    the fingerprint of a database built from `BOOTSTRAP_SQL` exactly, including column defaults.
+    The upgraded legacy databases have the same tables, columns, foreign keys and indexes; the
+    CSV-bounds fixture is compared without column defaults, because SQLite can only add a
+    `NOT NULL` column with a default, and the difference is asserted explicitly. The fingerprint
+    lists every user table with its columns (name, type, not-null, default) and every index
+    (name, table, unique, columns).
 14. _Financial, credential and annotation bytes are unchanged_ — seed a legacy database with an
     account (including `credentials_enc`), executions (including `content_hash`), a trade (including
     `notes`, `tags_json`, `rating`, `playbook_id`) and a note; capture every row byte-for-byte
@@ -327,11 +352,13 @@ Create `apps/web/scripts/build-migration-manifest.mjs` and generate
 `apps/web/src/db/migration-checksums.json`.
 
 - The script scans `apps/web/src/db/migrations/*.ts`, parses the version and name from the
-  `NNNN-name.ts` file name, canonicalises the source text and writes the SHA-256 hex.
+  `NNNN-name.ts` file name, canonicalises the source text and writes the SHA-256 hex. Two files
+  claiming the same version are a hard error, never a silent overwrite.
 - Output is deterministic: sorted by version, `JSON.stringify(manifest, null, 2)` plus a trailing
   newline.
 - `--check` regenerates in memory and exits non-zero when the committed artifact differs. It
-  prints the file names whose checksum changed.
+  prints the file names whose checksum changed. The canonicalisation rule is exported so the
+  migration test pins the artifact to the source with the same rule the script uses.
 - `apps/web/package.json` gains two scripts:
   `"migrations:build": "node scripts/build-migration-manifest.mjs"` and
   `"migrations:check": "node scripts/build-migration-manifest.mjs --check"`.
@@ -342,11 +369,12 @@ Create `apps/web/scripts/build-migration-manifest.mjs` and generate
 
 ## Step 5 — Wiring
 
-- `apps/web/src/db/bootstrap.ts`: keep `BOOTSTRAP_SQL` (append the ledger DDL at the end, imported
-  from the runner module so both spellings are identical), delete `migrate()` and `hasColumn()`,
+- `apps/web/src/db/bootstrap.ts`: keep `BOOTSTRAP_SQL` (append the ledger DDL at the end, taken
+  from the runner module in its re-runnable `IF NOT EXISTS` form, because the snapshot may be
+  executed on a journal that already has the ledger), delete `migrate()` and `hasColumn()`,
   and make `openJournalDatabase` call `applyMigrations(sqlite)` inside the existing
-  `retryWhileBusy` guard. The WAL pragma, `foreign_keys = ON` and the busy-retry policy are
-  unchanged.
+  `retryWhileBusy` guard, closing the handle if the migration is refused. The WAL pragma,
+  `foreign_keys = ON` and the busy-retry policy are unchanged.
 - `apps/web/src/db/schema.ts`: add the typed `journalMigrations` table (`version`, `name`,
   `checksum`, `appliedAt`). It is a mirror of the raw DDL for typed access; the runner owns the
   table.

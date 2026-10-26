@@ -1,0 +1,10 @@
+{
+  "formatVersion": 1,
+  "migrations": {
+    "1": {
+      "file": "0001-legacy-baseline.ts",
+      "name": "legacy-baseline",
+      "checksum": "f9d7d16ebbd535833124a0782ab3b6ebced8b23f19d3c0199f0b57463cf66e25"
+    }
+  }
+}
