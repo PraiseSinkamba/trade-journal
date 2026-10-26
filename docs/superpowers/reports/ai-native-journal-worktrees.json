@@ -1,7 +1,7 @@
 {
   "schemaVersion": 1,
   "feature": "ai-native-journal",
-  "updatedAt": "2026-10-26T16:25:00Z",
+  "updatedAt": "2026-10-26T16:45:00Z",
   "owner": "parent OMP coordinator (exclusive owner of this record)",
   "repository": {
     "name": "trade-journal",
@@ -114,7 +114,7 @@
         "orcaParentWorktreeId": "aa54a522-a9af-4cb4-9de7-f1d9a349c0fd::E:/4004/orca/workspaces/trade-journal/codex-ai-native-journal",
         "relationship": "child of the feature worktree; Git ancestry is the explicit verified feature HEAD after the Phase 01 integration, not the Orca lineage",
         "setup": "pnpm install --frozen-lockfile completed in the worker checkout; working tree clean; Node v24.20.0, pnpm 11.0.8; own node_modules and own pnpm virtual store, only the download cache is shared",
-        "state": "integrated into codex/ai-native-journal at 3047fe3 and verified on the destination branch; worktree and branch retained for inspection"
+        "state": "integrated into codex/ai-native-journal at 3047fe3 and verified on the destination branch, then cleaned up at the user's request: the content was verified present in the feature branch, and the Orca worktree, the git worktree registration, the branch and the leftover directory were removed. The phase plan, the phase report, the integration report, the migration runner, the frozen baseline, the checksum artifact and docs/database-migrations.md all survive in the feature branch."
       }
     ]
   },
@@ -145,7 +145,8 @@
       "state": "integrated",
       "nativeDispatch": "ctx_07e3d196e0d4",
       "nativeHandle": "term_cd0018da-005e-4138-b7b4-c08b4ac425f2",
-      "evidence": "worker_done succeeded on dispatch ctx_07e3d196e0d4; the coordinator reviewed the exact commits against the phase guide contract, re-ran the full CI sequence and merged into codex/ai-native-journal at 3047fe3"
+      "evidence": "worker_done succeeded on dispatch ctx_07e3d196e0d4; the coordinator reviewed the exact commits against the phase guide contract, re-ran the full CI sequence and merged into codex/ai-native-journal at 3047fe3",
+      "cleanup": "worktree, git worktree registration, branch and leftover directory removed at the user's request after the merge; all Phase 02 content is retained in the feature branch"
     },
     {
       "stable": "T-003",
@@ -535,6 +536,21 @@
       ],
       "findingRaisedAndWithdrawn": "The coordinator flagged the explicit .ts import specifiers and the added allowImportingTsExtensions option in apps/web/tsconfig.json as a convention deviation, because the repository holds zero .ts-extension imports elsewhere and tsconfig.json is not in the phase guide's modify list. Verification confirmed the worker's stated reason: db-concurrent-init.test.ts spawns child Node processes with --experimental-strip-types that await import() the real TypeScript modules, and Node's ESM resolver does not search for extensions, so the explicit specifier is functionally required. The option is legal because tsconfig.base.json already sets noEmit true. The worker had recorded it as deviation 1 and amended the plan before the implementation commit. No defect; the observation was withdrawn."
     }
+  },
+  "dispatchGuidance": {
+    "raisedBy": "user, 2026-10-26, after the Phase 01 and Phase 02 dispatches",
+    "problem": "Phase 01 burned about 3 hours in six plan-review rounds chasing wording defects and produced no code; the worker later said the plan was sound after round 2 and that the looping was its own wrong call. Phase 02 then spent 45+ minutes in a parallel reviewer-subagent round before its implementation commit and needed an active coordinator nudge to start working.",
+    "mechanism": "the repository pre-commit gate refuses any commit whose .omp/reviewer-report.md does not carry '## Verdict: PASS', so a worker that reviews a document before committing it can be trapped in an open-ended loop",
+    "rules": [
+      "at most two reviewer runs for the whole phase: one on the plan, one on the implementation diff",
+      "wording, formatting and completeness nits are not findings; only a defect that changes runtime behaviour, file ownership or the contract is a finding",
+      "timebox the phase plan to about 30 minutes and commit it; the plan is a contract, not a document to perfect",
+      "never re-review a plan after a pass that produced only nits; record them as accepted deviations in the plan's design decisions instead",
+      "the reviewer verdict is produced from the implementation diff, not from iterating on prose",
+      "keep the dispatch brief to the delta: resolved runtime values, handoff facts and the few real traps, pointing at the committed packet for the contract instead of restating it, because restating the contract invites a clause-by-clause checking mode",
+      "the coordinator nudges the worker once when it appears to be idling, rather than letting it sit in a loop"
+    ],
+    "alsoLearned": "the worker-read transcript source can serve a stale bounded window and make a live worker look hung; the terminal source is the reliable view of what the agent is actually doing"
   },
   "secretsPolicy": "this record contains no credentials, keys, tokens or provider payloads"
 }
