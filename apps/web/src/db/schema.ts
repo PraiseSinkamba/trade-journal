@@ -1,7 +1,9 @@
+import { sql } from "drizzle-orm";
 import {
   blob,
   index,
   integer,
+  primaryKey,
   real,
   sqliteTable,
   text,
@@ -368,4 +370,131 @@ export const journalMigrations = sqliteTable("journal_migrations", {
   name: text("name").notNull(),
   checksum: text("checksum").notNull(),
   appliedAt: integer("applied_at").notNull(),
+});
+
+/**
+ * Immutable trade identities (Phase 03).
+ *
+ * A trade keeps its derived key, but its identity is separate: the key may
+ * change, the identity may be transferred, and a removed key that reappears
+ * gets a new identity so old conclusions never revive silently. `currentKey`
+ * is released on retirement, which is what makes the unique index below an
+ * index over *active* mappings.
+ */
+export const tradeIdentities = sqliteTable(
+  "trade_identities",
+  {
+    id: text("id").primaryKey(),
+    accountId: text("account_id")
+      .notNull()
+      .references(() => accounts.id, { onDelete: "cascade" }),
+    currentKey: text("current_key"),
+    revision: integer("revision").notNull().default(0),
+    state: text("state", { enum: ["active", "tombstoned"] })
+      .notNull()
+      .default("active"),
+    createdAt: integer("created_at").notNull(),
+    updatedAt: integer("updated_at").notNull(),
+  },
+  (table) => [
+    uniqueIndex("trade_identities_current_key_unique")
+      .on(table.currentKey)
+      .where(sql`current_key IS NOT NULL`),
+    index("trade_identities_account_idx").on(table.accountId),
+  ],
+);
+
+/**
+ * Append-only projection revisions (Phase 03).
+ *
+ * One row per recorded revision of a trade: the fingerprint of the computed
+ * projection, the bounded factual snapshot it was computed from, and the
+ * identity resolution that produced it. Rows are never updated.
+ */
+export const tradeProjectionRevisions = sqliteTable(
+  "trade_projection_revisions",
+  {
+    id: text("id").primaryKey(),
+    tradeId: text("trade_id")
+      .notNull()
+      .references(() => tradeIdentities.id, { onDelete: "cascade" }),
+    accountId: text("account_id")
+      .notNull()
+      .references(() => accounts.id, { onDelete: "cascade" }),
+    revision: integer("revision").notNull(),
+    tradeKey: text("trade_key").notNull(),
+    fingerprint: text("fingerprint").notNull(),
+    resolution: text("resolution", {
+      enum: ["exact_key", "explicit_transfer", "new", "ambiguous"],
+    }).notNull(),
+    snapshotJson: text("snapshot_json").notNull(),
+    recordedAt: integer("recorded_at").notNull(),
+  },
+  (table) => [
+    uniqueIndex("trade_projection_revisions_trade_revision_unique").on(
+      table.tradeId,
+      table.revision,
+    ),
+    index("trade_projection_revisions_account_idx").on(table.accountId),
+  ],
+);
+
+/**
+ * The execution membership of a revision (Phase 03).
+ *
+ * Normalized rows rather than a JSON array, and deliberately without a foreign
+ * key to `executions`: membership evidence must survive the deletion of the
+ * source fills until an explicit purge.
+ */
+export const tradeRevisionExecutions = sqliteTable(
+  "trade_revision_executions",
+  {
+    revisionId: text("revision_id")
+      .notNull()
+      .references(() => tradeProjectionRevisions.id, { onDelete: "cascade" }),
+    executionId: text("execution_id").notNull(),
+  },
+  (table) => [
+    primaryKey({ columns: [table.revisionId, table.executionId] }),
+    index("trade_revision_executions_execution_idx").on(table.executionId),
+  ],
+);
+
+/**
+ * Provenance between identities (Phase 03): an explicit transfer, or the
+ * supersession of a retired identity by a new one.
+ */
+export const tradeIdentityLinks = sqliteTable(
+  "trade_identity_links",
+  {
+    oldId: text("old_id")
+      .notNull()
+      .references(() => tradeIdentities.id, { onDelete: "cascade" }),
+    newId: text("new_id")
+      .notNull()
+      .references(() => tradeIdentities.id, { onDelete: "cascade" }),
+    operationId: text("operation_id").notNull(),
+    reason: text("reason", { enum: ["superseded", "ambiguous"] }).notNull(),
+    recordedAt: integer("recorded_at").notNull(),
+  },
+  (table) => [
+    primaryKey({ columns: [table.oldId, table.newId, table.operationId] }),
+    index("trade_identity_links_new_idx").on(table.newId),
+  ],
+);
+
+/**
+ * Source quality of a single execution (Phase 03).
+ *
+ * Kept apart from the execution itself: it records what the source could
+ * prove about a fill without changing its hash or its import metadata.
+ */
+export const executionEvidence = sqliteTable("execution_evidence", {
+  executionId: text("execution_id").primaryKey(),
+  timingQuality: text("timing_quality", {
+    enum: ["source_reported", "reconstructed", "unknown"],
+  }).notNull(),
+  sourceKind: text("source_kind").notNull(),
+  evidenceVersion: integer("evidence_version").notNull().default(1),
+  recordedAt: integer("recorded_at").notNull(),
 });

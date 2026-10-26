@@ -5,6 +5,11 @@
       "file": "0001-legacy-baseline.ts",
       "name": "legacy-baseline",
       "checksum": "f9d7d16ebbd535833124a0782ab3b6ebced8b23f19d3c0199f0b57463cf66e25"
+    },
+    "2": {
+      "file": "0002-trade-projections.ts",
+      "name": "trade-projections",
+      "checksum": "693b07369d6b51a83a230be85c5d6f602482bb632ca311bc26652ee7450e3078"
     }
   }
 }

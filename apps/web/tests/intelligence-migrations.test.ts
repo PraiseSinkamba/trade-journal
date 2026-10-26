@@ -47,6 +47,24 @@ const MANIFEST = checksumManifest as {
 };
 const BASELINE_CHECKSUM = MANIFEST.migrations["1"]?.checksum ?? "";
 
+/** Every registered migration, in order: the registry the runner must apply. */
+const REGISTERED = Object.entries(MANIFEST.migrations)
+  .map(([version, entry]) => ({
+    version: Number(version),
+    name: entry.name,
+    file: entry.file,
+    checksum: entry.checksum,
+  }))
+  .sort((left, right) => left.version - right.version);
+/** The same registry without the source file name: the shape the ledger holds. */
+const REGISTERED_LEDGER = REGISTERED.map(({ version, name, checksum }) => ({
+  version,
+  name,
+  checksum,
+}));
+const REGISTERED_VERSIONS = REGISTERED.map((entry) => entry.version);
+const LATEST_VERSION = REGISTERED_VERSIONS[REGISTERED_VERSIONS.length - 1] ?? 0;
+
 const scratch = mkdtempSync(join(tmpdir(), "journal-migrations-"));
 afterAll(() => rmSync(scratch, { recursive: true, force: true }));
 
@@ -92,6 +110,37 @@ const createOldJournal = (name: string): Database.Database => {
   sqlite.exec("ALTER TABLE market_csv_datasets DROP COLUMN first_time");
   sqlite.exec("ALTER TABLE market_csv_datasets DROP COLUMN last_time");
   sqlite.exec("DROP TABLE IF EXISTS journal_migrations");
+  return sqlite;
+};
+
+/**
+ * A journal from the phase that came before this one: the ledger holds the
+ * baseline and the projection tables do not exist yet.
+ *
+ * This is the upgrade path that matters for a forward migration — the runner
+ * has to create the new tables on a journal that was already in use, not only
+ * on a fresh one.
+ */
+const createPhaseTwoJournal = (name: string): Database.Database => {
+  const sqlite = new Database(scratchFile(name));
+  sqlite.exec(BOOTSTRAP_SQL);
+  // Drop the tables this phase adds, so the journal looks like the previous
+  // phase's schema.
+  sqlite.exec(`
+    DROP TABLE IF EXISTS trade_revision_executions;
+    DROP TABLE IF EXISTS trade_identity_links;
+    DROP TABLE IF EXISTS trade_projection_revisions;
+    DROP TABLE IF EXISTS trade_identities;
+    DROP TABLE IF EXISTS execution_evidence;
+  `);
+  // The ledger holds the baseline only.
+  sqlite.exec("DROP TABLE IF EXISTS journal_migrations");
+  sqlite.exec(LEDGER_TABLE_SQL);
+  sqlite
+    .prepare(
+      "INSERT INTO journal_migrations (version, name, checksum, applied_at) VALUES (?, ?, ?, ?)",
+    )
+    .run(1, "legacy-baseline", BASELINE_CHECKSUM, 1);
   return sqlite;
 };
 
@@ -191,17 +240,18 @@ describe("migration runner", () => {
   it("applies the baseline to an empty journal and records it in the ledger", () => {
     const sqlite = new Database(scratchFile("empty.db"));
     try {
-      expect(inspectMigrations(sqlite)).toEqual({ currentVersion: 0, pendingVersions: [1] });
+      expect(inspectMigrations(sqlite)).toEqual({
+        currentVersion: 0,
+        pendingVersions: REGISTERED_VERSIONS,
+      });
       applyMigrations(sqlite);
-      expect(inspectMigrations(sqlite)).toEqual({ currentVersion: 1, pendingVersions: [] });
-      expect(ledgerRows(sqlite)).toEqual([
-        {
-          version: 1,
-          name: "legacy-baseline",
-          checksum: BASELINE_CHECKSUM,
-          applied_at: expect.any(Number),
-        },
-      ]);
+      expect(inspectMigrations(sqlite)).toEqual({
+        currentVersion: LATEST_VERSION,
+        pendingVersions: [],
+      });
+      expect(ledgerRows(sqlite)).toEqual(
+        REGISTERED_LEDGER.map((entry) => ({ ...entry, applied_at: expect.any(Number) })),
+      );
       // The tables the journal needs really exist.
       const tables = (
         sqlite
@@ -227,8 +277,11 @@ describe("migration runner", () => {
     const sqlite = new Database(scratchFile("pre-ledger.db"));
     try {
       applyMigrations(sqlite);
-      expect(inspectMigrations(sqlite)).toEqual({ currentVersion: 1, pendingVersions: [] });
-      expect(ledgerRows(sqlite)).toHaveLength(1);
+      expect(inspectMigrations(sqlite)).toEqual({
+        currentVersion: LATEST_VERSION,
+        pendingVersions: [],
+      });
+      expect(ledgerRows(sqlite)).toHaveLength(REGISTERED.length);
       // The repaired columns came back.
       const columns = (table: string) =>
         (sqlite.pragma(`table_info(${table})`) as { name: string }[]).map((column) => column.name);
@@ -236,6 +289,60 @@ describe("migration runner", () => {
       expect(columns("accounts")).toContain("ibkr_sync_time_zone");
       expect(columns("executions")).toContain("import_metadata_json");
       // The existing row survived untouched.
+      expect(sqlite.prepare("SELECT id, name FROM accounts").get()).toEqual({
+        id: "old",
+        name: "Existing",
+      });
+    } finally {
+      sqlite.close();
+    }
+  });
+
+  it("upgrades a journal from the previous phase onto the projection schema", () => {
+    const previous = createPhaseTwoJournal("previous-phase.db");
+    previous.exec(
+      "INSERT INTO accounts (id, name, kind, created_at) VALUES ('old', 'Existing', 'manual', '2026-01-01')",
+    );
+    previous.close();
+
+    const sqlite = new Database(scratchFile("previous-phase.db"));
+    try {
+      // Before the upgrade the projection tables do not exist and only the
+      // baseline is on the ledger.
+      const before = (
+        sqlite
+          .prepare("SELECT name FROM sqlite_master WHERE type = 'table' ORDER BY name")
+          .all() as { name: string }[]
+      ).map((row) => row.name);
+      expect(before).not.toContain("trade_identities");
+      expect(inspectMigrations(sqlite)).toEqual({
+        currentVersion: 1,
+        pendingVersions: REGISTERED_VERSIONS.filter((version) => version > 1),
+      });
+
+      applyMigrations(sqlite);
+
+      // The upgrade creates the projection tables and advances the ledger.
+      expect(inspectMigrations(sqlite)).toEqual({
+        currentVersion: LATEST_VERSION,
+        pendingVersions: [],
+      });
+      const after = (
+        sqlite
+          .prepare("SELECT name FROM sqlite_master WHERE type = 'table' ORDER BY name")
+          .all() as { name: string }[]
+      ).map((row) => row.name);
+      expect(after).toEqual(
+        expect.arrayContaining([
+          "trade_identities",
+          "trade_projection_revisions",
+          "trade_revision_executions",
+          "trade_identity_links",
+          "execution_evidence",
+        ]),
+      );
+      expect(ledgerRows(sqlite)).toHaveLength(REGISTERED.length);
+      // The existing row survived the upgrade untouched.
       expect(sqlite.prepare("SELECT id, name FROM accounts").get()).toEqual({
         id: "old",
         name: "Existing",
@@ -277,7 +384,7 @@ describe("migration runner", () => {
       sqlite.exec("CREATE TABLE marker (id TEXT PRIMARY KEY)");
       const appliedAt = ledgerRows(sqlite)[0]?.applied_at;
       applyMigrations(sqlite);
-      expect(ledgerRows(sqlite)).toHaveLength(1);
+      expect(ledgerRows(sqlite)).toHaveLength(REGISTERED.length);
       expect(ledgerRows(sqlite)[0]?.applied_at).toBe(appliedAt);
       // The second run did not touch the journal.
       expect(
@@ -470,14 +577,19 @@ describe("migration runner", () => {
     }
   });
 
-  it("binds the registry checksum to the canonical migration source", () => {
-    const source = readFileSync(
-      new URL("../src/db/migrations/0001-legacy-baseline.ts", import.meta.url),
-      "utf8",
-    );
-    expect(createHash("sha256").update(canonical(source), "utf8").digest("hex")).toBe(
-      BASELINE_CHECKSUM,
-    );
+  it("binds every registry checksum to the canonical migration source", () => {
+    // Each manifest entry is bound to the file it names, so a migration whose
+    // source changed cannot keep its old checksum.
+    expect(REGISTERED.length).toBeGreaterThan(0);
+    for (const entry of REGISTERED) {
+      const source = readFileSync(
+        new URL(`../src/db/migrations/${entry.file}`, import.meta.url),
+        "utf8",
+      );
+      expect(createHash("sha256").update(canonical(source), "utf8").digest("hex")).toBe(
+        entry.checksum,
+      );
+    }
   });
 
   it("converges concurrent starts on one fresh journal", async () => {
@@ -513,14 +625,9 @@ describe("migration runner", () => {
     expect(failures).toEqual([]);
     const sqlite = new Database(file, { readonly: true });
     try {
-      expect(ledgerRows(sqlite)).toEqual([
-        {
-          version: 1,
-          name: "legacy-baseline",
-          checksum: BASELINE_CHECKSUM,
-          applied_at: expect.any(Number),
-        },
-      ]);
+      expect(ledgerRows(sqlite)).toEqual(
+        REGISTERED_LEDGER.map((entry) => ({ ...entry, applied_at: expect.any(Number) })),
+      );
       expect(sqlite.pragma("integrity_check", { simple: true })).toBe("ok");
     } finally {
       sqlite.close();
