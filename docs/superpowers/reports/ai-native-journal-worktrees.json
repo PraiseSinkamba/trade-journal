@@ -1,7 +1,7 @@
 {
   "schemaVersion": 1,
   "feature": "ai-native-journal",
-  "updatedAt": "2026-10-26T12:12:00Z",
+  "updatedAt": "2026-10-26T12:25:00Z",
   "owner": "parent OMP coordinator (exclusive owner of this record)",
   "repository": {
     "name": "trade-journal",
@@ -34,9 +34,15 @@
     },
     "featureBranch": "codex/ai-native-journal",
     "featureBootstrapSha": "0a278503fd67c0f9e82138dfecb744f4bfd307ad",
-    "featureHeadSha": "0a278503fd67c0f9e82138dfecb744f4bfd307ad",
-    "featureHeadShaNote": "feature branch HEAD at Phase 01 dispatch and the exact base of the Phase 01 worktree; each later coordinator checkpoint advances this branch and appends to featureCheckpointCommits",
-    "featureCheckpointCommits": ["0a278503fd67c0f9e82138dfecb744f4bfd307ad"],
+    "featureHeadSha": "40011b47fdd57396b7097847fac4fdce3dbe42f2",
+    "featureHeadShaNote": "feature branch HEAD after the Phase 01 non-fast-forward merge; each later coordinator checkpoint advances this branch and appends to featureCheckpointCommits",
+    "featureCheckpointCommits": [
+      "0a278503fd67c0f9e82138dfecb744f4bfd307ad",
+      "80d53ccb62fda801897852a6f4e5d2aab8b0d58b",
+      "2a18658cff715570c1e383ff1a40c3521704463e",
+      "912948536ab8094bfb6aa792f15796ab36ebe665",
+      "40011b47fdd57396b7097847fac4fdce3dbe42f2"
+    ],
     "featureBranchNote": "Orca slugified the requested name to codex-ai-native-journal at creation; the coordinator renamed the newly created, exclusively owned branch to the contract-required codex/ai-native-journal. Orca reads the renamed ref live (refs/heads/codex/ai-native-journal). No pre-existing branch was overwritten."
   },
   "orchestration": {
@@ -52,7 +58,28 @@
     "grantedBy": "user pasted committed orca-execution-prompt.md (revision 4ae868dbbb72f975f9767efb4e212884ecca7803)",
     "authorizedPhases": ["01"],
     "authorizedTasks": ["T-001"],
-    "awaitingContinuation": ["T-002", "T-003", "T-004", "T-005", "T-006", "T-007", "T-008", "T-009", "T-010", "T-011", "T-012", "T-013", "T-014", "T-015", "T-016", "T-017", "T-018", "T-019", "T-020", "T-021"],
+    "awaitingContinuation": [
+      "T-002",
+      "T-003",
+      "T-004",
+      "T-005",
+      "T-006",
+      "T-007",
+      "T-008",
+      "T-009",
+      "T-010",
+      "T-011",
+      "T-012",
+      "T-013",
+      "T-014",
+      "T-015",
+      "T-016",
+      "T-017",
+      "T-018",
+      "T-019",
+      "T-020",
+      "T-021"
+    ],
     "note": "Each later phase requires an explicit user continuation instruction after its predecessor is integrated and verified. A status request does not authorize starting another phase."
   },
   "worktrees": {
@@ -81,27 +108,220 @@
     ]
   },
   "taskMap": [
-    { "stable": "T-001", "native": "task_2acef5be58ee", "phase": "01", "wave": 1, "branch": "codex/ai-native-journal-p01", "deps": [], "status": "dispatched", "state": "dispatched", "nativeDispatch": "ctx_c398a01cfc05", "nativeHandle": "term_08d447b7-7492-48b5-8904-a519d134302b", "evidence": "separate OMP session with its own Dispatch ID and worktree; transcript proves task receipt and execution at base 0a27850" },
-    { "stable": "T-002", "native": "task_4424551d3c6c", "phase": "02", "wave": 2, "branch": "codex/ai-native-journal-p02", "deps": ["task_2acef5be58ee"], "status": "pending", "state": "created" },
-    { "stable": "T-003", "native": "task_f9e9b7567e6c", "phase": "03", "wave": 3, "branch": "codex/ai-native-journal-p03", "deps": ["task_4424551d3c6c"], "status": "pending", "state": "created" },
-    { "stable": "T-004", "native": "task_6bda9ef55d84", "phase": "04", "wave": 4, "branch": "codex/ai-native-journal-p04", "deps": ["task_f9e9b7567e6c"], "status": "pending", "state": "created" },
-    { "stable": "T-005", "native": "task_a871bc6be4cd", "phase": "05", "wave": 5, "branch": "codex/ai-native-journal-p05", "deps": ["task_6bda9ef55d84"], "status": "pending", "state": "created" },
-    { "stable": "T-006", "native": "task_756e02a00efc", "phase": "06", "wave": 6, "branch": "codex/ai-native-journal-p06", "deps": ["task_a871bc6be4cd"], "status": "pending", "state": "created" },
-    { "stable": "T-007", "native": "task_816b57885f53", "phase": "07", "wave": 7, "branch": "codex/ai-native-journal-p07", "deps": ["task_756e02a00efc"], "status": "pending", "state": "created" },
-    { "stable": "T-008", "native": "task_1b9ab56eef54", "phase": "08", "wave": 8, "branch": "codex/ai-native-journal-p08", "deps": ["task_816b57885f53"], "status": "pending", "state": "created" },
-    { "stable": "T-009", "native": "task_5b7ff94b51b9", "phase": "09", "wave": 9, "branch": "codex/ai-native-journal-p09", "deps": ["task_1b9ab56eef54"], "status": "pending", "state": "created" },
-    { "stable": "T-010", "native": "task_b00115dce3c4", "phase": "10", "wave": 10, "branch": "codex/ai-native-journal-p10", "deps": ["task_5b7ff94b51b9"], "status": "pending", "state": "created" },
-    { "stable": "T-011", "native": "task_3b1725afcaa2", "phase": "11", "wave": 11, "branch": "codex/ai-native-journal-p11", "deps": ["task_b00115dce3c4"], "status": "pending", "state": "created" },
-    { "stable": "T-012", "native": "task_107db7662f7e", "phase": "12", "wave": 12, "branch": "codex/ai-native-journal-p12", "deps": ["task_3b1725afcaa2"], "status": "pending", "state": "created" },
-    { "stable": "T-013", "native": "task_96e133343b74", "phase": "13", "wave": 13, "branch": "codex/ai-native-journal-p13", "deps": ["task_107db7662f7e"], "status": "pending", "state": "created" },
-    { "stable": "T-014", "native": "task_53e2b3da13f7", "phase": "14", "wave": 14, "branch": "codex/ai-native-journal-p14", "deps": ["task_96e133343b74"], "status": "pending", "state": "created" },
-    { "stable": "T-015", "native": "task_3956a51d9794", "phase": "15", "wave": 15, "branch": "codex/ai-native-journal-p15", "deps": ["task_53e2b3da13f7"], "status": "pending", "state": "created" },
-    { "stable": "T-016", "native": "task_0ca236ab5428", "phase": "16", "wave": 16, "branch": "codex/ai-native-journal-p16", "deps": ["task_3956a51d9794"], "status": "pending", "state": "created" },
-    { "stable": "T-017", "native": "task_00be9f35e203", "phase": "17", "wave": 17, "branch": "codex/ai-native-journal-p17", "deps": ["task_0ca236ab5428"], "status": "pending", "state": "created" },
-    { "stable": "T-018", "native": "task_ed0e380a3fa9", "phase": "18", "wave": 18, "branch": "codex/ai-native-journal-p18", "deps": ["task_00be9f35e203"], "status": "pending", "state": "created" },
-    { "stable": "T-019", "native": "task_9eb1b8b7ab2f", "phase": "19", "wave": 19, "branch": "codex/ai-native-journal-p19", "deps": ["task_ed0e380a3fa9"], "status": "pending", "state": "created" },
-    { "stable": "T-020", "native": "task_16692d8c9708", "phase": "20", "wave": 20, "branch": "codex/ai-native-journal-p20", "deps": ["task_9eb1b8b7ab2f"], "status": "pending", "state": "created" },
-    { "stable": "T-021", "native": "task_d136aa634289", "phase": "21", "wave": 21, "branch": "codex/ai-native-journal-p21", "deps": ["task_16692d8c9708"], "status": "pending", "state": "created" }
+    {
+      "stable": "T-001",
+      "native": "task_2acef5be58ee",
+      "phase": "01",
+      "wave": 1,
+      "branch": "codex/ai-native-journal-p01",
+      "deps": [],
+      "status": "completed",
+      "state": "integrated",
+      "nativeDispatch": "ctx_aefaf725742a",
+      "nativeHandle": "term_b6126860-ddd0-47c5-86d5-130840512672",
+      "priorDispatch": "ctx_c398a01cfc05",
+      "evidence": "worker_done succeeded on dispatch ctx_aefaf725742a; the coordinator reviewed the exact commits, re-ran the phase gate and merged into codex/ai-native-journal at 40011b4"
+    },
+    {
+      "stable": "T-002",
+      "native": "task_4424551d3c6c",
+      "phase": "02",
+      "wave": 2,
+      "branch": "codex/ai-native-journal-p02",
+      "deps": ["task_2acef5be58ee"],
+      "status": "pending",
+      "state": "created"
+    },
+    {
+      "stable": "T-003",
+      "native": "task_f9e9b7567e6c",
+      "phase": "03",
+      "wave": 3,
+      "branch": "codex/ai-native-journal-p03",
+      "deps": ["task_4424551d3c6c"],
+      "status": "pending",
+      "state": "created"
+    },
+    {
+      "stable": "T-004",
+      "native": "task_6bda9ef55d84",
+      "phase": "04",
+      "wave": 4,
+      "branch": "codex/ai-native-journal-p04",
+      "deps": ["task_f9e9b7567e6c"],
+      "status": "pending",
+      "state": "created"
+    },
+    {
+      "stable": "T-005",
+      "native": "task_a871bc6be4cd",
+      "phase": "05",
+      "wave": 5,
+      "branch": "codex/ai-native-journal-p05",
+      "deps": ["task_6bda9ef55d84"],
+      "status": "pending",
+      "state": "created"
+    },
+    {
+      "stable": "T-006",
+      "native": "task_756e02a00efc",
+      "phase": "06",
+      "wave": 6,
+      "branch": "codex/ai-native-journal-p06",
+      "deps": ["task_a871bc6be4cd"],
+      "status": "pending",
+      "state": "created"
+    },
+    {
+      "stable": "T-007",
+      "native": "task_816b57885f53",
+      "phase": "07",
+      "wave": 7,
+      "branch": "codex/ai-native-journal-p07",
+      "deps": ["task_756e02a00efc"],
+      "status": "pending",
+      "state": "created"
+    },
+    {
+      "stable": "T-008",
+      "native": "task_1b9ab56eef54",
+      "phase": "08",
+      "wave": 8,
+      "branch": "codex/ai-native-journal-p08",
+      "deps": ["task_816b57885f53"],
+      "status": "pending",
+      "state": "created"
+    },
+    {
+      "stable": "T-009",
+      "native": "task_5b7ff94b51b9",
+      "phase": "09",
+      "wave": 9,
+      "branch": "codex/ai-native-journal-p09",
+      "deps": ["task_1b9ab56eef54"],
+      "status": "pending",
+      "state": "created"
+    },
+    {
+      "stable": "T-010",
+      "native": "task_b00115dce3c4",
+      "phase": "10",
+      "wave": 10,
+      "branch": "codex/ai-native-journal-p10",
+      "deps": ["task_5b7ff94b51b9"],
+      "status": "pending",
+      "state": "created"
+    },
+    {
+      "stable": "T-011",
+      "native": "task_3b1725afcaa2",
+      "phase": "11",
+      "wave": 11,
+      "branch": "codex/ai-native-journal-p11",
+      "deps": ["task_b00115dce3c4"],
+      "status": "pending",
+      "state": "created"
+    },
+    {
+      "stable": "T-012",
+      "native": "task_107db7662f7e",
+      "phase": "12",
+      "wave": 12,
+      "branch": "codex/ai-native-journal-p12",
+      "deps": ["task_3b1725afcaa2"],
+      "status": "pending",
+      "state": "created"
+    },
+    {
+      "stable": "T-013",
+      "native": "task_96e133343b74",
+      "phase": "13",
+      "wave": 13,
+      "branch": "codex/ai-native-journal-p13",
+      "deps": ["task_107db7662f7e"],
+      "status": "pending",
+      "state": "created"
+    },
+    {
+      "stable": "T-014",
+      "native": "task_53e2b3da13f7",
+      "phase": "14",
+      "wave": 14,
+      "branch": "codex/ai-native-journal-p14",
+      "deps": ["task_96e133343b74"],
+      "status": "pending",
+      "state": "created"
+    },
+    {
+      "stable": "T-015",
+      "native": "task_3956a51d9794",
+      "phase": "15",
+      "wave": 15,
+      "branch": "codex/ai-native-journal-p15",
+      "deps": ["task_53e2b3da13f7"],
+      "status": "pending",
+      "state": "created"
+    },
+    {
+      "stable": "T-016",
+      "native": "task_0ca236ab5428",
+      "phase": "16",
+      "wave": 16,
+      "branch": "codex/ai-native-journal-p16",
+      "deps": ["task_3956a51d9794"],
+      "status": "pending",
+      "state": "created"
+    },
+    {
+      "stable": "T-017",
+      "native": "task_00be9f35e203",
+      "phase": "17",
+      "wave": 17,
+      "branch": "codex/ai-native-journal-p17",
+      "deps": ["task_0ca236ab5428"],
+      "status": "pending",
+      "state": "created"
+    },
+    {
+      "stable": "T-018",
+      "native": "task_ed0e380a3fa9",
+      "phase": "18",
+      "wave": 18,
+      "branch": "codex/ai-native-journal-p18",
+      "deps": ["task_00be9f35e203"],
+      "status": "pending",
+      "state": "created"
+    },
+    {
+      "stable": "T-019",
+      "native": "task_9eb1b8b7ab2f",
+      "phase": "19",
+      "wave": 19,
+      "branch": "codex/ai-native-journal-p19",
+      "deps": ["task_ed0e380a3fa9"],
+      "status": "pending",
+      "state": "created"
+    },
+    {
+      "stable": "T-020",
+      "native": "task_16692d8c9708",
+      "phase": "20",
+      "wave": 20,
+      "branch": "codex/ai-native-journal-p20",
+      "deps": ["task_9eb1b8b7ab2f"],
+      "status": "pending",
+      "state": "created"
+    },
+    {
+      "stable": "T-021",
+      "native": "task_d136aa634289",
+      "phase": "21",
+      "wave": 21,
+      "branch": "codex/ai-native-journal-p21",
+      "deps": ["task_16692d8c9708"],
+      "status": "pending",
+      "state": "created"
+    }
   ],
   "dispatches": [
     {
@@ -121,11 +341,34 @@
       "executionProof": "worker-read source=transcript provider=omp: the worker received the injected brief carrying task ID task_2acef5be58ee, read docs/orchestration/ai-native-journal/tasks/T-001.md and verified branch codex/ai-native-journal-p01 at HEAD 0a27850 before editing",
       "coordinatorFollowupMessageId": "msg_f5d061f4f575",
       "followupSubject": "Phase 01 resolved checkout, base SHA, setup state and completion contract",
-      "state": "actively executing",
-      "candidate": null,
-      "reviewed": false,
-      "integrated": false,
-      "verified": false
+      "state": "failed by orchestration recovery, work committed anyway",
+      "heartbeatObserved": "2026-10-25T16:17:52Z phase=planning (delivery_5d8003713e47, acknowledged)",
+      "outcome": "capability revoked 2026-10-25T22:27:29Z by an Orca runtime restart; the worker process survived and completed the phase but could not send worker_done because its check addressed the coordinator inbox instead of its own Dispatch mailbox and returned consumer_fenced",
+      "candidate": ["e3b4df3", "4b361d3", "f3575ee"],
+      "reviewed": true,
+      "integrated": true,
+      "verified": true
+    },
+    {
+      "stableTask": "T-001",
+      "nativeTask": "task_2acef5be58ee",
+      "dispatchId": "ctx_aefaf725742a",
+      "agentTerminalHandle": "term_b6126860-ddd0-47c5-86d5-130840512672",
+      "agent": "omp",
+      "provider": "omp",
+      "model": "minimax-code/MiniMax-M3",
+      "mode": "terminal",
+      "worktreeId": "aa54a522-a9af-4cb4-9de7-f1d9a349c0fd::E:/4004/orca/workspaces/trade-journal/codex-ai-native-journal-p01",
+      "startedAt": "2026-10-26T12:05:00Z",
+      "purpose": "replacement attempt authorised with worker-start --retry-of after the failed attempt was recorded; its only assignment was the formatting-gate defect and the missing worker_done",
+      "coordinatorBriefMessageId": "msg_3b99040204ef",
+      "deliveryReceipt": "worker-start state=ready stage=input_accepted into terminal term_b6126860-ddd0-47c5-86d5-130840512672; the brief was read before any edit",
+      "outcome": "worker_done with outcome succeeded, three-sentence summary, real report path and files modified",
+      "state": "settled",
+      "candidate": ["477b102", "fdde475", "f0edcc3"],
+      "reviewed": true,
+      "integrated": true,
+      "verified": true
     }
   ],
   "integration": {
@@ -152,9 +395,33 @@
     "stableTask": "T-001",
     "nativeTask": "task_2acef5be58ee",
     "dispatchId": "ctx_aefaf725742a",
-    "state": "implementation complete and committed; coordinator review passed; one open defect in repair attempt 2",
-    "observedAt": "2026-10-26T12:12:00Z",
-    "candidateCommits": ["e3b4df3", "4b361d3", "f3575ee"],
+    "state": "integrated into codex/ai-native-journal and verified on the destination branch",
+    "observedAt": "2026-10-26T12:25:00Z",
+    "candidateCommits": ["e3b4df3", "4b361d3", "f3575ee", "477b102", "fdde475", "f0edcc3"],
+    "integration": {
+      "destinationBefore": "912948536ab8094bfb6aa792f15796ab36ebe665",
+      "mergeSha": "40011b47fdd57396b7097847fac4fdce3dbe42f2",
+      "mergeParents": [
+        "912948536ab8094bfb6aa792f15796ab36ebe665",
+        "f0edcc3963fafcc726dfc3d649301e1891451c2c"
+      ],
+      "strategy": "serialized local non-fast-forward merge in the feature checkout; no push, no PR, no main merge, no history rewrite, no worktree deletion",
+      "conflictCheck": "git merge-tree --write-tree returned a clean tree before the merge, and the merge itself reported no conflicts",
+      "postMergeChecks": {
+        "targetedVitest": "4 files, 62 passed | 1 skipped, exit 0",
+        "fullPnpmTest": "86 files, 850 passed | 1 skipped, exit 0",
+        "typecheckWeb": "exit 0",
+        "typecheckCore": "exit 0",
+        "typecheckImporters": "exit 0",
+        "license": "Dependency licenses OK",
+        "prettierPhaseFiles": "clean after the formatting repair at 477b102",
+        "rootTypecheck": "exit 101, desktop workspace only, RC2175 on the git-ignored generated icon; zero desktop files changed by the phase, so it is blocked host evidence and not a phase failure"
+      },
+      "reviewed": true,
+      "integrated": true,
+      "verified": true,
+      "integrationReport": "docs/superpowers/reports/ai-native-journal-integration-01.md"
+    },
     "planPath": "docs/superpowers/plans/ai-native-journal/phase-01.md",
     "planStatus": "committed at e3b4df3 before implementation, as the packet requires",
     "lifecycleAnomaly": {
