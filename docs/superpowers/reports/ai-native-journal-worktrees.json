@@ -1,7 +1,7 @@
 {
   "schemaVersion": 1,
   "feature": "ai-native-journal",
-  "updatedAt": "2026-10-26T12:35:00Z",
+  "updatedAt": "2026-10-26T16:25:00Z",
   "owner": "parent OMP coordinator (exclusive owner of this record)",
   "repository": {
     "name": "trade-journal",
@@ -34,15 +34,16 @@
     },
     "featureBranch": "codex/ai-native-journal",
     "featureBootstrapSha": "0a278503fd67c0f9e82138dfecb744f4bfd307ad",
-    "featureHeadSha": "e5352acd39c1d03f240b4b797c9ca021d97679f0",
-    "featureHeadShaNote": "feature branch HEAD at the Phase 02 dispatch and the exact base of the Phase 02 worktree; this coordinator record commit advances the branch by one commit and is appended to featureCheckpointCommits",
+    "featureHeadSha": "3047fe3e4163afe09c1b1802380719efeb6a4068",
+    "featureHeadShaNote": "feature branch HEAD after the Phase 02 non-fast-forward merge; this coordinator record commit advances the branch by one commit and is appended to featureCheckpointCommits",
     "featureCheckpointCommits": [
       "0a278503fd67c0f9e82138dfecb744f4bfd307ad",
       "80d53ccb62fda801897852a6f4e5d2aab8b0d58b",
       "2a18658cff715570c1e383ff1a40c3521704463e",
       "912948536ab8094bfb6aa792f15796ab36ebe665",
       "40011b47fdd57396b7097847fac4fdce3dbe42f2",
-      "e5352acd39c1d03f240b4b797c9ca021d97679f0"
+      "e5352acd39c1d03f240b4b797c9ca021d97679f0",
+      "3047fe3e4163afe09c1b1802380719efeb6a4068"
     ],
     "featureBranchNote": "Orca slugified the requested name to codex-ai-native-journal at creation; the coordinator renamed the newly created, exclusively owned branch to the contract-required codex/ai-native-journal. Orca reads the renamed ref live (refs/heads/codex/ai-native-journal). No pre-existing branch was overwritten."
   },
@@ -113,7 +114,7 @@
         "orcaParentWorktreeId": "aa54a522-a9af-4cb4-9de7-f1d9a349c0fd::E:/4004/orca/workspaces/trade-journal/codex-ai-native-journal",
         "relationship": "child of the feature worktree; Git ancestry is the explicit verified feature HEAD after the Phase 01 integration, not the Orca lineage",
         "setup": "pnpm install --frozen-lockfile completed in the worker checkout; working tree clean; Node v24.20.0, pnpm 11.0.8; own node_modules and own pnpm virtual store, only the download cache is shared",
-        "state": "dispatched"
+        "state": "integrated into codex/ai-native-journal at 3047fe3 and verified on the destination branch; worktree and branch retained for inspection"
       }
     ]
   },
@@ -140,11 +141,11 @@
       "wave": 2,
       "branch": "codex/ai-native-journal-p02",
       "deps": ["task_2acef5be58ee"],
-      "status": "dispatched",
-      "state": "dispatched",
+      "status": "completed",
+      "state": "integrated",
       "nativeDispatch": "ctx_07e3d196e0d4",
       "nativeHandle": "term_cd0018da-005e-4138-b7b4-c08b4ac425f2",
-      "evidence": "separate OMP session in its own Orca child worktree based on the verified feature HEAD e5352ac; the resolved brief (checkout path, base SHA, Phase 01 handoff inputs, schema allocation, verification set, completion contract) was delivered and read before any edit"
+      "evidence": "worker_done succeeded on dispatch ctx_07e3d196e0d4; the coordinator reviewed the exact commits against the phase guide contract, re-ran the full CI sequence and merged into codex/ai-native-journal at 3047fe3"
     },
     {
       "stable": "T-003",
@@ -398,11 +399,14 @@
       "purpose": "Phase 02 - versioned migration runner and legacy baseline",
       "coordinatorBriefMessageId": "msg_bb066640c4e4",
       "deliveryReceipt": "worker-start state=ready stage=input_accepted into terminal term_cd0018da-005e-4138-b7b4-c08b4ac425f2; the resolved brief was read before any edit",
-      "state": "actively executing",
-      "candidate": null,
-      "reviewed": false,
-      "integrated": false,
-      "verified": false
+      "clarificationMessageId": "msg_045f3892e2a4",
+      "steeringMessageId": "msg_b274d6bb819e",
+      "outcome": "worker_done with outcome succeeded, a three-sentence summary, real report path and files modified",
+      "state": "settled",
+      "candidate": ["919a9f4", "cf51fe8", "1a93a46"],
+      "reviewed": true,
+      "integrated": true,
+      "verified": true
     }
   ],
   "integration": {
@@ -483,6 +487,53 @@
       },
       "openDefect": "docs/superpowers/plans/ai-native-journal/phase-01.md fails prettier --check (exit 1). Every other phase file is prettier-clean and the other 75 repo-wide violations are pre-existing. This violates the phase stop condition and would fail the repo format:check CI gate.",
       "defectDisposition": "routed to replacement attempt ctx_aefaf725742a with an explicit fix brief; the coordinator does not edit worker deliverables"
+    }
+  },
+  "phase02Status": {
+    "stableTask": "T-002",
+    "nativeTask": "task_4424551d3c6c",
+    "dispatchId": "ctx_07e3d196e0d4",
+    "state": "integrated into codex/ai-native-journal and verified on the destination branch",
+    "observedAt": "2026-10-26T16:25:00Z",
+    "candidateCommits": ["919a9f4", "cf51fe8", "1a93a46"],
+    "integration": {
+      "destinationBefore": "ff3173f3dbce1dda5e7a2e8e7bfa3ec71e4fb6f7",
+      "mergeSha": "3047fe3e4163afe09c1b1802380719efeb6a4068",
+      "mergeParents": [
+        "ff3173f3dbce1dda5e7a2e8e7bfa3ec71e4fb6f7",
+        "1a93a469d20917e37ab681e9bf95587853cf44c4"
+      ],
+      "conflictCheck": "git merge-tree --write-tree returned a clean tree before the merge, and the merge itself reported no conflicts",
+      "postMergeChecks": {
+        "prettierPhaseFiles": "exit 0",
+        "typecheckWeb": "exit 0",
+        "typecheckCore": "exit 0",
+        "typecheckImporters": "exit 0",
+        "targetedVitest": "4 files, 35 passed, exit 0",
+        "fullPnpmTest": "87 files, 864 passed | 1 skipped, exit 0",
+        "license": "Dependency licenses OK",
+        "migrationsCheck": "migration-checksums.json is up to date, exit 0",
+        "packagesBuild": "exit 0",
+        "appBuild": "Next production build exit 0",
+        "rootTypecheck": "exit 101, desktop workspace only, RC2175 on the git-ignored generated icon; zero desktop files changed by the phase, so it is blocked host evidence and not a phase failure"
+      },
+      "reviewed": true,
+      "integrated": true,
+      "verified": true,
+      "integrationReport": "docs/superpowers/reports/ai-native-journal-integration-02.md"
+    },
+    "coordinatorReview": {
+      "verdict": "PASS",
+      "confirmed": [
+        "migrate() is deleted from bootstrap.ts and nothing calls it: startup runs the migration runner only, so there is no second competing startup migration mechanism",
+        "the checksum is a SHA-256 of canonical migration source text read from the build artifact, never Function.prototype.toString()",
+        "the runner owns the ledger and creates the table only when absent",
+        "history is validated read-only before any write, then re-read and re-validated inside the immediate write lock",
+        "a pre-ledger journal is not treated as already migrated: the baseline convergence runs first and version 1 is recorded afterwards",
+        "each migration's up() and its ledger row are written in the same immediate transaction, so a failure never advances the ledger",
+        "a future version, a tampered name, a tampered checksum, a missing applied version, a non-contiguous history and a non-contiguous registry each raise a distinct MigrationError"
+      ],
+      "findingRaisedAndWithdrawn": "The coordinator flagged the explicit .ts import specifiers and the added allowImportingTsExtensions option in apps/web/tsconfig.json as a convention deviation, because the repository holds zero .ts-extension imports elsewhere and tsconfig.json is not in the phase guide's modify list. Verification confirmed the worker's stated reason: db-concurrent-init.test.ts spawns child Node processes with --experimental-strip-types that await import() the real TypeScript modules, and Node's ESM resolver does not search for extensions, so the explicit specifier is functionally required. The option is legal because tsconfig.base.json already sets noEmit true. The worker had recorded it as deviation 1 and amended the plan before the implementation commit. No defect; the observation was withdrawn."
     }
   },
   "secretsPolicy": "this record contains no credentials, keys, tokens or provider payloads"
