@@ -1,6 +1,6 @@
 import type { ImportedExecution } from "@luxalgo/journal-importers";
 import { bad, handler, ok, requireValue } from "@/server/api";
-import { insertExecutions } from "@/server/executions";
+import { recordManualTrades } from "@/server/trading/commands";
 
 interface ManualBody {
   accountId: string;
@@ -39,5 +39,5 @@ export const POST = handler(async (request: Request) => {
     symbol: row.symbol.trim().toUpperCase(),
     fee: row.fee ?? 0,
   }));
-  return ok(insertExecutions(body.accountId, rows, "manual", body.notes));
+  return ok(recordManualTrades(body.accountId, rows, body.notes));
 });

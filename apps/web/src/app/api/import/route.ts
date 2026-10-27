@@ -7,7 +7,7 @@ import {
   type ImportedExecution,
 } from "@luxalgo/journal-importers";
 import { bad, handler, ok, requireValue } from "@/server/api";
-import { insertExecutions } from "@/server/executions";
+import { importGenericExecutions } from "@/server/trading/commands";
 import { getImportTimeZone } from "@/server/settings";
 import { isTimeZone } from "@/lib/timezone";
 import type { ImportReviewOptions } from "@/lib/import-review";
@@ -169,11 +169,9 @@ export const POST = handler(async (request: Request) => {
   const result =
     parsed.format === "ninjatrader"
       ? commitNinjaTraderImport(body.accountId, parsed, body.content, timeZone, body.review)
-      : insertExecutions(
+      : importGenericExecutions(
           body.accountId,
           xtb?.executions ?? (parsed.executions as ImportedExecution[]),
-          "import",
-          undefined,
           { preserveFees: Boolean(body.ai) },
         );
   if (xtb?.matched) result.duplicates += xtb.matched;
