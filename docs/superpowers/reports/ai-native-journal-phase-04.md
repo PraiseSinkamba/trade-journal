@@ -17,8 +17,10 @@
 | Base SHA                 | `52ccb52` (feature HEAD after the T-003 integration)                            |
 | Plan commit              | `a0e9897` — `docs: add Phase 04 outbox and durable job plan`                    |
 | Implementation tip       | `9fa3ffc` — `feat: add durable outbox and fenced SQLite jobs`                   |
-| Fix tip                  | see §4 — the follow-up commit that resolves the review findings                 |
-| Integration destination  | `codex/ai-native-journal` (not merged by this worker)                           |
+| Review-fix tip           | `af43482` — the follow-up commit that resolves the review findings              |
+| Repair tip               | `9ca2a55` — the two destination-verification repairs (see §4.1)                 |
+| Report tip               | `3c1dda7` — the repaired report (documentation only)                            |
+| Integration destination  | `codex/ai-native-journal` (merged at `6541c10` by the coordinator)              |
 
 **Scope completed.** A committed trade change can now leave a durable domain event in the same
 transaction as the change that caused it. A worker turns those events into per-handler deliveries
@@ -57,6 +59,7 @@ was created — those belong to later phases.
 | `apps/web/tests/intelligence-jobs.test.ts`                  | **new** — 17 invariant cases                                                         |
 | `apps/web/tests/intelligence-worker.test.ts`                | **new** — 11 invariant cases                                                         |
 | `apps/web/tests/intelligence-migrations.test.ts`            | Phase-03 upgrade fixture for the 0003 tables                                         |
+| `apps/web/tests/trade-projection-identity.test.ts`          | repaired — the ledger assertion now names its invariant instead of the ledger's size |
 | `docs/superpowers/plans/ai-native-journal/phase-04.md`      | phase plan (committed before the implementation), amended so plan and code agree     |
 | `docs/superpowers/reports/ai-native-journal-phase-04.md`    | this report                                                                          |
 
@@ -195,15 +198,75 @@ Every command below was run in this worktree against the phase's code.
 The red run is recorded too: before any production file existed, the three new test files failed
 with "Cannot find module" for the modules they exercise. That is the phase's red evidence.
 
+### 4.1 Destination verification and the two repairs
+
+The coordinator merged this phase into `codex/ai-native-journal` at `6541c10` and then verified the
+destination. That verification found two defects, both in the phase's own output rather than in
+its behaviour, and both were repaired on this branch:
+
+**Defect 1 — a formatting-gate violation in a file this phase owns.**
+`apps/web/src/server/intelligence/infrastructure/jobs.ts` failed `prettier --check` with exit 1.
+The violation was introduced by the post-review fix commit `af43482`, which landed after the
+review pass had already read the file, so the review could not have caught it. The repair ran
+prettier over the file and changed nothing but the line wrapping of the exhausted-job guard:
+`d6df314` — `style: format the exhausted-job guard to match the repo prettier rules`. The file's
+behaviour is unchanged; the gate now exits 0.
+
+**Defect 2 — a test pinned the ledger's length instead of its contents.**
+The full suite failed exactly one test:
+
+```
+apps/web/tests/trade-projection-identity.test.ts
+  > projection schema > applies migration 0002 and creates the five projection tables
+  AssertionError: expected [ 1, 2, 3 ] to deeply equal [ 1, 2 ]
+```
+
+The assertion compared the whole applied-migration ledger to exactly `[1, 2]`. This phase's own
+migration `0003` legitimately makes it three, so the assertion was incidental over-specification,
+not a broken invariant: the invariant the test names is that migration 0002 was applied and
+created the five projection tables. The repair asserts what the test actually claims — that
+versions 1 and 2 are present, that 0001 was applied no later than 0002, and that version 2 is
+still named `trade-projections`. It no longer asserts the ledger's length and no longer
+hard-codes a count, so the next phase's migration does not break a test that was never about it.
+The test still fails if 0002 is missing, renamed or out of order, and the five table assertions
+below it are unchanged: `9ca2a55` — `test: assert the projection migration ledger by what it
+contains, not how many versions it holds`. No production code changed for this defect.
+
+**The repair's verification** (run in this worktree against the repair tip `9ca2a55`, with a
+disposable absolute `JOURNAL_DATA_DIR` under the checkout; the full suite was re-run once more
+against the final tip `5ccd213` with the same result):
+
+| #   | Command                                                                                                                                                                                                                                                                                         | Result                                                  |
+| --- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------- |
+| R1  | `pnpm exec vitest run apps/web/tests/intelligence-outbox.test.ts apps/web/tests/intelligence-jobs.test.ts apps/web/tests/intelligence-worker.test.ts apps/web/tests/intelligence-migrations.test.ts apps/web/tests/db-concurrent-init.test.ts apps/web/tests/trade-projection-identity.test.ts` | **PASS** — 6 files, 82 tests (16.11 s)                  |
+| R2  | `pnpm test`                                                                                                                                                                                                                                                                                     | **PASS** — 91 files, 929 tests (125.86 s)               |
+| R3  | `pnpm --filter web typecheck`                                                                                                                                                                                                                                                                   | **PASS** — exit 0                                       |
+| R4  | `pnpm exec prettier --check <every file this repair changed>`                                                                                                                                                                                                                                   | **PASS** — "All matched files use Prettier code style!" |
+| R5  | `node scripts/check-licenses.mjs`                                                                                                                                                                                                                                                               | **PASS** — "Dependency licenses OK."                    |
+| R6  | `pnpm --filter web migrations:check`                                                                                                                                                                                                                                                            | **PASS** — "migration-checksums.json is up to date."    |
+
+The repair's production diff is one line-wrap in `jobs.ts`; the only other source change is the
+one assertion in `trade-projection-identity.test.ts`. No lease, fence, claim, retry, cancellation
+or completion rule, no job key, no handler registry, no payload cap and no schema was touched.
+The boundary and immutability sweeps still hold: `packages/core` and `packages/importers` import
+nothing across the dependency direction and contain no raw HTTP call, migrations 0001 and 0002 and
+their checksum entries are byte-identical, and `git diff --check` reports no whitespace error.
+
 **Not run, and why.**
 
-- The root `pnpm typecheck` was **not** run: it reaches the `desktop` workspace and fails with
-  RC2175 on a git-ignored icon file. That failure is unrelated to this phase and predates it. The
-  web workspace typechecks clean, and that is the workspace this phase changed.
-- The full root `pnpm test` suite was **not** run: the phase guide makes the whole-phase gate the
-  coordinator's, and it runs the merged feature branch rather than a single phase worktree.
+- The root `pnpm typecheck` fails in the `desktop` workspace, which this phase does not touch. The
+  failure is desktop tooling, not phase code: the Tauri build script wants two git-ignored
+  artifacts that a fresh checkout does not have — the Node sidecar binary
+  (`desktop/src-tauri/binaries/node-x86_64-pc-windows-msvc.exe`) and the built web bundle the
+  desktop resource path points at. The sidecar was fetched during the repair run; the desktop
+  resource path still needs a packaged web build, and the icons are generated by
+  `pnpm icons`. Neither belongs to this phase, and no file under `desktop/`, `packages/` or
+  `apps/web/src/app/` changed in it. The web workspace — the workspace this phase changed —
+  typechecks clean.
 - No Docker, Tauri or packaged-deployment check was run: this phase changes no deployment
   artifact, and the deployment checks belong to the supervisor phase.
+- The full root `pnpm test` suite is now recorded in §4.1 (R2). The coordinator still runs the
+  full sequence once on the destination branch after this repair is merged.
 
 ## 5. Deviations, review findings and unresolved risks
 
@@ -286,6 +349,24 @@ before it could report a failure could be reclaimed without bound, because the f
 budget was only enforced for handler failures. The attempt budget now applies to every path — a
 job that used up its attempts is terminal however it got there — and a test proves it.
 
+**Findings from the coordinator's destination verification.** After the phase was merged into
+`codex/ai-native-journal` at `6541c10`, the coordinator verified the destination and found two
+defects. Both were repaired in §4.1 and neither touched production behaviour:
+
+- _A formatting-gate violation in `jobs.ts`._ The post-review fix commit landed after the
+  review had read the file, so the review could not have caught it. Fixed by `d6df314`; the
+  guard's line wrapping changed and nothing else.
+- _A test pinned the applied-migration ledger's length._ The assertion `toEqual([1, 2])` broke
+  the moment this phase's own migration 0003 made the ledger three versions long. Fixed by
+  `9ca2a55`: the assertion now states the invariant the test names — versions 1 and 2 are
+  present, 0001 was applied no later than 0002, and version 2 is still named `trade-projections`
+  — and no longer pins a count. No production code changed.
+
+The coordinator confirmed the phase's semantics against the contract review during the same
+verification: the lease, fence, claim, retry, cancellation and completion rules, the job key,
+the handler registry, the payload caps and the schema are correct and were not touched by the
+repair.
+
 **Unresolved risks.**
 
 - The outbox, the job store and the worker are seams: no mutation path appends an event yet, and
@@ -324,6 +405,7 @@ Phase 05 (transaction-aware reconciliation and the command layer) needs, and now
 composition root that assembles a worker, the supervisor process, and the
 continuous-integration wiring of `migrations:check` (T-021).
 
-**Still with the coordinator, not claimed by this phase:** the full `pnpm test` phase gate, the
-serialized phase→feature merge into `codex/ai-native-journal`, and
-`docs/superpowers/reports/ai-native-journal-integration-04.md`.
+**Still with the coordinator, not claimed by this phase:** the serialized phase→feature merge of
+this repair into `codex/ai-native-journal` (the phase itself was merged at `6541c10`; the repair
+commits `d6df314` and `9ca2a55` still need to land), the full CI sequence on the destination
+branch, and `docs/superpowers/reports/ai-native-journal-integration-04.md`.

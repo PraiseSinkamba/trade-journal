@@ -133,9 +133,7 @@ export const createJobStore = (db: JournalDb): JobStore => ({
         const exhausted = tx
           .update(intelligenceJobs)
           .set({ status: "failed", owner: null, leaseUntil: null, updatedAt: now })
-          .where(
-            and(claimable(now), gte(intelligenceJobs.attempts, MAX_JOB_ATTEMPTS)),
-          )
+          .where(and(claimable(now), gte(intelligenceJobs.attempts, MAX_JOB_ATTEMPTS)))
           .returning({ id: intelligenceJobs.id })
           .all();
         for (const job of exhausted) {
