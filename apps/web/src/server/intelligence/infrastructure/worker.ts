@@ -5,7 +5,14 @@ import { withConnectionTransaction, type JournalTx } from "@/db/transaction";
 import { intelligenceWorkerLease } from "@/db/schema";
 import { newUuid } from "@/server/ids";
 import type { EffectStore, JobRecord, JobStore } from "../contracts/jobs";
-import { WORKER_LEASE_MS, WORKER_LEASE_NAME } from "./jobs";
+import {
+  DISPATCH_LIMIT,
+  POLL_INTERVAL_MS,
+  StaleClaimError,
+  WORKER_LEASE_MS,
+  WORKER_LEASE_NAME,
+  WORKER_RENEW_INTERVAL_MS,
+} from "./jobs";
 import type { OutboxDispatcher } from "./outbox";
 
 /**
@@ -62,6 +69,13 @@ const wait = (ms: number, signal: AbortSignal): Promise<void> =>
     );
   });
 
+/** Whether an error is SQLite refusing a write because the journal is busy. */
+const isBusy = (error: unknown): boolean =>
+  typeof error === "object" &&
+  error !== null &&
+  "code" in error &&
+  String((error as { code: unknown }).code).startsWith("SQLITE_BUSY");
+
 /**
  * Creates the worker.
  *
@@ -86,8 +100,8 @@ export const createWorkerService = (deps: {
 } => {
   const owner = deps.owner ?? `worker-${newUuid()}`;
   const enabled = deps.enabled ?? true;
-  const pollIntervalMs = deps.pollIntervalMs ?? 1_000;
-  const dispatchLimit = deps.dispatchLimit ?? 100;
+  const pollIntervalMs = deps.pollIntervalMs ?? POLL_INTERVAL_MS;
+  const dispatchLimit = deps.dispatchLimit ?? DISPATCH_LIMIT;
 
   let state: WorkerState = enabled ? "idle" : "disabled";
   let fence: number | null = null;
@@ -139,6 +153,13 @@ export const createWorkerService = (deps: {
       }
 
       if (current.owner === owner && current.leaseUntil > now) {
+        // The lease is still ours. It is refreshed on its own cadence, not on
+        // every poll.
+        if (lastHeartbeatAt !== null && now - lastHeartbeatAt < WORKER_RENEW_INTERVAL_MS) {
+          fence = current.fence;
+          leaseUntil = current.leaseUntil;
+          return true;
+        }
         const renewed = tx
           .update(intelligenceWorkerLease)
           .set({ leaseUntil: now + WORKER_LEASE_MS, heartbeatAt: now })
@@ -229,16 +250,26 @@ export const createWorkerService = (deps: {
       withConnectionTransaction(deps.db, (tx) => {
         deps.effects.assertClaim(tx, claim, now);
         handler.run(tx, job);
-        deps.effects.complete(tx, claim, now);
+        // The acknowledgement is guarded by the lease, so it is judged against
+        // the time the work actually finished: work that outlived its lease
+        // is refused, not silently acknowledged.
+        deps.effects.complete(tx, claim, deps.clock());
       });
       processed += 1;
     } catch (error) {
-      // A schema violation never succeeds on a retry; anything else may.
-      const validation = error instanceof ZodError;
-      const code = validation ? "validation_failed" : "handler_failed";
-      deps.jobs.fail(claim, code, now, !validation);
-      failed += 1;
-      lastErrorCode = code;
+      if (error instanceof StaleClaimError) {
+        // The claim no longer authorizes the work: the job was taken over or
+        // cancelled. That is not a handler failure, and the guarded update
+        // refuses to touch a job this worker no longer owns.
+        lastErrorCode = error.reason;
+      } else {
+        // A schema violation never succeeds on a retry; anything else may.
+        const validation = error instanceof ZodError;
+        const code = validation ? "validation_failed" : "handler_failed";
+        deps.jobs.fail(claim, code, now, !validation);
+        failed += 1;
+        lastErrorCode = code;
+      }
     }
     state = "idle";
     return true;
@@ -254,10 +285,16 @@ export const createWorkerService = (deps: {
         try {
           await tick(deps.clock());
         } catch (error) {
-          // A worker fault degrades intelligence, not the process: the loop
-          // stops and reports a sanitized code.
-          lastErrorCode = error instanceof Error ? error.name : "worker_failed";
-          break;
+          // A busy journal is transient: the work stays pending and the next
+          // poll tries again. Any other fault degrades intelligence, not the
+          // process: the loop stops and reports a sanitized code.
+          if (isBusy(error)) {
+            lastErrorCode = "journal_busy";
+            state = "idle";
+          } else {
+            lastErrorCode = error instanceof Error ? error.name : "worker_failed";
+            break;
+          }
         }
         if (stopped || controller.signal.aborted) break;
         await wait(pollIntervalMs, controller.signal);

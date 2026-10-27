@@ -263,12 +263,12 @@ The DDL lives in `apps/web/src/db/migrations/0003-durable-jobs.ts` as an exporte
 reused verbatim by the final-schema snapshot in `bootstrap.ts`, so the migrated schema and the
 declared schema cannot drift.
 
-| Table                       | Columns                                                                                                                                                                                             | Keys / indexes / constraints                                                                                                                                              |
-| --------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `domain_outbox`             | `id` PK, `type`, `schema_version`, `aggregate_type`, `aggregate_id`, `aggregate_revision`, `correlation_id`, `causation_id`, `origin`, `account_id`, `payload_json`, `recorded_at`, `dispatched_at` | UNIQUE `(aggregate_type, aggregate_id, aggregate_revision, type)`; index `(dispatched_at, recorded_at, id)`; index `(account_id)`; `origin IN (…)`; `schema_version >= 1` |
-| `intelligence_jobs`         | `id` PK, `idempotency_key`, `type`, `payload_json`, `status`, `attempts`, `available_at`, `owner`, `fence`, `lease_until`, `cancel_requested`, `last_error`, `created_at`, `updated_at`             | UNIQUE `idempotency_key`; index `(status, available_at, id)`; index `(status, lease_until)`; `status IN (…)`; `attempts >= 0`; `fence >= 0`                               |
-| `event_deliveries`          | `event_id` → domain_outbox (cascade), `handler_id`, `handler_version`, `state`, `job_id` → intelligence_jobs (set null), `last_error`, `created_at`, `updated_at`                                   | PRIMARY KEY `(event_id, handler_id, handler_version)`; index `(job_id)`; `state IN ('pending','delivered','failed','cancelled')`                                          |
-| `intelligence_worker_lease` | `name` PK, `owner`, `fence`, `lease_until`, `heartbeat_at`                                                                                                                                          | `name = 'journal-worker'` (CHECK) → exactly one lease row per journal; `fence >= 0`                                                                                       |
+| Table                       | Columns                                                                                                                                                                                                            | Keys / indexes / constraints                                                                                                                                              |
+| --------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `domain_outbox`             | `id` PK, `type`, `schema_version`, `aggregate_type`, `aggregate_id`, `aggregate_revision`, `correlation_id`, `causation_id`, `origin`, `account_id`, `payload_json`, `recorded_at`, `occurred_at`, `dispatched_at` | UNIQUE `(aggregate_type, aggregate_id, aggregate_revision, type)`; index `(dispatched_at, recorded_at, id)`; index `(account_id)`; `origin IN (…)`; `schema_version >= 1` |
+| `intelligence_jobs`         | `id` PK, `idempotency_key`, `type`, `payload_json`, `status`, `attempts`, `available_at`, `owner`, `fence`, `lease_until`, `cancel_requested`, `last_error`, `created_at`, `updated_at`                            | UNIQUE `idempotency_key`; index `(status, available_at, id)`; index `(status, lease_until)`; `status IN (…)`; `attempts >= 0`; `fence >= 0`                               |
+| `event_deliveries`          | `event_id` → domain_outbox (cascade), `handler_id`, `handler_version`, `state`, `job_id` → intelligence_jobs (set null), `last_error`, `created_at`, `updated_at`                                                  | PRIMARY KEY `(event_id, handler_id, handler_version)`; index `(job_id)`; `state IN ('pending','delivered','failed','cancelled')`                                          |
+| `intelligence_worker_lease` | `name` PK, `owner`, `fence`, `lease_until`, `heartbeat_at`                                                                                                                                                         | `name = 'journal-worker'` (CHECK) → exactly one lease row per journal; `fence >= 0`                                                                                       |
 
 Column notes: all new operational timestamps are **UTC epoch milliseconds**; `status`/`state`
 values are constrained in SQL; `attempts` and `fence` are non-negative. `event_deliveries.job_id`
@@ -612,3 +612,14 @@ to `codex/ai-native-journal`, push, or open a PR — the coordinator owns the in
    `withConnectionTransaction(journal, fn)` takes the connection as an argument; the singleton
    helper now delegates to it, so the synchronous-only contract and the runtime thenable guard
    stay in one place.
+6. **A job payload's schema version is its `type` discriminator.** Contract review §4 asks for
+   "JSON payloads [that are] schema-versioned, strict, and capped at 16 KiB per event/job". The
+   job payload is a strict Zod discriminated union, so the literal `type` pins the shape, and
+   `enqueue` refuses a payload over 16 KiB (`MAX_JOB_PAYLOAD_BYTES`). `intelligence_jobs`
+   therefore carries no separate `schema_version` column — the plan's schema table lists the
+   columns it has, and an always-`1` column would be ceremony.
+7. **The job store's audit timestamps use the wall clock.** The plan's `JobStore` port fixes
+   `enqueue(tx, key, payload, availableAt)` and `cancel(jobId)` — neither takes a `now` — so
+   `created_at` / `updated_at` (audit fields of the write) come from `Date.now()`. Every
+   behavioural timestamp (`available_at`, `lease_until`, the retry backoff) uses the injected
+   time the caller passes in.

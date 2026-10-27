@@ -29,6 +29,7 @@ const {
 } = await import("../src/db");
 const { createJobStore, createEffectStore, JOB_LEASE_MS, MAX_JOB_ATTEMPTS } =
   await import("../src/server/intelligence/infrastructure/jobs");
+const { MAX_JOB_PAYLOAD_BYTES } = await import("../src/server/intelligence/contracts/jobs");
 
 const NOW = 1_800_000_000_000;
 const OWNER = "worker-a";
@@ -134,6 +135,13 @@ describe("enqueuing a job", () => {
     expect(second).toBe(first);
     expect(jobRows()).toHaveLength(1);
   });
+
+  it("refuses a payload larger than the 16 KiB cap", () => {
+    const oversized = payload({ eventId: "e".repeat(MAX_JOB_PAYLOAD_BYTES + 1) });
+
+    expect(() => enqueue("evt-1:trade-evaluator:1", oversized)).toThrow();
+    expect(jobRows()).toHaveLength(0);
+  });
 });
 
 describe("claiming a job", () => {
@@ -179,12 +187,30 @@ describe("claiming a job", () => {
     }
   });
 
+  it("fails a job that used up its attempts, even without a handler failure", () => {
+    const id = enqueue();
+    // Five claims whose leases all ran out: the worker kept crashing before
+    // it could report a failure.
+    let now = NOW;
+    for (let attempt = 0; attempt < MAX_JOB_ATTEMPTS; attempt += 1) {
+      expect(jobs.claim(OWNER, now)).not.toBeNull();
+      now += JOB_LEASE_MS + 1;
+    }
+
+    expect(jobs.claim(OWNER, now)).toBeNull();
+    expect(jobRow(id)).toMatchObject({ status: "failed" });
+  });
+
   it("does not claim a cancelled job", () => {
     const id = enqueue();
+    withDelivery(id);
     jobs.cancel(id);
 
     expect(jobs.claim(OWNER, NOW)).toBeNull();
     expect(jobRow(id)).toMatchObject({ status: "cancelled", cancelRequested: true });
+    // The delivery records the cancellation, so the event is not left looking
+    // undelivered forever.
+    expect(deliveryRows()[0]).toMatchObject({ state: "cancelled" });
   });
 });
 
@@ -230,6 +256,26 @@ describe("fenced completion", () => {
     expect(() => withJournalTransaction((tx) => effects.assertClaim(tx, claim, NOW))).toThrow(
       /cancel/i,
     );
+  });
+
+  it("names the reason a completion was refused", () => {
+    enqueue();
+    const claim = jobs.claim(OWNER, NOW)!;
+    const expired = NOW + JOB_LEASE_MS + 1;
+
+    // The lease ran out without being reclaimed.
+    expect(() => withJournalTransaction((tx) => effects.complete(tx, claim, expired))).toThrow(
+      /expired/i,
+    );
+
+    // The job was cancelled.
+    const other = enqueue("evt-2:trade-evaluator:1");
+    const otherClaim = jobs.claim(OWNER, NOW)!;
+    jobs.cancel(other);
+    expect(() => withJournalTransaction((tx) => effects.complete(tx, otherClaim, NOW))).toThrow(
+      /cancel/i,
+    );
+    expect(other).not.toBe(claim.jobId);
   });
 
   it("renews the lease for the current owner only", () => {

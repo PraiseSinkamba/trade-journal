@@ -2,7 +2,7 @@ import { afterAll, beforeEach, describe, expect, it } from "vitest";
 import { mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { sql } from "drizzle-orm";
+import { eq, sql } from "drizzle-orm";
 import type { JobPayload, JobRecord } from "../src/server/intelligence/contracts/jobs";
 
 /**
@@ -174,6 +174,36 @@ describe("executing a job", () => {
 
     expect(effectCount()).toBe(0);
     expect(jobRow(id)).toMatchObject({ status: "cancelled" });
+  });
+
+  it("reports a cancelled job as cancelled, not as a handler failure", async () => {
+    const id = enqueue();
+    // The work is cancelled while the worker is running it, so the
+    // acknowledgement is refused.
+    const service = worker({
+      handlers: [
+        {
+          id: "trade-evaluator",
+          version: "1",
+          run: (
+            tx: Parameters<Parameters<typeof withJournalTransaction>[0]>[0],
+            job: JobRecord,
+          ) => {
+            tx.update(intelligenceJobs)
+              .set({ status: "cancelled", cancelRequested: true })
+              .where(eq(intelligenceJobs.id, job.id))
+              .run();
+          },
+        },
+      ],
+    });
+
+    await service.tick(NOW);
+
+    // The worker did not own the work any more, so it is not a handler failure.
+    expect(service.status()).toMatchObject({ failed: 0, lastErrorCode: "cancelled" });
+    expect(effectCount()).toBe(0);
+    expect(jobRow(id)).toMatchObject({ status: "running" });
   });
 
   it("fails a job whose handler is unknown instead of retrying it forever", async () => {

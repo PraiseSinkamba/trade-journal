@@ -1,10 +1,11 @@
-import { and, asc, eq, gt, inArray, isNull, lte, or, sql } from "drizzle-orm";
+import { and, asc, eq, gt, gte, inArray, isNull, lt, lte, or, sql } from "drizzle-orm";
 import type { JournalDb } from "@/db/connection";
 import { withConnectionTransaction, type JournalTx } from "@/db/transaction";
 import { eventDeliveries, intelligenceJobs } from "@/db/schema";
 import { newUuid } from "@/server/ids";
 import {
   jobPayloadSchema,
+  MAX_JOB_PAYLOAD_BYTES,
   type EffectStore,
   type JobClaim,
   type JobPayload,
@@ -82,6 +83,10 @@ const claimable = (now: number) =>
 export const createJobStore = (db: JournalDb): JobStore => ({
   enqueue(tx: JournalTx, key: string, payload: JobPayload, availableAt: number): string {
     const parsed = jobPayloadSchema.parse(payload);
+    const payloadJson = JSON.stringify(parsed);
+    if (Buffer.byteLength(payloadJson, "utf8") > MAX_JOB_PAYLOAD_BYTES) {
+      throw new Error(`Job ${key} exceeds the ${MAX_JOB_PAYLOAD_BYTES} byte payload limit.`);
+    }
     const id = newUuid();
     const now = Date.now();
     tx.insert(intelligenceJobs)
@@ -89,7 +94,7 @@ export const createJobStore = (db: JournalDb): JobStore => ({
         id,
         idempotencyKey: key,
         type: parsed.type,
-        payloadJson: JSON.stringify(parsed),
+        payloadJson,
         status: "pending",
         attempts: 0,
         availableAt,
@@ -117,11 +122,30 @@ export const createJobStore = (db: JournalDb): JobStore => ({
       const candidate = tx
         .select({ id: intelligenceJobs.id })
         .from(intelligenceJobs)
-        .where(claimable(now))
+        .where(and(claimable(now), lt(intelligenceJobs.attempts, MAX_JOB_ATTEMPTS)))
         .orderBy(asc(intelligenceJobs.availableAt), asc(intelligenceJobs.id))
         .limit(1)
         .get();
-      if (!candidate) return null;
+      if (!candidate) {
+        // A job that used up its attempts is terminal, however it got there:
+        // a handler failure, or a worker that kept crashing before it could
+        // report one.
+        const exhausted = tx
+          .update(intelligenceJobs)
+          .set({ status: "failed", owner: null, leaseUntil: null, updatedAt: now })
+          .where(
+            and(claimable(now), gte(intelligenceJobs.attempts, MAX_JOB_ATTEMPTS)),
+          )
+          .returning({ id: intelligenceJobs.id })
+          .all();
+        for (const job of exhausted) {
+          tx.update(eventDeliveries)
+            .set({ state: "failed", updatedAt: now })
+            .where(eq(eventDeliveries.jobId, job.id))
+            .run();
+        }
+        return null;
+      }
       const claimed = tx
         .update(intelligenceJobs)
         .set({
@@ -169,15 +193,25 @@ export const createJobStore = (db: JournalDb): JobStore => ({
   },
 
   cancel(jobId: string): void {
-    db.update(intelligenceJobs)
-      .set({ cancelRequested: true, status: "cancelled", updatedAt: Date.now() })
-      .where(
-        and(
-          eq(intelligenceJobs.id, jobId),
-          inArray(intelligenceJobs.status, ["pending", "retry_wait", "running"]),
-        ),
-      )
-      .run();
+    withConnectionTransaction(db, (tx) => {
+      const cancelled = tx
+        .update(intelligenceJobs)
+        .set({ cancelRequested: true, status: "cancelled", updatedAt: Date.now() })
+        .where(
+          and(
+            eq(intelligenceJobs.id, jobId),
+            inArray(intelligenceJobs.status, ["pending", "retry_wait", "running"]),
+          ),
+        )
+        .run();
+      if (cancelled.changes !== 1) return;
+      // The delivery records the cancellation, so the event is not left
+      // looking undelivered forever.
+      tx.update(eventDeliveries)
+        .set({ state: "cancelled", updatedAt: Date.now() })
+        .where(eq(eventDeliveries.jobId, jobId))
+        .run();
+    });
   },
 
   fail(claim: JobClaim, code: string, now: number, retryable: boolean): boolean {
@@ -301,6 +335,37 @@ export const createEffectStore = (): EffectStore => ({
       )
       .run();
     if (completed.changes !== 1) {
+      // The guarded update matched nothing: the job was cancelled, taken over
+      // or its lease ran out. Say which, so the worker reports the real reason.
+      const row = tx
+        .select({
+          owner: intelligenceJobs.owner,
+          fence: intelligenceJobs.fence,
+          status: intelligenceJobs.status,
+          leaseUntil: intelligenceJobs.leaseUntil,
+          cancelRequested: intelligenceJobs.cancelRequested,
+        })
+        .from(intelligenceJobs)
+        .where(eq(intelligenceJobs.id, claim.jobId))
+        .get();
+      if (row?.cancelRequested || row?.status === "cancelled") {
+        throw new StaleClaimError(
+          "cancelled",
+          `Cancelled job ${claim.jobId}: the work was cancelled.`,
+        );
+      }
+      if (row && (row.owner !== claim.owner || row.fence !== claim.fence)) {
+        throw new StaleClaimError(
+          "stale",
+          `Stale claim: job ${claim.jobId} is held by another worker at a later fence.`,
+        );
+      }
+      if (row && (row.leaseUntil === null || row.leaseUntil <= now)) {
+        throw new StaleClaimError(
+          "expired",
+          `Expired claim: the lease on job ${claim.jobId} has run out.`,
+        );
+      }
       throw new StaleClaimError(
         "stale",
         `Stale claim: job ${claim.jobId} is no longer held at fence ${claim.fence}.`,

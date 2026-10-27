@@ -12,6 +12,14 @@ import type { JournalTx } from "@/db/transaction";
 /** The lifecycle of a job. */
 export type JobStatus = "pending" | "running" | "completed" | "retry_wait" | "failed" | "cancelled";
 
+/**
+ * The largest job payload the journal stores, in bytes.
+ *
+ * The same cap the event payload has: a job carries references, never bulk
+ * data (contract review §4).
+ */
+export const MAX_JOB_PAYLOAD_BYTES = 16 * 1024;
+
 const evaluateTradePayload = z
   .object({
     type: z.literal("evaluate_trade"),
