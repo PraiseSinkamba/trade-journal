@@ -498,3 +498,121 @@ export const executionEvidence = sqliteTable("execution_evidence", {
   evidenceVersion: integer("evidence_version").notNull().default(1),
   recordedAt: integer("recorded_at").notNull(),
 });
+
+/**
+ * The transactional outbox (Phase 04).
+ *
+ * A committed domain event, written in the same transaction as the change that
+ * caused it. The unique key over the aggregate revision and the event type is
+ * what makes the append idempotent: one aggregate revision never produces two
+ * events.
+ */
+export const domainOutbox = sqliteTable(
+  "domain_outbox",
+  {
+    id: text("id").primaryKey(),
+    type: text("type").notNull(),
+    schemaVersion: integer("schema_version").notNull(),
+    aggregateType: text("aggregate_type").notNull(),
+    aggregateId: text("aggregate_id").notNull(),
+    aggregateRevision: integer("aggregate_revision").notNull(),
+    correlationId: text("correlation_id").notNull(),
+    causationId: text("causation_id"),
+    origin: text("origin", {
+      enum: ["user", "broker_sync", "import", "system", "workflow"],
+    }).notNull(),
+    accountId: text("account_id"),
+    payloadJson: text("payload_json").notNull(),
+    recordedAt: integer("recorded_at").notNull(),
+    occurredAt: integer("occurred_at"),
+    dispatchedAt: integer("dispatched_at"),
+  },
+  (table) => [
+    uniqueIndex("domain_outbox_aggregate_unique").on(
+      table.aggregateType,
+      table.aggregateId,
+      table.aggregateRevision,
+      table.type,
+    ),
+    index("domain_outbox_dispatch_idx").on(table.dispatchedAt, table.recordedAt, table.id),
+    index("domain_outbox_account_idx").on(table.accountId),
+  ],
+);
+
+/**
+ * Durable jobs (Phase 04).
+ *
+ * A job carries the ownership of a claim: the owner, the fence (the claim
+ * generation) and the lease expiry. The unique idempotency key is what makes a
+ * repeated fanout safe.
+ */
+export const intelligenceJobs = sqliteTable(
+  "intelligence_jobs",
+  {
+    id: text("id").primaryKey(),
+    idempotencyKey: text("idempotency_key").notNull(),
+    type: text("type").notNull(),
+    payloadJson: text("payload_json").notNull(),
+    status: text("status", {
+      enum: ["pending", "running", "completed", "retry_wait", "failed", "cancelled"],
+    }).notNull(),
+    attempts: integer("attempts").notNull().default(0),
+    availableAt: integer("available_at").notNull(),
+    owner: text("owner"),
+    fence: integer("fence").notNull().default(0),
+    leaseUntil: integer("lease_until"),
+    cancelRequested: integer("cancel_requested", { mode: "boolean" }).notNull().default(false),
+    lastError: text("last_error"),
+    createdAt: integer("created_at").notNull(),
+    updatedAt: integer("updated_at").notNull(),
+  },
+  (table) => [
+    uniqueIndex("intelligence_jobs_idempotency_unique").on(table.idempotencyKey),
+    index("intelligence_jobs_status_available_idx").on(table.status, table.availableAt, table.id),
+    index("intelligence_jobs_status_lease_idx").on(table.status, table.leaseUntil),
+  ],
+);
+
+/**
+ * Per-handler deliveries (Phase 04).
+ *
+ * One row per (event, handler, handler version): the delivery key. It carries
+ * the job the delivery produced, so a terminal failure stays inspectable even
+ * after the job is pruned.
+ */
+export const eventDeliveries = sqliteTable(
+  "event_deliveries",
+  {
+    eventId: text("event_id")
+      .notNull()
+      .references(() => domainOutbox.id, { onDelete: "cascade" }),
+    handlerId: text("handler_id").notNull(),
+    handlerVersion: text("handler_version").notNull(),
+    state: text("state", {
+      enum: ["pending", "delivered", "failed", "cancelled"],
+    }).notNull(),
+    jobId: text("job_id").references(() => intelligenceJobs.id, { onDelete: "set null" }),
+    lastError: text("last_error"),
+    createdAt: integer("created_at").notNull(),
+    updatedAt: integer("updated_at").notNull(),
+  },
+  (table) => [
+    primaryKey({ columns: [table.eventId, table.handlerId, table.handlerVersion] }),
+    index("event_deliveries_job_idx").on(table.jobId),
+  ],
+);
+
+/**
+ * The journal's worker lease (Phase 04).
+ *
+ * Exactly one row, named by the check constraint: one worker per journal, even
+ * after an accidental double launch. The fence increments on every takeover, so
+ * a worker that lost the lease cannot renew it.
+ */
+export const intelligenceWorkerLease = sqliteTable("intelligence_worker_lease", {
+  name: text("name").primaryKey(),
+  owner: text("owner").notNull(),
+  fence: integer("fence").notNull().default(0),
+  leaseUntil: integer("lease_until").notNull(),
+  heartbeatAt: integer("heartbeat_at").notNull(),
+});

@@ -10,17 +10,21 @@ const isThenable = (value: unknown): value is PromiseLike<unknown> =>
   typeof value.then === "function";
 
 /**
- * Runs `fn` inside one immediate transaction on the app's journal connection.
+ * Runs `fn` inside one immediate transaction on `journal`.
  *
- * Transactions are synchronous by contract: the callback type rejects a
+ * The transaction is synchronous by contract: the callback type rejects a
  * promise-returning function at compile time, and the runtime guard rolls the
  * transaction back when one shows up anyway. The discarded promise's rejection
  * is consumed so it can never surface as an unhandled rejection.
+ *
+ * Use this when the transaction must run on a specific connection — a worker
+ * fans out and acknowledges on its own connection, not on the request thread's.
  */
-export function withJournalTransaction<T>(
+export function withConnectionTransaction<T>(
+  journal: JournalDb,
   fn: (tx: JournalTx) => T extends PromiseLike<unknown> ? never : T,
 ): T {
-  return db.transaction(
+  return journal.transaction(
     (tx) => {
       const result: unknown = fn(tx);
       if (isThenable(result)) {
@@ -33,4 +37,18 @@ export function withJournalTransaction<T>(
     },
     { behavior: "immediate" },
   );
+}
+
+/**
+ * Runs `fn` inside one immediate transaction on the app's journal connection.
+ *
+ * Transactions are synchronous by contract: the callback type rejects a
+ * promise-returning function at compile time, and the runtime guard rolls the
+ * transaction back when one shows up anyway. The discarded promise's rejection
+ * is consumed so it can never surface as an unhandled rejection.
+ */
+export function withJournalTransaction<T>(
+  fn: (tx: JournalTx) => T extends PromiseLike<unknown> ? never : T,
+): T {
+  return withConnectionTransaction(db, fn);
 }

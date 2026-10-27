@@ -10,6 +10,11 @@
       "file": "0002-trade-projections.ts",
       "name": "trade-projections",
       "checksum": "693b07369d6b51a83a230be85c5d6f602482bb632ca311bc26652ee7450e3078"
+    },
+    "3": {
+      "file": "0003-durable-jobs.ts",
+      "name": "durable-jobs",
+      "checksum": "b552bba2ead5c1790a65fe236b4fbb8b099e94fe51722957ad71b826f968f272"
     }
   }
 }
