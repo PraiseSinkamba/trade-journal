@@ -224,11 +224,11 @@ The public `insertExecutions` keeps its signature and its `InsertResult`. It ope
 **immediate** transaction (the `withJournalTransaction` seam) and derives the context from the
 source, so no existing caller changes:
 
-| `source` | origin         | mode          |
-| -------- | -------------- | ------------- |
-| `manual` | `user`         | `live`        |
-| `import` | `import`       | `historical`  |
-| `sync`   | `broker_sync`  | `live`        |
+| `source` | origin        | mode         |
+| -------- | ------------- | ------------ |
+| `manual` | `user`        | `live`       |
+| `import` | `import`      | `historical` |
+| `sync`   | `broker_sync` | `live`       |
 
 The public `deleteExecutionsForTrades` keeps its signature and returns `void`. It opens one
 immediate transaction: it deletes the fills and then calls
@@ -312,11 +312,11 @@ idempotent: one aggregate revision never produces two events. The revision numbe
 the revision the change recorded, so it always names an existing revision row.
 
 A removal is the one case with no new projection row. The identity's last revision row
-(revision *N*) is the projection that disappeared, so:
+(revision _N_) is the projection that disappeared, so:
 
 - `aggregate.revision` is **N + 1** — the next number in the identity's chain. It must not
-  reuse *N*: revision *N* already has its own event, and the outbox unique key would swallow the
-  removal. *N + 1* has no revision row, and that is deliberate — a removal records no projection,
+  reuse _N_: revision _N_ already has its own event, and the outbox unique key would swallow the
+  removal. _N + 1_ has no revision row, and that is deliberate — a removal records no projection,
   it retires one.
 - `payload.projectionRevisionId` is the **id of revision N**, the projection being removed. A
   consumer reads that row to learn which projection disappeared, and it is immutable.
