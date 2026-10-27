@@ -1,5 +1,6 @@
 import { eq } from "drizzle-orm";
 import { db, settings } from "@/db";
+import type { JournalTx } from "@/db/transaction";
 import { decryptJson, encryptJson } from "./crypto";
 import { EMPTY_DEFAULTS, type JournalDefaults } from "@/lib/journal-defaults";
 import { DEFAULT_CONVERSION, parseCurrencyConversion } from "@/lib/currencies";
@@ -12,16 +13,27 @@ import {
   type AiSettingsPayload,
 } from "@/lib/ai-settings";
 
-export const getJournalDefaults = (): JournalDefaults => {
+export const getJournalDefaults = (): JournalDefaults =>
+  parseJournalDefaults(getSetting("journalDefaults"));
+
+const parseJournalDefaults = (raw: string | null): JournalDefaults => {
   try {
-    return { ...EMPTY_DEFAULTS, ...JSON.parse(getSetting("journalDefaults") ?? "{}") };
+    return { ...EMPTY_DEFAULTS, ...JSON.parse(raw ?? "{}") };
   } catch {
     return EMPTY_DEFAULTS;
   }
 };
 
+/** The journal defaults as the given transaction sees them. */
+export const getJournalDefaultsInTx = (tx: JournalTx): JournalDefaults =>
+  parseJournalDefaults(getSettingInTx(tx, "journalDefaults"));
+
 export const getSetting = (key: string): string | null =>
   db.select().from(settings).where(eq(settings.key, key)).get()?.value ?? null;
+
+/** The setting as the given transaction sees it. */
+export const getSettingInTx = (tx: JournalTx, key: string): string | null =>
+  tx.select().from(settings).where(eq(settings.key, key)).get()?.value ?? null;
 
 export const setSetting = (key: string, value: string): void => {
   db.insert(settings)
@@ -48,8 +60,14 @@ export const getTimeZone = (): string => getSetting("timeZone") ?? "UTC";
 export const getImportTimeZone = (): string => getSetting("importTimeZone") ?? getTimeZone();
 
 /** Per-symbol contract multipliers for futures/options P&L. */
-export const getMultipliers = (): Record<string, number> => {
-  const raw = getSetting("multipliers");
+export const getMultipliers = (): Record<string, number> =>
+  parseMultipliers(getSetting("multipliers"));
+
+/** The contract multipliers as the given transaction sees them. */
+export const getMultipliersInTx = (tx: JournalTx): Record<string, number> =>
+  parseMultipliers(getSettingInTx(tx, "multipliers"));
+
+const parseMultipliers = (raw: string | null): Record<string, number> => {
   if (!raw) return {};
   try {
     return JSON.parse(raw) as Record<string, number>;
