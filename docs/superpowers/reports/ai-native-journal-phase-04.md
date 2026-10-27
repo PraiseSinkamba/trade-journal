@@ -19,6 +19,7 @@
 | Implementation tip       | `9fa3ffc` — `feat: add durable outbox and fenced SQLite jobs`                   |
 | Review-fix tip           | `af43482` — the follow-up commit that resolves the review findings              |
 | Repair tip               | `9ca2a55` — the two destination-verification repairs (see §4.1)                 |
+| Report tip               | `3c1dda7` — the repaired report (documentation only)                            |
 | Integration destination  | `codex/ai-native-journal` (merged at `6541c10` by the coordinator)              |
 
 **Scope completed.** A committed trade change can now leave a durable domain event in the same

@@ -2,8 +2,27 @@
 
 ## Reviewer Report — Phase 04 (T-004): durable outbox, durable jobs and fenced worker
 
-**Diff reviewed:** `git diff a0e9897..HEAD` (base = plan commit `a0e9897`, tip = the phase's
+**Diff reviewed:** `git diff a0e9897..af43482` (base = plan commit `a0e9897`, tip = the phase's
 implementation and fix commits), 18 files.
+
+**Post-review repairs (not a new review round).** After this review passed, the coordinator
+verified the merged destination and found two defects; both were repaired on the phase branch and
+recorded in `docs/superpowers/reports/ai-native-journal-phase-04.md` §4.1:
+
+- `d6df314` — `jobs.ts` failed `prettier --check`. The violation was introduced by `af43482`,
+  which landed after this review had read the file, so this review could not have seen it. The
+  repair changes one line's wrapping and nothing else.
+- `9ca2a55` — `apps/web/tests/trade-projection-identity.test.ts` pinned the applied-migration
+  ledger to exactly `[1, 2]`, which this phase's own migration 0003 legitimately makes three. The
+  assertion now states the invariant the test names (versions 1 and 2 present, 0001 applied no
+  later than 0002, version 2 named `trade-projections`) and no longer pins a count. No production
+  code changed.
+
+Neither repair touches a lease, fence, claim, retry, cancellation or completion rule, the job
+key, the handler registry, a payload cap or the schema, so the findings above still hold. The
+repair's verification: 6 files / 82 tests on the targeted command, 91 files / 929 tests on the
+full `pnpm test`, web workspace typecheck, prettier, license and migration-checksum gates — all
+PASS.
 
 **Authorities checked:** `docs/orchestration/ai-native-journal/tasks/T-004.md`;
 `docs/superpowers/specs/2026-10-22-ai-native-journal-architecture-contract-review.md` §2–§6;
