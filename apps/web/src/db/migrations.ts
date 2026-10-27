@@ -1,6 +1,7 @@
 import type Database from "better-sqlite3";
 import { legacyBaseline } from "./migrations/0001-legacy-baseline.ts";
 import { tradeProjections } from "./migrations/0002-trade-projections.ts";
+import { durableJobs } from "./migrations/0003-durable-jobs.ts";
 import checksumManifest from "./migration-checksums.json" with { type: "json" };
 
 /**
@@ -89,7 +90,7 @@ const MANIFEST = checksumManifest as Manifest;
 const MANIFEST_FORMAT_VERSION = 1;
 
 /** Every migration, in order. Immutable once applied — never renumber or edit. */
-const SOURCES: readonly JournalMigrationSource[] = [legacyBaseline, tradeProjections];
+const SOURCES: readonly JournalMigrationSource[] = [legacyBaseline, tradeProjections, durableJobs];
 
 let cachedRegistry: readonly JournalMigration[] | undefined;
 

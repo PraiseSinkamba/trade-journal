@@ -124,9 +124,13 @@ const createOldJournal = (name: string): Database.Database => {
 const createPhaseTwoJournal = (name: string): Database.Database => {
   const sqlite = new Database(scratchFile(name));
   sqlite.exec(BOOTSTRAP_SQL);
-  // Drop the tables this phase adds, so the journal looks like the previous
-  // phase's schema.
+  // Drop the tables the later phases add, so the journal looks like the
+  // previous phase's schema.
   sqlite.exec(`
+    DROP TABLE IF EXISTS event_deliveries;
+    DROP TABLE IF EXISTS intelligence_jobs;
+    DROP TABLE IF EXISTS intelligence_worker_lease;
+    DROP TABLE IF EXISTS domain_outbox;
     DROP TABLE IF EXISTS trade_revision_executions;
     DROP TABLE IF EXISTS trade_identity_links;
     DROP TABLE IF EXISTS trade_projection_revisions;
@@ -141,6 +145,29 @@ const createPhaseTwoJournal = (name: string): Database.Database => {
       "INSERT INTO journal_migrations (version, name, checksum, applied_at) VALUES (?, ?, ?, ?)",
     )
     .run(1, "legacy-baseline", BASELINE_CHECKSUM, 1);
+  return sqlite;
+};
+
+/**
+ * A journal from the phase before this one: the ledger holds the baseline and
+ * the projection migration, and the durable-job tables do not exist yet.
+ */
+const createPhaseThreeJournal = (name: string): Database.Database => {
+  const sqlite = new Database(scratchFile(name));
+  sqlite.exec(BOOTSTRAP_SQL);
+  sqlite.exec(`
+    DROP TABLE IF EXISTS event_deliveries;
+    DROP TABLE IF EXISTS intelligence_jobs;
+    DROP TABLE IF EXISTS intelligence_worker_lease;
+    DROP TABLE IF EXISTS domain_outbox;
+  `);
+  sqlite.exec("DROP TABLE IF EXISTS journal_migrations");
+  sqlite.exec(LEDGER_TABLE_SQL);
+  const insert = sqlite.prepare(
+    "INSERT INTO journal_migrations (version, name, checksum, applied_at) VALUES (?, ?, ?, ?)",
+  );
+  insert.run(1, "legacy-baseline", BASELINE_CHECKSUM, 1);
+  insert.run(2, "trade-projections", MANIFEST.migrations["2"]?.checksum ?? "", 2);
   return sqlite;
 };
 
@@ -339,6 +366,58 @@ describe("migration runner", () => {
           "trade_revision_executions",
           "trade_identity_links",
           "execution_evidence",
+        ]),
+      );
+      expect(ledgerRows(sqlite)).toHaveLength(REGISTERED.length);
+      // The existing row survived the upgrade untouched.
+      expect(sqlite.prepare("SELECT id, name FROM accounts").get()).toEqual({
+        id: "old",
+        name: "Existing",
+      });
+    } finally {
+      sqlite.close();
+    }
+  });
+
+  it("upgrades a journal from the previous phase onto the durable jobs schema", () => {
+    const previous = createPhaseThreeJournal("previous-durable-phase.db");
+    previous.exec(
+      "INSERT INTO accounts (id, name, kind, created_at) VALUES ('old', 'Existing', 'manual', '2026-01-01')",
+    );
+    previous.close();
+
+    const sqlite = new Database(scratchFile("previous-durable-phase.db"));
+    try {
+      // Before the upgrade the durable-job tables do not exist.
+      const before = (
+        sqlite
+          .prepare("SELECT name FROM sqlite_master WHERE type = 'table' ORDER BY name")
+          .all() as { name: string }[]
+      ).map((row) => row.name);
+      expect(before).not.toContain("domain_outbox");
+      expect(before).not.toContain("intelligence_jobs");
+      expect(inspectMigrations(sqlite)).toEqual({
+        currentVersion: 2,
+        pendingVersions: REGISTERED_VERSIONS.filter((version) => version > 2),
+      });
+
+      applyMigrations(sqlite);
+
+      expect(inspectMigrations(sqlite)).toEqual({
+        currentVersion: LATEST_VERSION,
+        pendingVersions: [],
+      });
+      const after = (
+        sqlite
+          .prepare("SELECT name FROM sqlite_master WHERE type = 'table' ORDER BY name")
+          .all() as { name: string }[]
+      ).map((row) => row.name);
+      expect(after).toEqual(
+        expect.arrayContaining([
+          "domain_outbox",
+          "event_deliveries",
+          "intelligence_jobs",
+          "intelligence_worker_lease",
         ]),
       );
       expect(ledgerRows(sqlite)).toHaveLength(REGISTERED.length);

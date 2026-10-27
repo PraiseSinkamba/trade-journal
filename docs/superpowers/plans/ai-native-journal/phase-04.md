@@ -102,6 +102,10 @@ export declare function markEventDispatched(tx: JournalTx, eventId: string, now:
 - The unique key `(aggregate_type, aggregate_id, aggregate_revision, type)` makes the append
   idempotent: one aggregate revision never produces two events ("Events must not be published
   for unchanged trade projections").
+- `listPendingEvents` / `markEventDispatched` live here because the event store owns the
+  `domain_outbox` table (contract review §2: "persistence to `server/domain-event-store.ts`").
+  The fanout adapter in `infrastructure/outbox.ts` calls them, so the arrow from infrastructure
+  to the event domain stays one-way.
 
 ### `apps/web/src/server/intelligence/contracts/jobs.ts` (ports + vocabulary)
 
@@ -313,23 +317,26 @@ COMMIT
 
 ### 3. Claim (atomic, fenced)
 
+One guarded statement inside one immediate transaction, so the candidate is selected and claimed
+under the same write lock:
+
 ```
 BEGIN IMMEDIATE
-  SELECT id, … FROM intelligence_jobs
-   WHERE cancel_requested = 0
-     AND ( (status IN ('pending','retry_wait') AND available_at <= :now)
-        OR (status = 'running' AND lease_until IS NOT NULL AND lease_until <= :now) )
-   ORDER BY available_at, id LIMIT 1
   UPDATE intelligence_jobs
      SET status='running', owner=:owner, fence = fence + 1,
          lease_until = :now + 60_000, attempts = attempts + 1, updated_at = :now
-   WHERE id=:id AND cancel_requested = 0
+   WHERE id = ( SELECT id FROM intelligence_jobs
+                 WHERE cancel_requested = 0
+                   AND ( (status IN ('pending','retry_wait') AND available_at <= :now)
+                      OR (status = 'running' AND lease_until IS NOT NULL AND lease_until <= :now) )
+                 ORDER BY available_at, id LIMIT 1 )
+     AND cancel_requested = 0
      AND ( (status IN ('pending','retry_wait') AND available_at <= :now)
         OR (status = 'running' AND lease_until IS NOT NULL AND lease_until <= :now) )
 COMMIT
 ```
 
-- The `BEGIN IMMEDIATE` write lock serializes claimants; the guarded `WHERE` (same status and
+- The `BEGIN IMMEDIATE` write lock serializes claimants; the guarded `WHERE` (the same status and
   lease conditions) is the second line of defence, so **two connections can never win the same
   job**.
 - The **fence** increments on every claim. It is the generation number of the claim.
@@ -365,18 +372,24 @@ The effect and the acknowledgement commit **together**; a stale worker cannot co
 
 ### 6. Worker lease acquisition (singleton, fenced)
 
+The lease is one row. A worker reads it and then acts on what it read, so the fence moves on with
+every takeover:
+
 ```
-INSERT INTO intelligence_worker_lease (name, owner, fence, lease_until, heartbeat_at)
-VALUES ('journal-worker', :owner, 1, :now + 30_000, :now)
-ON CONFLICT (name) DO UPDATE
-   SET owner = excluded.owner, fence = intelligence_worker_lease.fence + 1,
-       lease_until = excluded.lease_until, heartbeat_at = excluded.heartbeat_at
- WHERE intelligence_worker_lease.lease_until <= :now      -- only an expired lease is taken over
+BEGIN IMMEDIATE
+  SELECT owner, fence, lease_until FROM intelligence_worker_lease WHERE name = 'journal-worker'
+  -- no row            -> INSERT (name, owner, fence=1, lease_until=:now+30_000, heartbeat_at=:now)
+  -- own live lease   -> UPDATE ... SET lease_until=:now+30_000, heartbeat_at=:now
+  --                     WHERE name AND owner=:owner AND fence=:observed_fence
+  -- expired lease    -> UPDATE ... SET owner=:owner, fence=:observed_fence+1,
+  --                     lease_until=:now+30_000, heartbeat_at=:now
+  --                     WHERE name AND fence=:observed_fence AND lease_until <= :now
+COMMIT
 ```
 
 A live lease owned by somebody else is **not** taken: the second worker stays `blocked` and does
-no work. Renewal is guarded by `owner` **and** `fence`, so a worker that lost the lease cannot
-heartbeat it back.
+no work. Renewal is guarded by `owner` **and** `fence**, so a worker that lost the lease cannot
+heartbeat it back; a takeover moves the fence on, so the old holder's renewal fails.
 
 ### 7. Failure, retry and cancellation
 
@@ -586,3 +599,16 @@ to `codex/ai-native-journal`, push, or open a PR — the coordinator owns the in
 3. **The other four `JobPayload` variants are declared but not produced.** They are the shared
    vocabulary of the plan's job contract; Phase 04 only produces `evaluate_trade`. No handler,
    job type or table is implemented for them.
+4. **Two domain-event files, as the coordinator asked.** The packet's area list names
+   `server/domain-events.ts`; the detailed plan's Task 4 file list names
+   `server/domain-event-store.ts`. Both exist, and each has one job:
+   `domain-events.ts` owns the strict event contract (types + Zod schema, no DB import), and
+   `domain-event-store.ts` owns the `domain_outbox` table's persistence (the transactional
+   append plus the pending/dispatched reads the fanout needs). The contract review §2 puts event
+   types in `server/domain-events.ts` and event persistence in
+   `server/domain-event-store.ts`, so this split satisfies both source documents.
+5. **`db/transaction.ts` gains a connection-scoped seam.** `withJournalTransaction` is bound to
+   the app singleton, but a worker claims and acknowledges on its own connection. The new
+   `withConnectionTransaction(journal, fn)` takes the connection as an argument; the singleton
+   helper now delegates to it, so the synchronous-only contract and the runtime thenable guard
+   stay in one place.
