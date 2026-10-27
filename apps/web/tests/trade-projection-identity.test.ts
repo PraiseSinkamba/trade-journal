@@ -524,7 +524,15 @@ describe("immutable projection revisions", () => {
 describe("projection schema", () => {
   it("applies migration 0002 and creates the five projection tables", () => {
     const applied = db.select().from(journalMigrations).all();
-    expect(applied.map((row) => row.version).sort((a, b) => a - b)).toEqual([1, 2]);
+    // This test owns the claim that 0002 was applied, not how many migrations
+    // the journal happens to carry: a later phase adds its own version, and the
+    // ledger keeps growing. The invariant is that 0001 and 0002 are present,
+    // 0002 was applied after 0001, and it is still the migration this test
+    // names.
+    const versions = applied.map((row) => row.version);
+    expect(versions).toEqual(expect.arrayContaining([1, 2]));
+    const appliedAt = new Map(applied.map((row) => [row.version, row.appliedAt]));
+    expect(appliedAt.get(1)).toBeLessThanOrEqual(appliedAt.get(2) as number);
     expect(applied.find((row) => row.version === 2)?.name).toBe("trade-projections");
 
     const tables = (
