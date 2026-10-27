@@ -1,7 +1,7 @@
 {
   "schemaVersion": 1,
   "feature": "ai-native-journal",
-  "updatedAt": "2026-10-27T01:05:00Z",
+  "updatedAt": "2026-10-27T15:35:00Z",
   "owner": "parent OMP coordinator (exclusive owner of this record)",
   "repository": {
     "name": "trade-journal",
@@ -34,8 +34,8 @@
     },
     "featureBranch": "codex/ai-native-journal",
     "featureBootstrapSha": "0a278503fd67c0f9e82138dfecb744f4bfd307ad",
-    "featureHeadSha": "f4e4ffe4841f2ddf7532643ea6e7f4bb23373d6e",
-    "featureHeadShaNote": "feature branch HEAD at the Phase 04 dispatch; the Phase 04 worktree base is the merge commit 52ccb52, one coordinator-record commit behind. Each coordinator checkpoint advances this branch and is appended to featureCheckpointCommits",
+    "featureHeadSha": "f6ea10cfa408a8357c1c51073e8ba68c9d91186d",
+    "featureHeadShaNote": "feature branch HEAD after the Phase 04 repair merge; this coordinator record commit advances the branch by one commit and is appended to featureCheckpointCommits",
     "featureCheckpointCommits": [
       "0a278503fd67c0f9e82138dfecb744f4bfd307ad",
       "80d53ccb62fda801897852a6f4e5d2aab8b0d58b",
@@ -45,7 +45,9 @@
       "e5352acd39c1d03f240b4b797c9ca021d97679f0",
       "3047fe3e4163afe09c1b1802380719efeb6a4068",
       "2e818946022b777e3f62f35b3a05fc1613e91fcf",
-      "349c06157e694503c9c5230070c2a202c61683d3"
+      "349c06157e694503c9c5230070c2a202c61683d3",
+      "6541c10c546932032b3944d652ab7ddf0cf172ca",
+      "f6ea10cfa408a8357c1c51073e8ba68c9d91186d"
     ],
     "featureBranchNote": "Orca slugified the requested name to codex-ai-native-journal at creation; the coordinator renamed the newly created, exclusively owned branch to the contract-required codex/ai-native-journal. Orca reads the renamed ref live (refs/heads/codex/ai-native-journal). No pre-existing branch was overwritten."
   },
@@ -60,10 +62,9 @@
   },
   "authorization": {
     "grantedBy": "user pasted committed orca-execution-prompt.md (revision 4ae868dbbb72f975f9767efb4e212884ecca7803)",
-    "authorizedPhases": ["01", "02", "03", "04"],
-    "authorizedTasks": ["T-001", "T-002", "T-003", "T-004"],
+    "authorizedPhases": ["01", "02", "03", "04", "05"],
+    "authorizedTasks": ["T-001", "T-002", "T-003", "T-004", "T-005"],
     "awaitingContinuation": [
-      "T-005",
       "T-006",
       "T-007",
       "T-008",
@@ -137,7 +138,7 @@
         "startSha": "52ccb529227b250c75506431c2a210cb5ced57a8",
         "orcaParentWorktreeId": "aa54a522-a9af-4cb4-9de7-f1d9a349c0fd::E:/4004/orca/workspaces/trade-journal/codex-ai-native-journal",
         "setup": "pnpm install --frozen-lockfile completed; working tree clean; Node v24.20.0, pnpm 11.0.8; own node_modules and own pnpm virtual store",
-        "state": "dispatched"
+        "state": "integrated into codex/ai-native-journal at 6541c10 and the repair merged at f6ea10c, verified on the destination branch; then cleaned up at the user request: the Orca worktree, the git worktree registration, the branch and the leftover directory were removed after verifying the content was merged."
       }
     ]
   },
@@ -191,10 +192,12 @@
       "wave": 4,
       "branch": "codex/ai-native-journal-p04",
       "deps": ["task_f9e9b7567e6c"],
-      "status": "dispatched",
-      "state": "dispatched",
-      "nativeDispatch": "ctx_8e4bf88a2a92",
-      "nativeHandle": "term_4fe68a37-fbcd-4ba1-83c4-f191315789f1"
+      "status": "completed",
+      "state": "integrated",
+      "nativeDispatch": "ctx_aa32f5a5ca09",
+      "nativeHandle": "term_c0ffab47-ce38-4925-889b-597296148dcb",
+      "priorDispatch": "ctx_8e4bf88a2a92",
+      "evidence": "worker_done succeeded on the repair attempt ctx_aa32f5a5ca09 after coordinator destination verification found two defects and routed them back to an implementation worker; merged into codex/ai-native-journal at 6541c10 and the repair merged at f6ea10c"
     },
     {
       "stable": "T-005",
@@ -444,11 +447,28 @@
       "started": "2026-10-27T01:05:00Z",
       "base": "52ccb529227b250c75506431c2a210cb5ced57a8",
       "purpose": "Phase 04 - outbox, durable jobs and fenced worker mechanics, exercised in tests only",
-      "state": "actively executing",
-      "candidate": null,
-      "reviewed": false,
-      "integrated": false,
+      "state": "settled; candidate merged at 6541c10 then superseded by the repair attempt",
+      "candidate": ["a0e9897", "9fa3ffc", "af43482"],
+      "reviewed": true,
+      "integrated": true,
       "verified": false
+    },
+    {
+      "task": "T-004",
+      "native": "task_6bda9ef55d84",
+      "dispatch": "ctx_aa32f5a5ca09",
+      "handle": "term_c0ffab47-ce38-4925-889b-597296148dcb",
+      "agent": "omp",
+      "provider": "omp",
+      "worktree": "aa54a522-a9af-4cb4-9de7-f1d9a349c0fd::E:/4004/orca/workspaces/trade-journal/codex-ai-native-journal-p04",
+      "started": "2026-10-27T12:52:00Z",
+      "base": "af434820f932ea3e10f536717bdd67211aca2441",
+      "purpose": "Phase 04 repair attempt - fix the prettier violation in jobs.ts and the over-specified migration-ledger assertion in trade-projection-identity.test.ts",
+      "state": "settled",
+      "candidate": ["9ca2a55", "d6df314", "5ccd213", "3c1dda7", "206beaa"],
+      "reviewed": true,
+      "integrated": true,
+      "verified": true
     }
   ],
   "integration": {
@@ -557,6 +577,28 @@
       "deviations": "Three, recorded in the phase report: epoch-millisecond timestamps; execution_evidence created but unwritten (its producer belongs to later importer mapping work); two review-driven tightenings.",
       "note": "The first 16 model calls failed with 402 insufficient_balance_error then 401 invalid api key, exhausting the retry budget at 15:02Z. The coordinator diagnosed this from the worker session transcript. The worker recovered and completed unaided once the provider balance was restored.",
       "report": "docs/superpowers/reports/ai-native-journal-integration-03.md",
+      "reviewed": true,
+      "integrated": true,
+      "verified": true
+    },
+    {
+      "phase": "04",
+      "task": "T-004",
+      "native": "task_6bda9ef55d84",
+      "dispatch": "ctx_aa32f5a5ca09",
+      "base": "52ccb529227b250c75506431c2a210cb5ced57a8",
+      "mergeSha": "f6ea10cfa408a8357c1c51073e8ba68c9d91186d",
+      "mergeParents": [
+        "6541c10c546932032b3944d652ab7ddf0cf172ca",
+        "206beaa7efb1b9776884eccd0d9b5d9467ff2fa0"
+      ],
+      "commits": ["a0e9897", "9fa3ffc", "af43482", "9ca2a55", "d6df314"],
+      "checks": "targeted 4 files 62 passed; full pnpm test 91 files 929 passed; typecheck web/core/importers 0; prettier 0; migrations:check OK; license OK; packages build 0; next build 0",
+      "review": "PASS after one repair round. Dispatch is one immediate transaction with the job key eventId:handlerId:handlerVersion; appendDomainEvent writes into the caller transaction; claims carry an incremented fence and completion calls assertClaim inside the effect transaction; all contract review section 5 constants exact.",
+      "deviations": "The worker records several accepted deviations in the phase plan, including the job payload carrying handlerId and four JobPayload variants declared but not produced.",
+      "defectsFoundAndRepaired": "Two, both at destination verification and both invisible to the targeted gate: a prettier violation introduced by the post-review fix commit af43482, and a Phase 03 test that pinned the applied-migration ledger to exactly two versions and broke on the legitimate forward migration 0003. Both were routed back to an implementation worker.",
+      "note": "The initial attempt lost DNS access to api.minimax.io mid-phase and still completed. The coordinator supervisor aborted on a single transient error, which was a false alarm; it now counts only new errors.",
+      "report": "docs/superpowers/reports/ai-native-journal-integration-04.md",
       "reviewed": true,
       "integrated": true,
       "verified": true
