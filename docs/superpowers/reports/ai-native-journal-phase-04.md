@@ -231,17 +231,25 @@ The test still fails if 0002 is missing, renamed or out of order, and the five t
 below it are unchanged: `9ca2a55` — `test: assert the projection migration ledger by what it
 contains, not how many versions it holds`. No production code changed for this defect.
 
-**The repair's verification** (run against `9ca2a55` in this worktree, with a disposable
-`JOURNAL_DATA_DIR` under the checkout):
+**The repair's verification** (run in this worktree against the repair tip `9ca2a55`, with a
+disposable absolute `JOURNAL_DATA_DIR` under the checkout; the full suite was re-run once more
+against the final tip `5ccd213` with the same result):
 
 | #   | Command                                                                                                                                                                                                                                                                                         | Result                                                  |
 | --- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------- |
-| R1  | `pnpm exec vitest run apps/web/tests/intelligence-outbox.test.ts apps/web/tests/intelligence-jobs.test.ts apps/web/tests/intelligence-worker.test.ts apps/web/tests/intelligence-migrations.test.ts apps/web/tests/db-concurrent-init.test.ts apps/web/tests/trade-projection-identity.test.ts` | **PASS** — 6 files, 82 tests                            |
-| R2  | `pnpm test`                                                                                                                                                                                                                                                                                     | **PASS** — 91 files, 929 tests                          |
+| R1  | `pnpm exec vitest run apps/web/tests/intelligence-outbox.test.ts apps/web/tests/intelligence-jobs.test.ts apps/web/tests/intelligence-worker.test.ts apps/web/tests/intelligence-migrations.test.ts apps/web/tests/db-concurrent-init.test.ts apps/web/tests/trade-projection-identity.test.ts` | **PASS** — 6 files, 82 tests (16.11 s)                  |
+| R2  | `pnpm test`                                                                                                                                                                                                                                                                                     | **PASS** — 91 files, 929 tests (125.86 s)               |
 | R3  | `pnpm --filter web typecheck`                                                                                                                                                                                                                                                                   | **PASS** — exit 0                                       |
 | R4  | `pnpm exec prettier --check <every file this repair changed>`                                                                                                                                                                                                                                   | **PASS** — "All matched files use Prettier code style!" |
 | R5  | `node scripts/check-licenses.mjs`                                                                                                                                                                                                                                                               | **PASS** — "Dependency licenses OK."                    |
 | R6  | `pnpm --filter web migrations:check`                                                                                                                                                                                                                                                            | **PASS** — "migration-checksums.json is up to date."    |
+
+The repair's production diff is one line-wrap in `jobs.ts`; the only other source change is the
+one assertion in `trade-projection-identity.test.ts`. No lease, fence, claim, retry, cancellation
+or completion rule, no job key, no handler registry, no payload cap and no schema was touched.
+The boundary and immutability sweeps still hold: `packages/core` and `packages/importers` import
+nothing across the dependency direction and contain no raw HTTP call, migrations 0001 and 0002 and
+their checksum entries are byte-identical, and `git diff --check` reports no whitespace error.
 
 **Not run, and why.**
 
