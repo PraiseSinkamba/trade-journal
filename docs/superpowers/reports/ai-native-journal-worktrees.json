@@ -1,7 +1,7 @@
 {
   "schemaVersion": 1,
   "feature": "ai-native-journal",
-  "updatedAt": "2026-10-28T11:52:22Z",
+  "updatedAt": "2026-10-28T22:40:40Z",
   "owner": "parent OMP coordinator (exclusive owner of this record)",
   "repository": {
     "name": "trade-journal",
@@ -293,9 +293,10 @@
       "deps": ["task_816b57885f53"],
       "status": "dispatched",
       "state": "dispatched",
-      "nativeDispatch": "ctx_7ed9eb0f577b",
-      "nativeHandle": "term_7a62c192-b47b-4aeb-8e1e-cc5781a11dc7",
-      "evidence": "separate OMP session in its own Orca child worktree based on the verified feature HEAD; the resolved brief (checkout, base SHA, predecessor handoff, the phase scope, the verification set and the completion contract) was delivered and read before any edit"
+      "nativeDispatch": "ctx_e48790748e2c",
+      "nativeHandle": "term_ac380c4e-384f-4c0f-a55c-1fe9a4d887c7",
+      "evidence": "the initial attempt delivered the implementation (plan 27dd6f7, schema and contract 392461d, implementation 8e41524, report 65f7f2e) but its dispatch was revoked by an Orca runtime restart before it could send worker_done; the coordinator verified the exact commits and the targeted gate (4 files, 57 tests, exit 0) and routed the closure to a replacement attempt",
+      "priorDispatch": "ctx_7ed9eb0f577b"
     },
     {
       "stable": "T-009",
@@ -590,6 +591,24 @@
       "started": "2026-10-28 11:50:04",
       "base": "259c89441d4689bfb888b03196dad6113e1e70b4",
       "purpose": "Phase 08",
+      "state": "failed by orchestration recovery; work committed anyway",
+      "candidate": ["27dd6f7", "392461d", "8e41524", "65f7f2e"],
+      "reviewed": true,
+      "integrated": false,
+      "verified": false,
+      "outcome": "capability revoked 2026-10-28T20:04:12Z by an Orca runtime restart; the worker process survived the revocation, completed and verified the implementation and composed its final summary at 22:31Z, but could not send worker_done because its capability had already been revoked"
+    },
+    {
+      "task": "T-008",
+      "native": "task_1b9ab56eef54",
+      "dispatch": "ctx_e48790748e2c",
+      "handle": "term_ac380c4e-384f-4c0f-a55c-1fe9a4d887c7",
+      "agent": "omp",
+      "provider": "omp",
+      "worktree": "aa54a522-a9af-4cb4-9de7-f1d9a349c0fd::E:/4004/orca/workspaces/trade-journal/codex-ai-native-journal-p08",
+      "started": "2026-10-28T22:42:00Z",
+      "base": "259c89441d4689bfb888b03196dad6113e1e70b4",
+      "purpose": "Phase 08 closure attempt - verify the committed implementation, record the coordinator verification and the revocation anomaly, and emit the missing worker_done",
       "state": "actively executing",
       "candidate": null,
       "reviewed": false,
@@ -790,6 +809,21 @@
       "reviewed": true,
       "integrated": true,
       "verified": true
+    },
+    {
+      "phase": "08",
+      "task": "T-008",
+      "native": "task_1b9ab56eef54",
+      "dispatch": "ctx_e48790748e2c",
+      "base": "259c89441d4689bfb888b03196dad6113e1e70b4",
+      "mergeSha": null,
+      "commits": ["27dd6f7", "392461d", "8e41524", "65f7f2e"],
+      "checks": "targeted 4 files 57 passed, exit 0, reproduced independently by the coordinator; destination verification pending the closure attempt",
+      "review": "Implementation verified against the exact commits: migration 0004 appends intelligence_observations, observation_evidence and intelligence_seed_checkpoints with 0001 to 0003 byte-unchanged; purgeAccountIntelligence now removes the account observations and seed checkpoint; classifyExecutionEvidence refuses to upgrade a synthetic fill even when the caller omits the synthetic flag, because the synthetic execution id is a second signal, and legacy quality stays unknown.",
+      "anomaly": "The initial dispatch ctx_7ed9eb0f577b was revoked by an Orca runtime restart at 2026-10-28T20:04:12Z. The worker process survived, completed and verified the implementation and composed its final summary at 22:31Z, but could not send worker_done because its capability was already revoked. This is the second occurrence of that pattern, after Phase 01 attempt 1.",
+      "reviewed": true,
+      "integrated": false,
+      "verified": false
     }
   ],
   "recordShape": "This file is the index and the authoritative stable-to-native task mapping: stable/native task mapping, worktree and dispatch identifiers, and one compact entry per integrated phase. Narrative, findings, deviations and command output live in the per-phase reports under docs/superpowers/reports/. Keep this file compact - one entry per phase, no duplicated prose. Resolve a native task id from taskMap here or from the native task list, never from a chat summary: a transcription slip once named T-019 as T-005, and the near miss was caught because the native task list disagreed with the prose."
