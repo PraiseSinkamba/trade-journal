@@ -124,9 +124,7 @@ export const observationResultSchema: z.ZodType<ObservationResult> = observation
  * quality value is the explicit reason there is none, and a duration the
  * source never stated is never promoted into one.
  */
-export const evaluateTradeProjection = (
-  source: TradeProjectionEvidence,
-): ObservationResult => {
+export const evaluateTradeProjection = (source: TradeProjectionEvidence): ObservationResult => {
   if (source.identityResolution === "ambiguous") {
     // The journal cannot say which trade it observed, so it does not observe.
     return { kind: "insufficient_evidence", reason: "ambiguous_identity" };

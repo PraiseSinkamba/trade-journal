@@ -40,7 +40,7 @@ fetch / parse (outside the transaction)
         persist it against the CURRENT revision (fence)
 ```
 
-If the quality were resolved *after* the fingerprint, the fingerprint would change and the journal
+If the quality were resolved _after_ the fingerprint, the fingerprint would change and the journal
 would manufacture a spurious revision and a spurious domain event. The quality therefore reaches
 reconciliation **before** the fingerprint is computed, inside the same transaction.
 
@@ -318,7 +318,7 @@ projection and compares it with the quality the journal last recorded.
   quality the journal actually recorded, so a quality upgrade produces a new revision (a quality
   change is a change of the facts) and an unchanged quality produces none.
 
-The comparison is therefore *recorded against derived*: an unchanged projection still compares
+The comparison is therefore _recorded against derived_: an unchanged projection still compares
 equal, and a corrected quality creates exactly one revision — never two.
 
 ---
@@ -371,7 +371,7 @@ CREATE TABLE IF NOT EXISTS intelligence_seed_checkpoints (
 );
 ```
 
-- The unique key is *subject / source revision / evaluator / evaluator version / type* — the phase
+- The unique key is _subject / source revision / evaluator / evaluator version / type_ — the phase
   guide's minimum, which is also what makes a repeated delivery idempotent.
 - `subject_id` is the trade identity id. It carries no foreign key: an observation outlives the
   identity it observed, exactly like the execution membership does.
@@ -411,11 +411,11 @@ CREATE TABLE IF NOT EXISTS intelligence_seed_checkpoints (
 - [ ] The cTrader mapper marks the synthetic opening fill it invents, so the sync knows which
       fills are synthetic. The **import metadata and the execution hash do not change**.
 - [ ] The cTrader sync classifies every fill it produces:
-      - a real deal → `source_reported`, source kind `ctrader_deal`;
-      - a synthetic opening fill whose time came from the order history → `reconstructed`, source
-        kind `ctrader_synthetic_open`;
-      - a synthetic opening fill without a recovered opening time → `unknown`, source kind
-        `ctrader_synthetic_open`.
+  - a real deal → `source_reported`, source kind `ctrader_deal`;
+  - a synthetic opening fill whose time came from the order history → `reconstructed`, source
+    kind `ctrader_synthetic_open`;
+  - a synthetic opening fill without a recovered opening time → `unknown`, source kind
+    `ctrader_synthetic_open`.
 - [ ] The sync passes the classifications to `insertExecutionsInTx` through the `quality` option, so
       the sidecar rows are written before the reconciliation fingerprints the projection.
 
@@ -450,16 +450,16 @@ CREATE TABLE IF NOT EXISTS intelligence_seed_checkpoints (
 
 Every case below is exit evidence.
 
-| Case                                            | Expected                                                                                       |
-| ----------------------------------------------- | ---------------------------------------------------------------------------------------------- |
-| A duplicate delivery                            | Exactly one observation and exactly one evidence link.                                          |
-| A correction                                    | The earlier observation is superseded; the new one is active.                                   |
-| A removal                                       | The active observation is invalidated; no new observation is written.                          |
-| A reversed event order                          | The old event cannot revive the old truth: it is refused by the current-revision fence.        |
-| A synthetic entry                               | Never source-reported timing, with either a zero or a nonzero duration.                        |
-| A legacy quality                                | Stays unknown; it is never guessed from a duration.                                             |
-| A stale or cancelled source                     | No observation is written.                                                                      |
-| A deleted account                               | No observation is written.                                                                      |
+| Case                        | Expected                                                                                |
+| --------------------------- | --------------------------------------------------------------------------------------- |
+| A duplicate delivery        | Exactly one observation and exactly one evidence link.                                  |
+| A correction                | The earlier observation is superseded; the new one is active.                           |
+| A removal                   | The active observation is invalidated; no new observation is written.                   |
+| A reversed event order      | The old event cannot revive the old truth: it is refused by the current-revision fence. |
+| A synthetic entry           | Never source-reported timing, with either a zero or a nonzero duration.                 |
+| A legacy quality            | Stays unknown; it is never guessed from a duration.                                     |
+| A stale or cancelled source | No observation is written.                                                              |
+| A deleted account           | No observation is written.                                                              |
 
 ---
 
@@ -469,12 +469,12 @@ The children are omp task agents inside this phase. They share **one** worktree.
 most **three** files. No child commits, and no child runs a shared build, a formatter, a migration
 or the full test suite — the orchestrator does that at the consolidation barrier.
 
-| Child (omp task agent) | Tasks          | Owned files (exclusive)                                                                                                                                                                                                                                    |
-| ---------------------- | -------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `QualityPath`          | T-08.2         | `apps/web/src/server/trading/projection.ts`, `apps/web/src/server/ctrader-mcp/deals.ts`, `apps/web/src/server/ctrader-mcp/sync.ts`                                                                                                                                                                                          |
-| `ObservationStore`     | T-08.4         | `apps/web/src/server/intelligence/infrastructure/knowledge-store.ts`, `apps/web/src/server/intelligence/composition.ts`, `apps/web/src/server/intelligence/infrastructure/retention.ts`                                                                                                                                          |
-| `QualityDerivation`    | T-08.3         | `apps/web/src/server/trading/reconcile.ts`, `apps/web/src/server/executions.ts`, `apps/web/tests/ctrader-mcp/sync.test.ts`                                                                                                                                                                                                |
-| `ObservationSuite`     | T-08.5         | `apps/web/tests/intelligence-observations.test.ts`, `apps/web/tests/ctrader-mcp/deals.test.ts`                                                                                                                                                                                                                              |
+| Child (omp task agent) | Tasks  | Owned files (exclusive)                                                                                                                                                                 |
+| ---------------------- | ------ | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `QualityPath`          | T-08.2 | `apps/web/src/server/trading/projection.ts`, `apps/web/src/server/ctrader-mcp/deals.ts`, `apps/web/src/server/ctrader-mcp/sync.ts`                                                      |
+| `ObservationStore`     | T-08.4 | `apps/web/src/server/intelligence/infrastructure/knowledge-store.ts`, `apps/web/src/server/intelligence/composition.ts`, `apps/web/src/server/intelligence/infrastructure/retention.ts` |
+| `QualityDerivation`    | T-08.3 | `apps/web/src/server/trading/reconcile.ts`, `apps/web/src/server/executions.ts`, `apps/web/tests/ctrader-mcp/sync.test.ts`                                                              |
+| `ObservationSuite`     | T-08.5 | `apps/web/tests/intelligence-observations.test.ts`, `apps/web/tests/ctrader-mcp/deals.test.ts`                                                                                          |
 
 The orchestrator owns the shared files: the migration, the typed schema, the snapshot, the registry,
 the checksum artifact, the observation contracts, the migration tests and both documents.
@@ -489,8 +489,8 @@ the checksum artifact, the observation contracts, the migration tests and both d
 
 ### Deviations from the packet's file list (recorded deliberately)
 
-The packet's file list refines the scope, but the coordinator's ordering requirement — *the quality
-must reach reconciliation before the fingerprint* — cannot be met without two surgical changes to
+The packet's file list refines the scope, but the coordinator's ordering requirement — _the quality
+must reach reconciliation before the fingerprint_ — cannot be met without two surgical changes to
 Phase 05 files. Both are additive and behaviour-preserving for every path that does not use the new
 option:
 
