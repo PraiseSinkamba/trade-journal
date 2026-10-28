@@ -1,8 +1,9 @@
 import { eq, inArray } from "drizzle-orm";
 import { db, trades } from "@/db";
 import { bad, handler, ok } from "@/server/api";
-import { deleteExecutionsForTrades } from "@/server/executions";
 import { nowIso } from "@/server/ids";
+import { deleteTrades } from "@/server/trading/commands";
+import { changeContext } from "@/server/trading/reconcile";
 
 interface BulkBody {
   keys: string[];
@@ -45,14 +46,8 @@ export const POST = handler(async (request: Request) => {
         .run();
       return ok({ updated: rows.length });
     case "delete": {
-      const byAccount = new Map<string, string[]>();
-      for (const row of rows) {
-        const ids = JSON.parse(row.executionIdsJson) as string[];
-        byAccount.set(row.accountId, [...(byAccount.get(row.accountId) ?? []), ...ids]);
-      }
-      for (const [accountId, executionIds] of byAccount) {
-        deleteExecutionsForTrades(accountId, executionIds);
-      }
+      // One command, one transaction: every affected account is rebuilt once.
+      deleteTrades(body.keys, changeContext("user", "live"));
       return ok({ deleted: rows.length });
     }
     default:

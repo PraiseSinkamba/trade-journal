@@ -28,23 +28,55 @@ const parseJournalDefaults = (raw: string | null): JournalDefaults => {
 export const getJournalDefaultsInTx = (tx: JournalTx): JournalDefaults =>
   parseJournalDefaults(getSettingInTx(tx, "journalDefaults"));
 
-export const getSetting = (key: string): string | null =>
-  db.select().from(settings).where(eq(settings.key, key)).get()?.value ?? null;
+/**
+ * The journal connection, seen as a transaction handle.
+ *
+ * Drizzle's better-sqlite3 driver runs every statement on one connection, so
+ * the non-transactional readers and writers below hand that connection to
+ * their in-transaction twin: there is one implementation of the semantics, and
+ * the difference is only whether a transaction is open.
+ */
+const journal = db as unknown as JournalTx;
+
+export const getSetting = (key: string): string | null => getSettingInTx(journal, key);
 
 /** The setting as the given transaction sees it. */
 export const getSettingInTx = (tx: JournalTx, key: string): string | null =>
   tx.select().from(settings).where(eq(settings.key, key)).get()?.value ?? null;
 
 export const setSetting = (key: string, value: string): void => {
-  db.insert(settings)
+  setSettingInTx(journal, key, value);
+};
+
+/**
+ * Writes one setting inside the caller's transaction.
+ *
+ * One row per key, replaced on conflict.
+ */
+export const setSettingInTx = (tx: JournalTx, key: string, value: string): void => {
+  tx.insert(settings)
     .values({ key, value })
     .onConflictDoUpdate({ target: settings.key, set: { value } })
     .run();
 };
 
 export const deleteSetting = (key: string): void => {
-  db.delete(settings).where(eq(settings.key, key)).run();
+  deleteSettingInTx(journal, key);
 };
+
+/** Removes one setting inside the caller's transaction. */
+export const deleteSettingInTx = (tx: JournalTx, key: string): void => {
+  tx.delete(settings).where(eq(settings.key, key)).run();
+};
+
+/**
+ * The import timezone as the given transaction sees it.
+ *
+ * The stored import zone, else the stored display zone, else UTC — the same
+ * fallback chain as {@link getImportTimeZone}.
+ */
+export const getImportTimeZoneInTx = (tx: JournalTx): string =>
+  getSettingInTx(tx, "importTimeZone") ?? getSettingInTx(tx, "timeZone") ?? "UTC";
 
 export const getCurrencyConversion = () => {
   const saved = getSetting("currencyConversion");
@@ -100,6 +132,17 @@ export const setAiKey = (provider: AiProvider, key: string | null): void => {
   else setSetting(`${provider}KeyEnc`, encryptJson(key.trim()));
 };
 
+/**
+ * Stores or clears one provider's key inside the caller's transaction.
+ *
+ * `null` removes the stored envelope; a key is stored encrypted, exactly as
+ * {@link setAiKey} stores it.
+ */
+export const setAiKeyInTx = (tx: JournalTx, provider: AiProvider, key: string | null): void => {
+  if (key === null) deleteSettingInTx(tx, `${provider}KeyEnc`);
+  else setSettingInTx(tx, `${provider}KeyEnc`, encryptJson(key.trim()));
+};
+
 export const getAnthropicKey = (): string | null => getAiKey("anthropic");
 export const setAnthropicKey = (key: string | null): void => setAiKey("anthropic", key);
 
@@ -121,6 +164,18 @@ export const getCompatibleBaseUrl = (): string | null => getSetting("compatibleB
 export const setCompatibleBaseUrl = (url: string, keepKey: boolean): void => {
   if (!keepKey && url !== getCompatibleBaseUrl()) setAiKey("compatible", null);
   setSetting("compatibleBaseUrl", url);
+};
+
+/**
+ * Stores the compatible server URL inside the caller's transaction.
+ *
+ * A saved key belongs to the server it was entered for: a changed URL drops
+ * the key unless a new one was sent.
+ */
+export const setCompatibleBaseUrlInTx = (tx: JournalTx, url: string, keepKey: boolean): void => {
+  const saved = getSettingInTx(tx, "compatibleBaseUrl");
+  if (!keepKey && url !== saved) setAiKeyInTx(tx, "compatible", null);
+  setSettingInTx(tx, "compatibleBaseUrl", url);
 };
 
 export const getAiProvider = (): AiProvider => {
@@ -212,4 +267,10 @@ export const getCurrentAccountId = (): string | null => getSetting("currentAccou
 export const setCurrentAccountId = (id: string | null): void => {
   if (id === null) deleteSetting("currentAccountId");
   else setSetting("currentAccountId", id);
+};
+
+/** Writes the persisted default inside the caller's transaction. `null` clears it. */
+export const setCurrentAccountIdInTx = (tx: JournalTx, id: string | null): void => {
+  if (id === null) deleteSettingInTx(tx, "currentAccountId");
+  else setSettingInTx(tx, "currentAccountId", id);
 };

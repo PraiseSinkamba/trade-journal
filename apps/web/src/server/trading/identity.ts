@@ -73,6 +73,19 @@ interface IdentityMembership {
   readonly executionIds: ReadonlySet<string>;
 }
 
+/**
+ * The membership of a projection as one comparable key.
+ *
+ * The membership is the set of fill ids that make up a cycle. Two projections
+ * with the same membership are the same cycle: the fills are the facts, and the
+ * account-prefixed trade key is only a name that changes when a trade moves
+ * between accounts. A transfer is only ever proven by a full membership
+ * match, so the key ignores order and duplicates — two memberships that differ
+ * only in the order of the fills are the same cycle.
+ */
+export const executionMembershipKey = (executionIds: readonly string[]): string =>
+  [...new Set(executionIds)].sort().join("\n");
+
 const sameSet = (left: ReadonlySet<string>, right: ReadonlySet<string>): boolean =>
   left.size === right.size && [...left].every((member) => right.has(member));
 
