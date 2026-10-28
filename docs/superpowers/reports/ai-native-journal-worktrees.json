@@ -1,7 +1,7 @@
 {
   "schemaVersion": 1,
   "feature": "ai-native-journal",
-  "updatedAt": "2026-10-28T22:40:40Z",
+  "updatedAt": "2026-10-28T23:13:05Z",
   "owner": "parent OMP coordinator (exclusive owner of this record)",
   "repository": {
     "name": "trade-journal",
@@ -34,8 +34,8 @@
     },
     "featureBranch": "codex/ai-native-journal",
     "featureBootstrapSha": "0a278503fd67c0f9e82138dfecb744f4bfd307ad",
-    "featureHeadSha": "259c89441d4689bfb888b03196dad6113e1e70b4",
-    "featureHeadShaNote": "feature branch HEAD at the Phase 08 dispatch and the exact base of the Phase 08 worktree; the coordinator record commit advances the branch by one commit",
+    "featureHeadSha": "c8a6fdc8464169a0d924c7d5f3558c98d3f3e00b",
+    "featureHeadShaNote": "feature branch HEAD after the Phase 08 non-fast-forward merge; the coordinator record commit advances the branch by one commit",
     "featureCheckpointCommits": [
       "0a278503fd67c0f9e82138dfecb744f4bfd307ad",
       "80d53ccb62fda801897852a6f4e5d2aab8b0d58b",
@@ -53,7 +53,8 @@
       "3f672c76ed0da21432eea27a32c30a367d542fca",
       "3e7346e2115be4b74d2b65594f9fe3e3ab3044b7",
       "93452871ca51e35cb7bc89bb129e1d58228a9f97",
-      "259c89441d4689bfb888b03196dad6113e1e70b4"
+      "259c89441d4689bfb888b03196dad6113e1e70b4",
+      "c8a6fdc8464169a0d924c7d5f3558c98d3f3e00b"
     ],
     "featureBranchNote": "Orca slugified the requested name to codex-ai-native-journal at creation; the coordinator renamed the newly created, exclusively owned branch to the contract-required codex/ai-native-journal. Orca reads the renamed ref live (refs/heads/codex/ai-native-journal). No pre-existing branch was overwritten."
   },
@@ -185,7 +186,7 @@
         "startSha": "259c89441d4689bfb888b03196dad6113e1e70b4",
         "orcaParentWorktreeId": "aa54a522-a9af-4cb4-9de7-f1d9a349c0fd::E:/4004/orca/workspaces/trade-journal/codex-ai-native-journal",
         "setup": "pnpm install --frozen-lockfile completed in the worker checkout; working tree clean; Node v24.20.0, pnpm 11.0.8",
-        "state": "dispatched"
+        "state": "integrated into codex/ai-native-journal at c8a6fdc and verified on the destination branch, then cleaned up at the user request: the Orca worktree, the git worktree registration, the branch and the leftover directory were removed after verifying the content was merged."
       }
     ]
   },
@@ -291,11 +292,11 @@
       "wave": 8,
       "branch": "codex/ai-native-journal-p08",
       "deps": ["task_816b57885f53"],
-      "status": "dispatched",
-      "state": "dispatched",
+      "status": "completed",
+      "state": "integrated",
       "nativeDispatch": "ctx_e48790748e2c",
       "nativeHandle": "term_ac380c4e-384f-4c0f-a55c-1fe9a4d887c7",
-      "evidence": "the initial attempt delivered the implementation (plan 27dd6f7, schema and contract 392461d, implementation 8e41524, report 65f7f2e) but its dispatch was revoked by an Orca runtime restart before it could send worker_done; the coordinator verified the exact commits and the targeted gate (4 files, 57 tests, exit 0) and routed the closure to a replacement attempt",
+      "evidence": "the initial attempt delivered the implementation but its dispatch was revoked by an Orca runtime restart before it could send worker_done; the coordinator verified the exact commits and the targeted gate (4 files, 57 tests, exit 0), routed the closure to a replacement attempt, and merged the phase into codex/ai-native-journal at c8a6fdc",
       "priorDispatch": "ctx_7ed9eb0f577b"
     },
     {
@@ -609,11 +610,11 @@
       "started": "2026-10-28T22:42:00Z",
       "base": "259c89441d4689bfb888b03196dad6113e1e70b4",
       "purpose": "Phase 08 closure attempt - verify the committed implementation, record the coordinator verification and the revocation anomaly, and emit the missing worker_done",
-      "state": "actively executing",
-      "candidate": null,
-      "reviewed": false,
-      "integrated": false,
-      "verified": false
+      "state": "settled",
+      "candidate": ["27dd6f7", "392461d", "8e41524", "65f7f2e", "b7d33ea", "1873f9b"],
+      "reviewed": true,
+      "integrated": true,
+      "verified": true
     }
   ],
   "integration": {
@@ -816,14 +817,18 @@
       "native": "task_1b9ab56eef54",
       "dispatch": "ctx_e48790748e2c",
       "base": "259c89441d4689bfb888b03196dad6113e1e70b4",
-      "mergeSha": null,
+      "mergeSha": "c8a6fdc8464169a0d924c7d5f3558c98d3f3e00b",
       "commits": ["27dd6f7", "392461d", "8e41524", "65f7f2e"],
-      "checks": "targeted 4 files 57 passed, exit 0, reproduced independently by the coordinator; destination verification pending the closure attempt",
-      "review": "Implementation verified against the exact commits: migration 0004 appends intelligence_observations, observation_evidence and intelligence_seed_checkpoints with 0001 to 0003 byte-unchanged; purgeAccountIntelligence now removes the account observations and seed checkpoint; classifyExecutionEvidence refuses to upgrade a synthetic fill even when the caller omits the synthetic flag, because the synthetic execution id is a second signal, and legacy quality stays unknown.",
+      "checks": "targeted 4 files 57 passed; full pnpm test 99 files 1030 passed; typecheck web/core/importers 0; prettier 0; migrations:check OK; license OK; packages build 0; next build 0",
+      "review": "PASS. Migration 0004 appends intelligence_observations, observation_evidence and intelligence_seed_checkpoints with 0001 to 0003 byte-unchanged; the Phase 07 purge hand-forward is closed because the account observations and seed checkpoint are deleted with the account; classifyExecutionEvidence cannot upgrade a synthetic fill even when the caller omits the flag, because the synthetic execution id is a second signal, and legacy quality stays unknown. The closure attempt found and fixed two Prettier violations in the phase own files.",
       "anomaly": "The initial dispatch ctx_7ed9eb0f577b was revoked by an Orca runtime restart at 2026-10-28T20:04:12Z. The worker process survived, completed and verified the implementation and composed its final summary at 22:31Z, but could not send worker_done because its capability was already revoked. This is the second occurrence of that pattern, after Phase 01 attempt 1.",
       "reviewed": true,
-      "integrated": false,
-      "verified": false
+      "integrated": true,
+      "verified": true,
+      "mergeParents": [
+        "1af813aedd20089afa42178ceb3a441937043b00",
+        "1873f9bfed726b7138e2acaa1a18648236ea0611"
+      ]
     }
   ],
   "recordShape": "This file is the index and the authoritative stable-to-native task mapping: stable/native task mapping, worktree and dispatch identifiers, and one compact entry per integrated phase. Narrative, findings, deviations and command output live in the per-phase reports under docs/superpowers/reports/. Keep this file compact - one entry per phase, no duplicated prose. Resolve a native task id from taskMap here or from the native task list, never from a chat summary: a transcription slip once named T-019 as T-005, and the near miss was caught because the native task list disagreed with the prose."
