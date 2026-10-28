@@ -22,6 +22,12 @@ quality of every cTrader fill is explicit — source-reported, reconstructed or 
 Phase 12 (capability contracts), Phase 14 (knowledge sources), Phase 18 (interaction APIs) and
 Phase 20 (retention and backup) are untouched and remain out of scope.
 
+**Note for the coordinator.** This phase was completed by a worker whose dispatch was revoked by
+the orchestration recovery ("the assigned worker terminal is no longer live") before it could send
+its `worker_done`. The work, the verification and this report are complete and committed on
+`codex/ai-native-journal-p08`; the dispatch was left untouched, so no completion message was sent
+from the revoked attempt. The three phase commits above are the whole phase.
+
 ## 2. Changed files and exported interfaces
 
 | File                                                                       | Change                                                                                                                                                                                                                                                                     |
