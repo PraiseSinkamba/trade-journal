@@ -9,7 +9,8 @@
 | Base SHA              | `259c89441d4689bfb888b03196dad6113e1e70b4` — the feature HEAD after the Phase 07 integration                                     |
 | Plan commit           | `27dd6f7` — `docs: add Phase 08 observation plan`                                                                                |
 | Schema commit         | `392461d` — `feat: add the observation storage schema and the observation contract`                                              |
-| Implementation commit | see §6                                                                                                                           |
+| Implementation commit | `8e41524` — `feat: derive persistent factual trade observations`                                                                 |
+| Verified tip          | `65f7f2ec952ecb9e582aa9bbf2f157d484989f5a` — the tip every gate in §4 was run against                                            |
 | Branch                | `codex/ai-native-journal-p08`                                                                                                    |
 | Destination           | `codex/ai-native-journal`, local non-fast-forward merge only — **not** performed here; the coordinator owns the integration lock |
 
@@ -22,11 +23,30 @@ quality of every cTrader fill is explicit — source-reported, reconstructed or 
 Phase 12 (capability contracts), Phase 14 (knowledge sources), Phase 18 (interaction APIs) and
 Phase 20 (retention and backup) are untouched and remain out of scope.
 
-**Note for the coordinator.** This phase was completed by a worker whose dispatch was revoked by
-the orchestration recovery ("the assigned worker terminal is no longer live") before it could send
-its `worker_done`. The work, the verification and this report are complete and committed on
-`codex/ai-native-journal-p08`; the dispatch was left untouched, so no completion message was sent
-from the revoked attempt. The three phase commits above are the whole phase.
+**Note for the coordinator — the dispatch revocation, recorded honestly.** This phase was
+implemented by the first T-008 worker attempt. That attempt's dispatch was **revoked by the
+orchestration infrastructure**, not by a worker failure: an Orca runtime restart revoked the
+dispatch at **2026-10-28T20:04:12Z** ("the assigned worker terminal is no longer live"). The worker
+process survived the revocation, finished the implementation, ran its verification and composed its
+final summary at **22:31Z**, but could no longer send its `worker_done`, because the capability to
+send it had already been revoked. The work, the verification and this report were complete and
+committed on `codex/ai-native-journal-p08` at that point; only the lifecycle message was missing.
+
+The coordinator read the four commits, independently verified them, and re-dispatched the same
+native Task (`task_1b9ab56eef54`) and Dispatch (`ctx_e48790748e2c`) on **2026-10-28T22:38:56Z** with
+a closure-only instruction: verify the committed implementation, record the verification, and send
+the missing `worker_done`. This attempt did exactly that — it re-ran every gate against the tip,
+fixed the two formatting violations the gates exposed, updated this report and sent the
+`worker_done`. Nothing in the phase was re-implemented and no review round was reopened.
+
+The four phase commits are the whole phase:
+
+| Commit    | Subject                                                                 | When                      |
+| --------- | ----------------------------------------------------------------------- | ------------------------- |
+| `27dd6f7` | `docs: add Phase 08 observation plan`                                   | 2026-10-28T13:58:53+02:00 |
+| `392461d` | `feat: add the observation storage schema and the observation contract` | 2026-10-28T14:03:43+02:00 |
+| `8e41524` | `feat: derive persistent factual trade observations`                    | 2026-10-29T00:28:19+02:00 |
+| `65f7f2e` | `docs: record the Phase 08 dispatch state for the coordinator`          | 2026-10-29T00:29:59+02:00 |
 
 ## 2. Changed files and exported interfaces
 
@@ -52,6 +72,15 @@ from the revoked attempt. The three phase commits above are the whole phase.
 | `apps/web/tests/intelligence-migrations.test.ts`                           | The upgrade from a version-3 journal onto the observation schema.                                                                                                                                                                                                          |
 | `docs/superpowers/plans/ai-native-journal/phase-08.md`                     | The phase plan, committed before the implementation.                                                                                                                                                                                                                       |
 | `.omp/reviewer-report.md`                                                  | The reviewer's verdict for this phase's diff.                                                                                                                                                                                                                              |
+
+**Files changed by the closure attempt (formatting only, no behaviour change).** The closure
+verification found two of the phase's own files out of conformance with the repository's Prettier
+configuration; both were corrected and nothing else was touched:
+
+| File                                                         | Change                                                                                                                                                                                                                                                                      |
+| ------------------------------------------------------------ | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `apps/web/src/server/intelligence/contracts/observations.ts` | The evaluator's signature is on one line instead of three — the form the 100-column configuration produces. No logic, type or comment changed.                                                                                                                              |
+| `docs/superpowers/plans/ai-native-journal/phase-08.md`       | The nested classification list uses a two-space continuation indent so it stays a list instead of collapsing into one sentence, and the document uses the formatter's own italic and table forms. The 18 code fences, every wording, table cell and checkbox are unchanged. |
 
 **Compatibility preserved.** No execution hash, import metadata, fee, price, quantity, timestamp,
 trade key, annotation, credential, provider or import/AI response contract changed. The public
@@ -123,23 +152,74 @@ checkpoint cascades with the account row.
 ## 4. Commands actually run
 
 Every command ran in `E:/4004/orca/workspaces/trade-journal/codex-ai-native-journal-p08` on Node
-v24.20.0 / pnpm 11.0.8, against disposable scratch databases under the OS temp directory. No live
-journal, no credentials and no port was touched.
+v24.20.0 / pnpm 11.0.8, against disposable absolute `JOURNAL_DATA_DIR` directories under the
+checkout. No live journal, no credentials and no port (3000/3001 included) was touched.
+
+### 4a. The implementation attempt's own verification
 
 | Command                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                            | Result                                                                                                      |
 | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------- |
 | `pnpm exec vitest run apps/web/tests/intelligence-observations.test.ts`                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                            | **9 passed / 9**                                                                                            |
 | `pnpm exec vitest run apps/web/tests/intelligence-migrations.test.ts apps/web/tests/intelligence-outbox.test.ts apps/web/tests/intelligence-jobs.test.ts apps/web/tests/intelligence-worker.test.ts apps/web/tests/trade-projection-identity.test.ts apps/web/tests/ctrader-mcp/deals.test.ts apps/web/tests/ctrader-mcp/sync.test.ts apps/web/tests/trade-reconciliation.test.ts apps/web/tests/execution-storage.test.ts apps/web/tests/sync-resilience.test.ts apps/web/tests/trade-mutation-events.test.ts apps/web/tests/intelligence-boundaries.test.ts` (13 files, one run) | **169 passed / 169**                                                                                        |
 | `pnpm --filter web typecheck`                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                      | **clean** (`next typegen` + `tsc --noEmit`, no diagnostics)                                                 |
-| `pnpm exec prettier --check <every file this phase touched>`                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                       | **All matched files use Prettier code style!**                                                              |
 | `node scripts/check-licenses.mjs`                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                  | **Dependency licenses OK.**                                                                                 |
 | `pnpm --filter web migrations:check`                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                               | **migration-checksums.json is up to date.**                                                                 |
 | `pnpm test`                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                        | **99 files passed / 1030 tests passed** (the run before the review fix passed 1029; the fix added one case) |
 | `pnpm exec vitest run apps/web/tests/intelligence-observations.test.ts apps/web/tests/ctrader-mcp/sync.test.ts` (after the review fix)                                                                                                                                                                                                                                                                                                                                                                                                                                             | **9 + 13 passed**                                                                                           |
 
+### 4b. The coordinator's independent verification
+
+The coordinator read the commits and verified them independently: the targeted gate passed with
+**4 files, 57 tests, exit 0**; migrations `0001`, `0002` and `0003` are byte-unchanged and `0004`
+is appended forward and registered in the runner; the account purge removes the account's
+observations and its seed checkpoint; the classifier refuses to upgrade a synthetic fill into
+source-reported timing even when the caller forgets the synthetic flag; and the schema, the
+final-schema snapshot and the checksum artifact are consistent.
+
+### 4c. The closure attempt's re-verification (this attempt)
+
+Every command below ran in this attempt against the verified tip
+`65f7f2ec952ecb9e582aa9bbf2f157d484989f5a`. Times are UTC.
+
+| #   | Command                                                                                                                                                                                                 | Exit              | Runtime                       | Result                                                                                           |
+| --- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ----------------- | ----------------------------- | ------------------------------------------------------------------------------------------------ |
+| 1   | `pnpm exec vitest run apps/web/tests/intelligence-observations.test.ts apps/web/tests/intelligence-migrations.test.ts apps/web/tests/ctrader-mcp/deals.test.ts apps/web/tests/ctrader-mcp/sync.test.ts` | **0**             | 15 s (22:39:56Z → 22:40:11Z)  | **4 files passed, 57 tests passed**                                                              |
+| 2   | `pnpm --filter web typecheck`                                                                                                                                                                           | **0**             | 89 s (22:40:24Z → 22:41:53Z)  | **clean** — `next typegen` succeeded, `tsc --noEmit` reported no diagnostics                     |
+| 3   | `pnpm exec prettier --check <all 20 files this phase changed>`                                                                                                                                          | **1**, then **0** | 9 s, then 4 s                 | **failed on 2 files**, then **"All matched files use Prettier code style!"**                     |
+| 4   | `node scripts/check-licenses.mjs`                                                                                                                                                                       | **0**             | 8 s                           | **Dependency licenses OK.**                                                                      |
+| 5   | `pnpm --filter web migrations:check`                                                                                                                                                                    | **0**             | 8 s                           | **migration-checksums.json is up to date.**                                                      |
+| 6   | `pnpm test`                                                                                                                                                                                             | **0**             | 228 s (22:45:10Z → 22:48:57Z) | **99 files passed, 1030 tests passed** (vitest duration 223.07 s)                                |
+| 7   | `pnpm -r --filter "./packages/*" build`                                                                                                                                                                 | **0**             | 27 s                          | `packages/core` and `packages/importers` built successfully                                      |
+| 8   | `pnpm --filter web build`                                                                                                                                                                               | **0**             | 401 s (22:50:24Z → 22:57:05Z) | Next.js production build succeeded; the static bundle was written to `apps/web/.next/tauri-dist` |
+
+Gates 6, 7 and 8 ran **after** the formatting fix landed, so they already cover the final source.
+Gates 1, 2 and 3 ran **before** it, so they were re-run against the final tree as well, and those
+re-runs are the ones that count: the targeted gate at **22:57:41Z → 22:57:57Z** returned **4 files
+passed, 57 tests passed, exit 0** (vitest duration 12.79 s), and `pnpm --filter web typecheck` at
+**22:58:01Z → 22:58:19Z** returned **exit 0** with no diagnostics. The final tree therefore passes
+every gate.
+
+**Gate 3 found two real violations, and they were the only thing this attempt changed.** The
+phase files did not conform to the repository's Prettier configuration:
+
+- `apps/web/src/server/intelligence/contracts/observations.ts` — the evaluator's signature was
+  wrapped over three lines where the repository's 100-column configuration fits it on one.
+- `docs/superpowers/plans/ai-native-journal/phase-08.md` — the plan's nested classification list
+  used a six-space continuation indent, which Prettier read as one run-on sentence, and the
+  document used the `*italic*` form and over-wide table padding the formatter does not produce.
+
+Both were corrected. The TypeScript change is a one-line signature; the markdown change is
+Prettier's own output plus the nested-list indent that preserves the list as a list. The diff is
+formatting only: the plan's 18 code fences are unchanged in count and content, and no wording,
+contract, table cell or checkbox changed. No production behaviour changed in this attempt.
+
 The **root** `pnpm typecheck` was not run as a gate: it fails in the `desktop` workspace on a
 pre-existing tooling defect (RC2175) that is outside this phase's ownership. The web package
-typecheck and the package filters are the gate here.
+typecheck and the package filters are the gate here. The **repository-wide** `pnpm format:check`
+also fails on 71 files that this phase never touched (pre-existing: `packages/importers/src/**`,
+older `docs/superpowers/plans/**` and `PRODUCT.md`); before this attempt it failed on 73, the two
+extra being this phase's own files. The gate that matters for this phase — Prettier over every file
+the phase changed — now passes.
 
 ## 5. Review findings and resolutions
 
@@ -171,6 +251,13 @@ identity first, so the identity check fires earlier — the observable outcome, 
 written", is the same either way), and the store's `claim` parameter is part of the fixed contract
 while the job and the delivery are acknowledged by the worker's effect store in the same
 transaction.
+
+**No review round was reopened by the closure attempt.** The coordinator's instruction was explicit:
+do not re-implement the phase, do not redesign anything, do not open a review round. The
+implementation diff was already reviewed and already carries a PASS verdict; the closure attempt
+touched no production behaviour, so there was nothing new to review. The only code change it made
+is the one-line signature wrap in `observations.ts`, which is a formatter's output and carries no
+behaviour.
 
 ## 6. Deviations, evidence and unresolved risks
 
@@ -241,6 +328,10 @@ Phase 09 needs, and does not yet have:
 - [x] `node scripts/check-licenses.mjs` reports OK (no new dependency).
 - [x] `pnpm --filter web migrations:check` exits 0.
 - [x] `pnpm test` passes.
+- [x] `pnpm -r --filter "./packages/*" build` and `pnpm --filter web build` pass.
 - [x] The reviewer's verdict for this phase's diff is `## Verdict: PASS`.
 - [x] This report is committed.
 - [x] The phase-only plan was committed before the implementation.
+- [x] The coordinator's closure instruction is satisfied: the committed implementation was verified
+      against `65f7f2e`, the two formatting violations the verification exposed were fixed, the
+      verification is recorded in §4c, and the missing `worker_done` was sent.
