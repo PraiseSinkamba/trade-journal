@@ -1,9 +1,11 @@
 import { eq } from "drizzle-orm";
 import type { ImportedExecution } from "@luxalgo/journal-importers";
 import { db, accounts } from "@/db";
+import { withJournalTransaction } from "@/db/transaction";
 import { decryptJson } from "@/server/crypto";
 import { nowIso } from "@/server/ids";
-import { insertExecutions, type InsertResult } from "@/server/executions";
+import { insertExecutionsInTx, type InsertResult } from "@/server/executions";
+import { changeContext } from "@/server/trading/reconcile";
 import { CTraderMcpClient } from "./client";
 import { classifyMcpError, CTraderMcpSyncError } from "./errors";
 import { getAccountBalance } from "./account";
@@ -166,29 +168,33 @@ export const syncCTraderMcpAccount = async (accountId: string): Promise<SyncOutc
 
     const equity = balance?.equity ?? null;
 
-    const result = db.transaction(
-      () => {
-        const inserted = insertExecutions(accountId, rows, "sync");
-        db.update(accounts)
-          .set({
-            lastSyncAt: syncedAt,
-            snapshotJson: JSON.stringify({
-              equity,
-              positions,
-              openOrders: pendingOrders,
-              balance: balance?.balance ?? null,
-              freeMargin: balance?.freeMargin ?? null,
-              depositAsset: balance?.depositAsset ?? null,
-              brokerName: balance?.brokerName ?? null,
-              fetchedAt: syncedAt,
-            }),
-          })
-          .where(eq(accounts.id, accountId))
-          .run();
-        return inserted;
-      },
-      { behavior: "immediate" },
-    );
+    const result = withJournalTransaction((tx) => {
+      // The broker bookkeeping is written first: a failure in the fill write
+      // below must roll the snapshot back with it.
+      tx.update(accounts)
+        .set({
+          lastSyncAt: syncedAt,
+          snapshotJson: JSON.stringify({
+            equity,
+            positions,
+            openOrders: pendingOrders,
+            balance: balance?.balance ?? null,
+            freeMargin: balance?.freeMargin ?? null,
+            depositAsset: balance?.depositAsset ?? null,
+            brokerName: balance?.brokerName ?? null,
+            fetchedAt: syncedAt,
+          }),
+        })
+        .where(eq(accounts.id, accountId))
+        .run();
+      return insertExecutionsInTx(
+        tx,
+        accountId,
+        rows,
+        "sync",
+        changeContext("broker_sync", "live"),
+      );
+    });
 
     return {
       accountId,

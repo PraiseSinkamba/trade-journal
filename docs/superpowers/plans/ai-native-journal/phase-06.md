@@ -89,14 +89,14 @@ transaction.
 
 ### Change contexts (fixed by this phase)
 
-| Path                                                            | `origin`      | `mode`        |
-| --------------------------------------------------------------- | ------------- | ------------- |
-| SDK broker sync (`server/sync.ts`)                              | `broker_sync` | `live`        |
-| cTrader MCP sync (`server/ctrader-mcp/sync.ts`)                | `broker_sync` | `live`        |
-| XTB workbook upload (`server/xtb-import.ts`)                    | `import`      | `historical`  |
-| IBKR Flex XML upload (`server/ibkr-flex-xml-import.ts`)         | `import`      | `historical`  |
-| NinjaTrader reviewed import (`server/ninjatrader-import.ts`)    | `import`      | `historical`  |
-| Demo load (`server/demo.ts`)                                    | `import`      | `historical`  |
+| Path                                                         | `origin`      | `mode`       |
+| ------------------------------------------------------------ | ------------- | ------------ |
+| SDK broker sync (`server/sync.ts`)                           | `broker_sync` | `live`       |
+| cTrader MCP sync (`server/ctrader-mcp/sync.ts`)              | `broker_sync` | `live`       |
+| XTB workbook upload (`server/xtb-import.ts`)                 | `import`      | `historical` |
+| IBKR Flex XML upload (`server/ibkr-flex-xml-import.ts`)      | `import`      | `historical` |
+| NinjaTrader reviewed import (`server/ninjatrader-import.ts`) | `import`      | `historical` |
+| Demo load (`server/demo.ts`)                                 | `import`      | `historical` |
 
 The **classification** Phase 05 shipped is preserved unchanged: a first sight is `discovered`,
 a first sight that is still open in `live` mode is `opened`, an observed open cycle that is now
@@ -115,8 +115,7 @@ the event's **provenance**, not the classification: a first sight is `discovered
 (modify).
 
 - [ ] Replace the outer `db.transaction(…)` + public `insertExecutions(…)` with
-      `withJournalTransaction((tx) => { insertExecutionsInTx(tx, accountId, timed, "sync",
-      changeContext("broker_sync", "live")); … })`.
+      `withJournalTransaction((tx) => { insertExecutionsInTx(tx, accountId, timed, "sync", changeContext("broker_sync", "live")); … })`.
 - [ ] The IBKR guard inside the transaction must read the account through `tx`, not through the
       global `db`, and must keep both checks: the credentials did not change during the fetch and
       `assertIbkrSyncTimeZone` still holds.
@@ -132,8 +131,7 @@ the event's **provenance**, not the classification: a first sight is `discovered
 **Target:** `apps/web/src/server/ctrader-mcp/sync.ts` (modify). **Tests:**
 `apps/web/tests/ctrader-mcp/sync.test.ts` (modify).
 
-- [ ] Same seam as T-06.1: `withJournalTransaction` + `insertExecutionsInTx(tx, …,
-      changeContext("broker_sync", "live"))` + the account snapshot through `tx`.
+- [ ] Same seam as T-06.1: `withJournalTransaction` + `insertExecutionsInTx(tx, …, changeContext("broker_sync", "live"))` + the account snapshot through `tx`.
 - [ ] Every MCP call stays outside the transaction. The order-history fetch stays non-fatal.
 - [ ] The existing test mocks `@/server/executions`; the mock must also export
       `insertExecutionsInTx` (real implementation) so the module keeps working.
@@ -194,9 +192,7 @@ the event's **provenance**, not the classification: a first sight is `discovered
 
 - [ ] The demo account row and the demo fills are written in **one** transaction, so a failed
       fill insert leaves no empty demo account behind.
-- [ ] The demo fills go through `insertExecutionsInTx(tx, id, rows, "import",
-      changeContext("import", "historical"))` — the same ingestion boundary as every other
-      import, in historical mode. A demo trade is never a live opening.
+- [ ] The demo fills go through `insertExecutionsInTx(tx, id, rows, "import", changeContext("import", "historical"))` — the same ingestion boundary as every other import, in historical mode. A demo trade is never a live opening.
 - [ ] The loader stays idempotent: a second call returns the existing demo account untouched.
 - [ ] The demo loads no provider, contacts no network and enqueues no proactive work.
 
@@ -220,9 +216,9 @@ the event's **provenance**, not the classification: a first sight is `discovered
 The coordinator's dispatch permits a clean split when the exact child assignments, owned files,
 interface SHA, dependencies, tests and merge order are recorded here. This phase has one.
 
-| Child (omp task agent)   | Tasks     | Owned files (exclusive)                                                                                                                                        | Tests it owns                                        |
-| ------------------------ | --------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------- | ---------------------------------------------------- |
-| `BrokerSyncWrites`       | T-06.1, T-06.2 | `apps/web/src/server/sync.ts`, `apps/web/src/server/ctrader-mcp/sync.ts`                                                                             | `apps/web/tests/sync-resilience.test.ts`, `apps/web/tests/ctrader-mcp/sync.test.ts` |
+| Child (omp task agent)    | Tasks                                  | Owned files (exclusive)                                                                                                                                                                                | Tests it owns                                                                                                                                                         |
+| ------------------------- | -------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ | --------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `BrokerSyncWrites`        | T-06.1, T-06.2                         | `apps/web/src/server/sync.ts`, `apps/web/src/server/ctrader-mcp/sync.ts`                                                                                                                               | `apps/web/tests/sync-resilience.test.ts`, `apps/web/tests/ctrader-mcp/sync.test.ts`                                                                                   |
 | `SpecializedImportWrites` | T-06.3, T-06.4, T-06.5, T-06.6, T-06.7 | `apps/web/src/server/xtb-import.ts`, `apps/web/src/server/ibkr-flex-xml-import.ts`, `apps/web/src/server/ninjatrader-import.ts`, `apps/web/src/server/demo.ts`, `apps/web/src/app/api/import/route.ts` | `apps/web/tests/xtb-import.test.ts`, `apps/web/tests/ibkr-flex-xml-import.test.ts`, `apps/web/tests/ninjatrader-import.test.ts`, `apps/web/tests/demo-import.test.ts` |
 
 - **Interface SHA:** `5d1bf55cfc3d704d595e1a92df053c1d0592e083`. Neither child edits

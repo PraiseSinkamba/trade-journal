@@ -9,7 +9,18 @@ import { parseAuto } from "@luxalgo/journal-importers";
 const originalDir = process.env.JOURNAL_DATA_DIR;
 const scratch = mkdtempSync(join(tmpdir(), "journal-ninjatrader-test-"));
 process.env.JOURNAL_DATA_DIR = scratch;
-const { db, accounts, executions, trades, settings } = await import("../src/db");
+const {
+  db,
+  accounts,
+  executions,
+  trades,
+  settings,
+  domainOutbox,
+  tradeProjectionRevisions,
+  importBatches,
+  importSources,
+  importSourceAliases,
+} = await import("../src/db");
 const { insertExecutions } = await import("../src/server/executions");
 const { rebuildAccount } = await import("../src/server/rebuild");
 const { POST } = await import("../src/app/api/import/route");
@@ -55,8 +66,13 @@ const accountTrades = () => db.select().from(trades).where(eq(trades.accountId, 
 
 beforeEach(() => {
   vi.stubEnv("JOURNAL_PASSWORD", "");
+  db.delete(domainOutbox).run();
+  db.delete(tradeProjectionRevisions).run();
   db.delete(trades).run();
   db.delete(executions).run();
+  db.delete(importSourceAliases).run();
+  db.delete(importSources).run();
+  db.delete(importBatches).run();
   db.delete(accounts).run();
   db.delete(settings).run();
   db.insert(accounts)
@@ -255,6 +271,68 @@ describe("NinjaTrader imports through preview, storage and rebuild", () => {
     ]);
     expect((await commit(content)).status).toBe(200);
     expect(accountTrades()[0]).toMatchObject({ netPnl: 1, fees: 0 });
+  });
+
+  it("commits the fills, the batch, the sources, the aliases and the events together", async () => {
+    process.env.JOURNAL_EVENT_CAPTURE = "1";
+    db.$client.exec(
+      "CREATE TRIGGER fail_event BEFORE INSERT ON domain_outbox BEGIN SELECT RAISE(FAIL, 'test event failure'); END",
+    );
+    try {
+      const response = await commit();
+      expect(response.status).toBe(500);
+    } finally {
+      db.$client.exec("DROP TRIGGER fail_event");
+      delete process.env.JOURNAL_EVENT_CAPTURE;
+    }
+    // Nothing survives: the fills, the projections, the revisions, the events and
+    // the import bookkeeping were one operation.
+    expect(db.select().from(executions).all()).toHaveLength(0);
+    expect(db.select().from(trades).all()).toHaveLength(0);
+    expect(db.select().from(tradeProjectionRevisions).all()).toHaveLength(0);
+    expect(db.select().from(domainOutbox).all()).toHaveLength(0);
+    expect(db.select().from(importBatches).all()).toHaveLength(0);
+    expect(db.select().from(importSources).all()).toHaveLength(0);
+    expect(db.select().from(importSourceAliases).all()).toHaveLength(0);
+  });
+
+  it("records the import as a historical change, never as a live opening", async () => {
+    process.env.JOURNAL_EVENT_CAPTURE = "1";
+    try {
+      expect((await commit()).status).toBe(200);
+    } finally {
+      delete process.env.JOURNAL_EVENT_CAPTURE;
+    }
+    const stored = db.select().from(domainOutbox).all();
+    expect(stored.length).toBeGreaterThan(0);
+    expect(stored.every((row) => row.origin === "import")).toBe(true);
+    expect(stored.every((row) => JSON.parse(row.payloadJson).mode === "historical")).toBe(true);
+    expect(stored.some((row) => JSON.parse(row.payloadJson).kind === "opened")).toBe(false);
+  });
+
+  it("revises the projection when an approved fee correction arrives", async () => {
+    const original = csv([
+      "AAPL,Buy,1,100,2026-09-15 09:30,A,broker,e1,2",
+      "AAPL,Sell,1,101,2026-09-15 09:31,A,broker,e2,0",
+    ]);
+    const corrected = csv([
+      "AAPL,Buy,1,100,2026-09-15 09:30,A,broker,e1,3",
+      "AAPL,Sell,1,101,2026-09-15 09:31,A,broker,e2,0",
+    ]);
+    expect((await commit(original)).status).toBe(200);
+    process.env.JOURNAL_EVENT_CAPTURE = "1";
+    let response: Response;
+    try {
+      response = await commit(corrected, "test", { approveFeeCorrections: true });
+    } finally {
+      delete process.env.JOURNAL_EVENT_CAPTURE;
+    }
+    expect(response.status).toBe(200);
+    expect(await response.json()).toMatchObject({ inserted: 0, duplicates: 1, corrected: 1 });
+    expect(accountTrades()[0]).toMatchObject({ fees: 3, netPnl: -2 });
+    // A corrected fee is a revision of a known projection, not a new trade.
+    const revisions = db.select().from(domainOutbox).all();
+    expect(revisions.map((row) => JSON.parse(row.payloadJson).kind)).toEqual(["revised"]);
   });
 
   it("requires the exact contract multiplier before committing the sample", async () => {

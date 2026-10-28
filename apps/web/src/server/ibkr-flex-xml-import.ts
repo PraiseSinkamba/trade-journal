@@ -1,8 +1,9 @@
 import { BrokerError } from "@luxalgo/broker-sdk";
 import { parseFlexStatement } from "@luxalgo/broker-sdk/adapters";
-import type { ParsedImport, SkippedReason } from "@luxalgo/journal-importers";
+import type { ImportedExecution, ParsedImport, SkippedReason } from "@luxalgo/journal-importers";
 import { eq } from "drizzle-orm";
 import { accounts, db } from "@/db";
+import { withJournalTransaction, type JournalTx } from "@/db/transaction";
 import { RequestError, requireValue } from "./request-error";
 import { brokerTradesToExecutions, untimedFillsReason } from "./broker-trades";
 import {
@@ -10,7 +11,9 @@ import {
   canonicalImportTimeZone,
   isIbkrSyncAccount,
 } from "./ibkr-sync-timezone";
-import { getImportTimeZone } from "./settings";
+import { getSettingInTx } from "./settings";
+import { insertExecutionsInTx, type InsertResult } from "./executions";
+import { changeContext } from "./trading/reconcile";
 
 export const IBKR_FLEX_XML = { id: "ibkr-flex-xml", label: "Interactive Brokers (Flex Query XML)" };
 
@@ -114,13 +117,22 @@ export const parseFlexXmlImport = (content: string, timeZone: string): ParsedImp
 /**
  * An upload into an IBKR sync account must use the statement timezone sync
  * uses, or the same fills would hash differently and be stored twice.
+ *
+ * The account and the import timezone are read through the caller's
+ * transaction, so the commit path decides against the state it writes into.
  */
-export const flexUploadSyncProblem = (accountId: string, zone: string): string | null => {
-  const account = db.select().from(accounts).where(eq(accounts.id, accountId)).get();
+export const flexUploadSyncProblemInTx = (
+  tx: JournalTx,
+  accountId: string,
+  zone: string,
+): string | null => {
+  const account = tx.select().from(accounts).where(eq(accounts.id, accountId)).get();
   if (!account || (!isIbkrSyncAccount(account) && account.ibkrSyncTimeZone === null)) return null;
-  const syncZone = canonicalImportTimeZone(account.ibkrSyncTimeZone ?? getImportTimeZone());
+  const importZone =
+    getSettingInTx(tx, "importTimeZone") ?? getSettingInTx(tx, "timeZone") ?? "UTC";
+  const syncZone = canonicalImportTimeZone(account.ibkrSyncTimeZone ?? importZone);
   const uploadZone = canonicalImportTimeZone(zone);
-  if (uploadZone !== syncZone)
+  if (syncZone !== uploadZone)
     return `This account syncs IBKR statements in ${syncZone}, but this upload uses ${uploadZone}. Upload with the ${syncZone} statement timezone so uploaded and synced fills match, or import into a separate account.`;
   try {
     assertIbkrSyncTimeZone(account, uploadZone);
@@ -130,3 +142,35 @@ export const flexUploadSyncProblem = (accountId: string, zone: string): string |
   }
   return null;
 };
+
+/** The read-only timezone check the preview uses. */
+export const flexUploadSyncProblem = (accountId: string, zone: string): string | null =>
+  db.transaction((tx) => flexUploadSyncProblemInTx(tx, accountId, zone));
+
+/**
+ * Commits an IBKR Flex XML upload.
+ *
+ * The statement timezone is revalidated inside the transaction that writes the
+ * fills, so an upload and the sync of the same account can never disagree
+ * about the instant a fill happened. The fills, the rebuilt projections, the
+ * projection revisions and the domain events commit together.
+ */
+export const commitIbkrFlexImport = (
+  accountId: string,
+  rows: ImportedExecution[],
+  zone: string,
+  options: { preserveFees?: boolean } = {},
+): InsertResult =>
+  withJournalTransaction((tx) => {
+    const problem = flexUploadSyncProblemInTx(tx, accountId, zone);
+    requireValue(!problem, problem ?? "");
+    return insertExecutionsInTx(
+      tx,
+      accountId,
+      rows,
+      "import",
+      changeContext("import", "historical"),
+      undefined,
+      options,
+    );
+  });

@@ -18,11 +18,12 @@ import {
   importBatches,
 } from "@/db";
 import type { ImportReview, ImportReviewOptions } from "@/lib/import-review";
+import type { JournalTx } from "@/db/transaction";
 import { defaultFee } from "@/lib/journal-defaults";
 import { requireValue } from "./request-error";
 import { executionHash, newId, nowIso } from "./ids";
-import { getMultipliers, getJournalDefaults, getTimeZone } from "./settings";
-import { rebuildAccount } from "./rebuild";
+import { getMultipliersInTx, getJournalDefaultsInTx, getTimeZone } from "./settings";
+import { changeContext, reconcileAccountInTx } from "./trading/reconcile";
 import { orderNinjaTraderFills } from "./ninjatrader-order";
 
 const digest = (value: unknown) => createHash("sha256").update(JSON.stringify(value)).digest("hex");
@@ -79,6 +80,7 @@ interface Plan {
 
 /** Read-only plan used by both preview and the transaction that commits it. */
 function planImport(
+  tx: JournalTx,
   accountId: string,
   parsed: ParsedImport,
   content: string,
@@ -86,29 +88,29 @@ function planImport(
   rawOptions: ImportReviewOptions,
 ): Plan {
   const options = readOptions(rawOptions);
-  const account = db.select().from(accounts).where(eq(accounts.id, accountId)).get();
+  const account = tx.select().from(accounts).where(eq(accounts.id, accountId)).get();
   requireValue(account, "Account not found.");
-  const savedSources = db
+  const savedSources = tx
     .select()
     .from(importSources)
     .where(and(eq(importSources.accountId, accountId), eq(importSources.format, FORMAT)))
     .all();
-  const savedAliases = db
+  const savedAliases = tx
     .select()
     .from(importSourceAliases)
     .where(
       and(eq(importSourceAliases.accountId, accountId), eq(importSourceAliases.format, FORMAT)),
     )
     .all();
-  const batches = db
+  const batches = tx
     .select()
     .from(importBatches)
     .where(and(eq(importBatches.accountId, accountId), eq(importBatches.format, FORMAT)))
     .all();
-  const stored = db.select().from(executions).where(eq(executions.accountId, accountId)).all();
-  const oldTrades = db.select().from(trades).where(eq(trades.accountId, accountId)).all();
-  const defaults = getJournalDefaults(),
-    multipliers = getMultipliers();
+  const stored = tx.select().from(executions).where(eq(executions.accountId, accountId)).all();
+  const oldTrades = tx.select().from(trades).where(eq(trades.accountId, accountId)).all();
+  const defaults = getJournalDefaultsInTx(tx),
+    multipliers = getMultipliersInTx(tx);
   const conflicts = new Set(parsed.errors ?? []),
     warnings = new Set<string>();
   if (parsed.skippedRows)
@@ -486,7 +488,7 @@ export const previewNinjaTraderImport = (
   content: string,
   timeZone: string,
   options: ImportReviewOptions = {},
-) => db.transaction(() => planImport(accountId, parsed, content, timeZone, options).review);
+) => db.transaction((tx) => planImport(tx, accountId, parsed, content, timeZone, options).review);
 
 export const commitNinjaTraderImport = (
   accountId: string,
@@ -497,7 +499,7 @@ export const commitNinjaTraderImport = (
 ) =>
   db.transaction(
     (tx) => {
-      const plan = planImport(accountId, parsed, content, timeZone, options);
+      const plan = planImport(tx, accountId, parsed, content, timeZone, options);
       requireValue(plan.review.conflicts.length === 0, plan.review.conflicts.join(" "));
       requireValue(
         !plan.review.corrections.length || options.approveFeeCorrections,
@@ -534,7 +536,11 @@ export const commitNinjaTraderImport = (
           .set({ fee: fill.fee, importMetadataJson: JSON.stringify(fill.importMetadata) })
           .where(eq(executions.id, fill.id))
           .run();
-      if (plan.inserts.length || plan.updates.length) rebuildAccount(accountId);
+      // The projections, the projection revisions and the domain events are written
+      // by the one reconciliation boundary, inside this transaction, next to the
+      // sources, the aliases, the fills, the corrections and the import batch.
+      if (plan.inserts.length || plan.updates.length)
+        reconcileAccountInTx(tx, accountId, changeContext("import", "historical"));
       tx.insert(importBatches).values(plan.batch).onConflictDoNothing().run();
       return {
         inserted: plan.inserts.length,
