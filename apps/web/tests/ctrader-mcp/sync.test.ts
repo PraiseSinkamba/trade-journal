@@ -1,6 +1,7 @@
 import { eq } from "drizzle-orm";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { db, accounts, executions, trades, domainOutbox } from "@/db";
+import { executionEvidence, tradeProjectionRevisions } from "@/db/schema";
 import { encryptJson } from "@/server/crypto";
 import { newId } from "@/server/ids";
 import { syncCTraderMcpAccount } from "@/server/ctrader-mcp/sync";
@@ -613,5 +614,87 @@ describe("a cTrader sync commits its fills, its snapshot and its events together
     expect(second.inserted).toBe(0);
     expect(second.duplicates).toBe(2);
     expect(events(accountId)).toHaveLength(1);
+  });
+});
+
+describe("the cTrader source quality reaches the projection fingerprint", () => {
+  it("records the quality of every fill in the very revision it fingerprinted", async () => {
+    fake.toolResponses = {
+      get_symbols: {
+        symbols: [{ name: "NAS100", description: "US Tech 100", assetClass: "Indices" }],
+      },
+      get_deals: {
+        deals: [
+          {
+            orderId: 395217525,
+            positionId: 626745677,
+            symbolName: "NAS100",
+            dealType: "close",
+            side: "Sell",
+            filledVolume: 0.1,
+            executionPrice: 29555,
+            entryPrice: 29447.1,
+            grossProfit: -10.79,
+            commission: 0,
+            swap: 0,
+            time: "2026-10-15T14:01:25.056Z",
+          },
+        ],
+      },
+      get_positions: { positions: [] },
+      get_pending_orders: { orders: [] },
+      get_balance: {
+        balance: 24.71,
+        equity: 24.71,
+        margin: 0,
+        freeMargin: 24.71,
+        marginLevel: null,
+        depositAsset: "USD",
+        brokerName: "Pepperstone",
+      },
+    };
+    testSlot.__FAKE_MCP__ = fake;
+
+    const accountId = newId();
+    addAccount(accountId);
+
+    await syncCTraderMcpAccount(accountId);
+
+    const rows = db.select().from(executions).where(eq(executions.accountId, accountId)).all();
+    const synthetic = rows.find((row) => row.importMetadataJson?.includes("synthetic:open:"));
+    const close = rows.find((row) => !row.importMetadataJson?.includes("synthetic:open:"));
+    expect(synthetic).toBeTruthy();
+    expect(close).toBeTruthy();
+
+    const evidence = db.select().from(executionEvidence).all();
+    expect(evidence.find((row) => row.executionId === synthetic!.id)).toMatchObject({
+      timingQuality: "unknown",
+      sourceKind: "ctrader_synthetic_open",
+    });
+    expect(evidence.find((row) => row.executionId === close!.id)).toMatchObject({
+      timingQuality: "source_reported",
+      sourceKind: "ctrader_deal",
+    });
+
+    // The quality reached the fingerprint: the one revision the journal
+    // recorded already carries it, and no second revision was minted for it.
+    const revisions = db
+      .select()
+      .from(tradeProjectionRevisions)
+      .where(eq(tradeProjectionRevisions.accountId, accountId))
+      .all();
+    expect(revisions).toHaveLength(1);
+    const snapshot = JSON.parse(revisions[0]!.snapshotJson) as { timingQuality?: string };
+    expect(snapshot.timingQuality).toBe("unknown");
+
+    // A second sync learns nothing new, so it records nothing new.
+    await syncCTraderMcpAccount(accountId);
+    expect(
+      db
+        .select()
+        .from(tradeProjectionRevisions)
+        .where(eq(tradeProjectionRevisions.accountId, accountId))
+        .all(),
+    ).toHaveLength(1);
   });
 });

@@ -1,4 +1,5 @@
 import type { ImportedExecution } from "@luxalgo/journal-importers";
+import { SYNTHETIC_EXECUTION_ID_PREFIX } from "@/server/trading/projection";
 import type { CTraderMcpClient } from "./client";
 import { cTraderDealsResponseSchema, type AssetClass, type CTraderDeal } from "./schemas";
 
@@ -91,7 +92,7 @@ export const mapClosedPositionToExecutions = (
     executedAt: entryTime,
     assetClass: assetClass === "stock" ? "equity" : assetClass,
     importMetadata: {
-      id: `synthetic:open:${closeId}`,
+      id: `${SYNTHETIC_EXECUTION_ID_PREFIX}${closeId}`,
       group,
       order: dealIndex * 2,
       preserveFee: true,

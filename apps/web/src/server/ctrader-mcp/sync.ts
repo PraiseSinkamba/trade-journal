@@ -6,6 +6,12 @@ import { decryptJson } from "@/server/crypto";
 import { nowIso } from "@/server/ids";
 import { insertExecutionsInTx, type InsertResult } from "@/server/executions";
 import { changeContext } from "@/server/trading/reconcile";
+import {
+  classifyExecutionEvidence,
+  isSyntheticExecutionId,
+  type ClassifiedExecutionEvidence,
+  type ExecutionEvidenceContext,
+} from "@/server/trading/projection";
 import { CTraderMcpClient } from "./client";
 import { classifyMcpError, CTraderMcpSyncError } from "./errors";
 import { getAccountBalance } from "./account";
@@ -129,11 +135,28 @@ export const syncCTraderMcpAccount = async (accountId: string): Promise<SyncOutc
     }
 
     const rows: ImportedExecution[] = [];
+    // The quality of every fill this sync produces, keyed by the fill's import-metadata id.
+    // The quality is resolved here, outside the transaction, so it lands before the
+    // reconciliation fingerprints the projection.
+    const qualities = new Map<string, ClassifiedExecutionEvidence>();
+    const recordQuality = (row: ImportedExecution, context: ExecutionEvidenceContext): void => {
+      const id = row.importMetadata?.id;
+      if (!id) return;
+      qualities.set(id, classifyExecutionEvidence({ sourceId: id }, context));
+    };
+    const dealContext: ExecutionEvidenceContext = {
+      sourceKind: "ctrader_deal",
+      sourceReportedTime: true,
+      reconstructedTime: false,
+      synthetic: false,
+    };
     for (const [positionId, group] of groups) {
       const isOpen = openPositionIds.has(positionId);
       if (isOpen) {
         for (const deal of group.deals) {
-          rows.push(mapDealToExecution(deal, deal.symbolName, group.assetClass, dealIndex++));
+          const row = mapDealToExecution(deal, deal.symbolName, group.assetClass, dealIndex++);
+          rows.push(row);
+          recordQuality(row, dealContext);
         }
         continue;
       }
@@ -149,19 +172,36 @@ export const syncCTraderMcpAccount = async (accountId: string): Promise<SyncOutc
             };
           }
           rows.push(base);
+          recordQuality(base, dealContext);
         });
         continue;
       }
       const onlyDeal = group.deals[0]!;
-      rows.push(
-        ...mapClosedPositionToExecutions(
-          onlyDeal,
-          onlyDeal.symbolName,
-          group.assetClass,
-          dealIndex++,
-          openingTimes.get(positionId),
-        ),
+      const openingTime = openingTimes.get(positionId);
+      const pair = mapClosedPositionToExecutions(
+        onlyDeal,
+        onlyDeal.symbolName,
+        group.assetClass,
+        dealIndex++,
+        openingTime,
       );
+      for (const row of pair) {
+        rows.push(row);
+        // The journal invented the opening fill; the close is a real deal. A recovered
+        // opening time came from the order history, so the invented fill is reconstructed
+        // timing — never source-reported, whatever duration it ends up with.
+        recordQuality(
+          row,
+          isSyntheticExecutionId(row.importMetadata?.id)
+            ? {
+                sourceKind: "ctrader_synthetic_open",
+                sourceReportedTime: false,
+                reconstructedTime: openingTime !== undefined,
+                synthetic: true,
+              }
+            : dealContext,
+        );
+      }
     }
     pendingOrders = await getPendingOrders(client);
     balance = await getAccountBalance(client);
@@ -193,6 +233,10 @@ export const syncCTraderMcpAccount = async (accountId: string): Promise<SyncOutc
         rows,
         "sync",
         changeContext("broker_sync", "live"),
+        undefined,
+        {
+          quality: (row) => qualities.get(row.importMetadata?.id ?? "") ?? null,
+        },
       );
     });
 
