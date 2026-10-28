@@ -15,6 +15,11 @@
       "file": "0003-durable-jobs.ts",
       "name": "durable-jobs",
       "checksum": "b552bba2ead5c1790a65fe236b4fbb8b099e94fe51722957ad71b826f968f272"
+    },
+    "4": {
+      "file": "0004-observations.ts",
+      "name": "observations",
+      "checksum": "51020c338f0846841ed34e4acb3d7922437a3a6e1e951122b5a78d95568612b5"
     }
   }
 }

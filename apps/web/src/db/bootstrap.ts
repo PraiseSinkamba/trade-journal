@@ -2,6 +2,7 @@ import Database from "better-sqlite3";
 import { applyMigrations, LEDGER_TABLE_SQL_SNAPSHOT } from "./migrations.ts";
 import { TRADE_PROJECTION_SQL } from "./migrations/0002-trade-projections.ts";
 import { DURABLE_JOBS_SQL } from "./migrations/0003-durable-jobs.ts";
+import { OBSERVATIONS_SQL } from "./migrations/0004-observations.ts";
 
 /**
  * Final-schema snapshot of the journal, used by the schema parity test and by
@@ -206,6 +207,8 @@ CREATE UNIQUE INDEX IF NOT EXISTS import_batch_unique ON import_batches(account_
 ${TRADE_PROJECTION_SQL}
 
 ${DURABLE_JOBS_SQL}
+
+${OBSERVATIONS_SQL}
 
 ${LEDGER_TABLE_SQL_SNAPSHOT}
 `;

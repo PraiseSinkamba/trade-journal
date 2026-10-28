@@ -616,3 +616,92 @@ export const intelligenceWorkerLease = sqliteTable("intelligence_worker_lease", 
   leaseUntil: integer("lease_until").notNull(),
   heartbeatAt: integer("heartbeat_at").notNull(),
 });
+
+/**
+ * Factual observations (Phase 08).
+ *
+ * One derived statement about a trade. The unique key over the subject, the
+ * source revision, the evaluator and the type is what makes a repeated
+ * delivery idempotent: the same delivery writes the same observation, never a
+ * second one. The subject carries no foreign key on purpose — an observation
+ * outlives the identity it observed, the way the execution membership does.
+ */
+export const intelligenceObservations = sqliteTable(
+  "intelligence_observations",
+  {
+    id: text("id").primaryKey(),
+    subjectId: text("subject_id").notNull(),
+    sourceRevision: text("source_revision").notNull(),
+    evaluatorId: text("evaluator_id").notNull(),
+    evaluatorVersion: text("evaluator_version").notNull(),
+    type: text("type").notNull(),
+    status: text("status", { enum: ["active", "superseded", "invalidated"] }).notNull(),
+    accountId: text("account_id")
+      .notNull()
+      .references(() => accounts.id, { onDelete: "cascade" }),
+    currency: text("currency").notNull(),
+    netPnl: real("net_pnl").notNull(),
+    fees: real("fees").notNull(),
+    tradeStatus: text("trade_status", {
+      enum: ["open", "win", "loss", "breakeven"],
+    }).notNull(),
+    timingQuality: text("timing_quality", {
+      enum: ["source_reported", "reconstructed", "unknown"],
+    }).notNull(),
+    durationMs: integer("duration_ms"),
+    /** The direct fact: the projection revision's snapshot, verbatim. */
+    directFactsJson: text("direct_facts_json").notNull(),
+    /** The derived observation: what the evaluator concluded. */
+    observationJson: text("observation_json").notNull(),
+    recordedAt: integer("recorded_at").notNull(),
+    updatedAt: integer("updated_at").notNull(),
+  },
+  (table) => [
+    uniqueIndex("intelligence_observations_subject_unique").on(
+      table.subjectId,
+      table.sourceRevision,
+      table.evaluatorId,
+      table.evaluatorVersion,
+      table.type,
+    ),
+    index("intelligence_observations_subject_status_idx").on(table.subjectId, table.status),
+  ],
+);
+
+/**
+ * The evidence links of an observation (Phase 08).
+ *
+ * One row per projection revision an observation was derived from. The primary
+ * key makes the link idempotent, so a repeated delivery writes one link.
+ */
+export const observationEvidence = sqliteTable(
+  "observation_evidence",
+  {
+    observationId: text("observation_id")
+      .notNull()
+      .references(() => intelligenceObservations.id, { onDelete: "cascade" }),
+    revisionId: text("revision_id").notNull(),
+  },
+  (table) => [
+    primaryKey({ columns: [table.observationId, table.revisionId] }),
+    index("observation_evidence_revision_idx").on(table.revisionId),
+  ],
+);
+
+/**
+ * The historical seed checkpoint of an account (Phase 08).
+ *
+ * Created with the phase allocation; the historical seed phase writes it. The
+ * account cascades, so deleting an account removes its checkpoint with it.
+ */
+export const intelligenceSeedCheckpoints = sqliteTable("intelligence_seed_checkpoints", {
+  accountId: text("account_id")
+    .primaryKey()
+    .references(() => accounts.id, { onDelete: "cascade" }),
+  status: text("status", {
+    enum: ["pending", "running", "completed", "suppressed"],
+  }).notNull(),
+  lastTradeKey: text("last_trade_key"),
+  baselineOperationId: text("baseline_operation_id").notNull(),
+  updatedAt: integer("updated_at").notNull(),
+});
