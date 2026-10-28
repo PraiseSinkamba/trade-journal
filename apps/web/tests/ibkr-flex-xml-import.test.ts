@@ -9,7 +9,7 @@ const scratch = mkdtempSync(join(tmpdir(), "journal-flex-xml-"));
 vi.stubEnv("JOURNAL_DATA_DIR", scratch);
 vi.stubEnv("JOURNAL_PASSWORD", "");
 vi.mock("next/headers", () => ({ cookies: async () => ({ get: () => undefined }) }));
-const { db, accounts, executions, trades, settings } = await import("../src/db");
+const { db, accounts, executions, trades, settings, domainOutbox } = await import("../src/db");
 const { encryptJson } = await import("../src/server/crypto");
 const { setSetting } = await import("../src/server/settings");
 const { syncAccount } = await import("../src/server/sync");
@@ -75,6 +75,7 @@ const mockFlexService = () =>
   );
 
 beforeEach(() => {
+  db.delete(domainOutbox).run();
   db.delete(trades).run();
   db.delete(executions).run();
   db.delete(accounts).run();
@@ -160,6 +161,23 @@ describe("IBKR Flex Query XML upload honours the statement timezone (#16)", () =
     expect(await (await commit(flexXml())).json()).toMatchObject({ inserted: 2 });
     expect(await (await commit(flexXml())).json()).toMatchObject({ inserted: 0, duplicates: 2 });
     expect(stored()).toHaveLength(2);
+  });
+
+  it("commits the fills, the projections and the events together or not at all", async () => {
+    process.env.JOURNAL_EVENT_CAPTURE = "1";
+    db.$client.exec(
+      "CREATE TRIGGER fail_event BEFORE INSERT ON domain_outbox BEGIN SELECT RAISE(FAIL, 'test event failure'); END",
+    );
+    try {
+      const response = await commit(flexXml());
+      expect(response.status).toBe(500);
+    } finally {
+      db.$client.exec("DROP TRIGGER fail_event");
+      delete process.env.JOURNAL_EVENT_CAPTURE;
+    }
+    expect(stored()).toHaveLength(0);
+    expect(db.select().from(trades).all()).toHaveLength(0);
+    expect(db.select().from(domainOutbox).all()).toHaveLength(0);
   });
 
   it("lists Flex XML among the auto-detected formats", async () => {

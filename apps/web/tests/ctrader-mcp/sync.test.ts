@@ -1,10 +1,14 @@
 import { eq } from "drizzle-orm";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { db, accounts, executions, trades } from "@/db";
+import { db, accounts, executions, trades, domainOutbox } from "@/db";
 import { encryptJson } from "@/server/crypto";
 import { newId } from "@/server/ids";
 import { syncCTraderMcpAccount } from "@/server/ctrader-mcp/sync";
 import type { InsertResult } from "@/server/executions";
+
+// Event capture is off in production; the event behaviour is proved here.
+// It is read per call, so setting it after the imports is enough.
+process.env.JOURNAL_EVENT_CAPTURE = "1";
 
 // Test seam: tests install a fake MCP via globalThis.__FAKE_MCP__ and use the
 // typed alias below for read/write. Defined once to avoid per-use inline casts.
@@ -22,16 +26,23 @@ interface FakeMcp {
 
 // vi.importActual bypasses the module cache and returns the real module.
 // vi.hoisted runs before vi.mock factory, so the real fn is captured here.
-const { insertExecutions: realInsertExecutions } = await vi.importActual<{
-  insertExecutions: (...a: unknown[]) => InsertResult;
-}>("@/server/executions");
+const { insertExecutions: realInsertExecutions, insertExecutionsInTx: realInsertExecutionsInTx } =
+  await vi.importActual<{
+    insertExecutions: (...a: unknown[]) => InsertResult;
+    insertExecutionsInTx: (...a: unknown[]) => InsertResult;
+  }>("@/server/executions");
 
 const insertExecutionsMock = vi.hoisted(() =>
   vi.fn<(...a: unknown[]) => InsertResult>((...a) => realInsertExecutions(...a)),
 );
 
+const insertExecutionsInTxMock = vi.hoisted(() =>
+  vi.fn<(...a: unknown[]) => InsertResult>((...a) => realInsertExecutionsInTx(...a)),
+);
+
 vi.mock("@/server/executions", () => ({
   insertExecutions: (...a: unknown[]) => insertExecutionsMock(...a),
+  insertExecutionsInTx: (...a: unknown[]) => insertExecutionsInTxMock(...a),
 }));
 
 beforeEach(() => {
@@ -308,9 +319,9 @@ describe("syncCTraderMcpAccount (Local)", () => {
     expect(trade!.status).toBe("open");
   });
 
-  it("does not advance lastSyncAt when insertExecutions throws", async () => {
-    const insertError = new Error("simulated insertExecutions failure");
-    insertExecutionsMock.mockImplementation(() => {
+  it("does not advance lastSyncAt when the fill insert throws", async () => {
+    const insertError = new Error("simulated insert failure");
+    insertExecutionsInTxMock.mockImplementation(() => {
       throw insertError;
     });
 
@@ -515,5 +526,92 @@ describe("syncCTraderMcpAccount (Local)", () => {
     expect(trade!.durationMs).toBe(0);
     expect(warnSpy).toHaveBeenCalled();
     warnSpy.mockRestore();
+  });
+});
+
+describe("a cTrader sync commits its fills, its snapshot and its events together", () => {
+  /** One closed position: a synthetic entry plus the real close. */
+  const oneClosedPosition = () => ({
+    get_symbols: {
+      symbols: [{ name: "NAS100", description: "US Tech 100", assetClass: "Indices" }],
+    },
+    get_deals: {
+      deals: [
+        {
+          orderId: 395217525,
+          positionId: 626745677,
+          symbolName: "NAS100",
+          dealType: "close",
+          side: "Sell",
+          filledVolume: 0.1,
+          executionPrice: 29555,
+          entryPrice: 29447.1,
+          grossProfit: -10.79,
+          commission: 0,
+          swap: 0,
+          time: "2026-10-15T14:01:25.056Z",
+        },
+      ],
+    },
+    get_positions: { positions: [] },
+    get_pending_orders: { orders: [] },
+    get_balance: {
+      balance: 24.71,
+      equity: 24.71,
+      margin: 0,
+      freeMargin: 24.71,
+      marginLevel: null,
+      depositAsset: "USD",
+      brokerName: "Pepperstone",
+    },
+  });
+
+  const accountRow = (accountId: string) =>
+    db.select().from(accounts).where(eq(accounts.id, accountId)).get();
+  const events = (accountId: string) =>
+    db.select().from(domainOutbox).where(eq(domainOutbox.accountId, accountId)).all();
+
+  it("rolls the snapshot back with the event when the event append fails", async () => {
+    fake.toolResponses = oneClosedPosition();
+    testSlot.__FAKE_MCP__ = fake;
+
+    const accountId = newId();
+    const previousSyncAt = "2026-01-01T00:00:00.000Z";
+    const previousSnapshot = JSON.stringify({ equity: 1 });
+    addAccount(accountId, { lastSyncAt: previousSyncAt, snapshotJson: previousSnapshot });
+
+    db.$client.exec(
+      "CREATE TRIGGER fail_event BEFORE INSERT ON domain_outbox BEGIN SELECT RAISE(FAIL, 'test event failure'); END",
+    );
+    try {
+      await expect(syncCTraderMcpAccount(accountId)).rejects.toThrow();
+    } finally {
+      db.$client.exec("DROP TRIGGER fail_event");
+    }
+
+    expect(
+      db.select().from(executions).where(eq(executions.accountId, accountId)).all(),
+    ).toHaveLength(0);
+    expect(db.select().from(trades).where(eq(trades.accountId, accountId)).all()).toHaveLength(0);
+    expect(events(accountId)).toHaveLength(0);
+    expect(accountRow(accountId)?.lastSyncAt).toBe(previousSyncAt);
+    expect(accountRow(accountId)?.snapshotJson).toBe(previousSnapshot);
+  });
+
+  it("stays silent when the same deals are synced again", async () => {
+    fake.toolResponses = oneClosedPosition();
+    testSlot.__FAKE_MCP__ = fake;
+
+    const accountId = newId();
+    addAccount(accountId);
+
+    const first = await syncCTraderMcpAccount(accountId);
+    expect(first.inserted).toBe(2);
+    expect(events(accountId)).toHaveLength(1);
+
+    const second = await syncCTraderMcpAccount(accountId);
+    expect(second.inserted).toBe(0);
+    expect(second.duplicates).toBe(2);
+    expect(events(accountId)).toHaveLength(1);
   });
 });

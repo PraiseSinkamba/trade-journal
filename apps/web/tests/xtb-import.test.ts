@@ -7,12 +7,14 @@ import {
   type ClosedLot,
   type OpenLot,
 } from "../../../packages/importers/tests/xtb-fixture";
+import { parseAuto, xtbWorkbookToStatement } from "@luxalgo/journal-importers";
 
 const scratch = mkdtempSync(join(tmpdir(), "journal-xtb-"));
 vi.stubEnv("JOURNAL_DATA_DIR", scratch);
 vi.stubEnv("JOURNAL_PASSWORD", "");
-const { db, accounts, executions, trades } = await import("../src/db");
+const { db, accounts, executions, trades, domainOutbox } = await import("../src/db");
 const { POST } = await import("../src/app/api/import/route");
+const { commitXtbImport } = await import("../src/server/xtb-import");
 
 const post = (body: object) =>
   POST(new Request("http://localhost/api/import", { method: "POST", body: JSON.stringify(body) }));
@@ -66,6 +68,7 @@ const later = (closed: ClosedLot) =>
   xtbWorkbook(ACCOUNT, { closed: [closed], open: lots.slice(1) });
 
 beforeEach(() => {
+  db.delete(domainOutbox).run();
   db.delete(trades).run();
   db.delete(executions).run();
   db.delete(accounts).run();
@@ -141,6 +144,40 @@ describe("XTB .xlsx upload (#42)", () => {
     const response = await upload("commit", partial);
     expect(response.status).toBe(400);
     expect((await response.json()).error).toMatch(/partial close.*Nothing was saved/);
+    expect(state()).toEqual(before);
+  });
+
+  it("commits the close, its projections and its events together or not at all", async () => {
+    await upload("commit", holdings);
+    const before = state();
+    process.env.JOURNAL_EVENT_CAPTURE = "1";
+    db.$client.exec(
+      "CREATE TRIGGER fail_event BEFORE INSERT ON domain_outbox BEGIN SELECT RAISE(FAIL, 'test event failure'); END",
+    );
+    try {
+      const response = await upload("commit", later(close(lots[0]!)));
+      expect(response.status).toBe(500);
+    } finally {
+      db.$client.exec("DROP TRIGGER fail_event");
+      delete process.env.JOURNAL_EVENT_CAPTURE;
+    }
+    // The matched holding, the close and the rebuilt cycle are gone together.
+    expect(state()).toEqual(before);
+    expect(db.select().from(domainOutbox).all()).toHaveLength(0);
+  });
+
+  it("refuses a changed holding inside the command that writes it", async () => {
+    await upload("commit", holdings);
+    const before = state();
+    const partial = later(close(lots[0]!, { volume: 2, net: 20, gross: 20 }));
+    const statement = await xtbWorkbookToStatement(partial);
+    const parsed = parseAuto(statement, { timeZone: "Europe/Bucharest" })!;
+    expect(parsed.format).toBe("xtb");
+    // The command decides under the lock: it refuses the changed lot itself,
+    // so no route-level check stands between the decision and the write.
+    expect(() => commitXtbImport("xtb", parsed.executions)).toThrow(
+      /partial close.*Nothing was saved/,
+    );
     expect(state()).toEqual(before);
   });
 
