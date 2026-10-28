@@ -2,10 +2,12 @@ import { tradeRisk, tradeR, plannedR } from "@luxalgo/journal-core";
 import { eq } from "drizzle-orm";
 import { db, trades, playbooks, accounts } from "@/db";
 import { bad, handler, ok, requireValue } from "@/server/api";
-import { deleteExecutionsForTrades, listExecutions } from "@/server/executions";
+import { listExecutions } from "@/server/executions";
 import { nowIso } from "@/server/ids";
 import { getTradeByKey, rowToTrade } from "@/server/trades-query";
 import { getTimeZone } from "@/server/settings";
+import { deleteTrades } from "@/server/trading/commands";
+import { changeContext } from "@/server/trading/reconcile";
 
 type Params = { params: Promise<{ key: string }> };
 
@@ -97,7 +99,8 @@ export const DELETE = handler(async (_request: Request, { params }: Params) => {
   const { key } = await params;
   const row = getTradeByKey(key);
   if (!row) return bad("Trade not found", 404);
-  // Deleting a trade means deleting its executions; the rebuild removes the row.
-  deleteExecutionsForTrades(row.accountId, JSON.parse(row.executionIdsJson) as string[]);
+  // The command owns the transaction: the fills go, the account is rebuilt and
+  // the projection disappears.
+  deleteTrades([key], changeContext("user", "live"));
   return ok({ deleted: true });
 });

@@ -250,13 +250,51 @@ export const insertExecutions = (
   );
 };
 
+/**
+ * SQLite's bind-parameter limit. Every statement that names a list of ids
+ * stays below it, even for a long history.
+ */
+const ID_CHUNK = 500;
+
+/**
+ * Deletes the given fills of one account inside the caller's transaction.
+ *
+ * The fills are deleted in chunks, so a trade with a long history never
+ * exceeds SQLite's bind-parameter limit.
+ */
+export const deleteExecutionsForTradesInTx = (
+  tx: JournalTx,
+  accountId: string,
+  executionIds: readonly string[],
+): void => {
+  if (executionIds.length === 0) return;
+  for (let i = 0; i < executionIds.length; i += ID_CHUNK) {
+    tx.delete(executions)
+      .where(
+        and(
+          eq(executions.accountId, accountId),
+          inArray(executions.id, executionIds.slice(i, i + ID_CHUNK)),
+        ),
+      )
+      .run();
+  }
+};
+
+/**
+ * Deletes every fill of one account inside the caller's transaction.
+ *
+ * One statement: the account is named, not a list of fills, so there is no
+ * bind-parameter limit to stay below.
+ */
+export const deleteAccountExecutionsInTx = (tx: JournalTx, accountId: string): void => {
+  tx.delete(executions).where(eq(executions.accountId, accountId)).run();
+};
+
 export const deleteExecutionsForTrades = (accountId: string, executionIds: string[]): void => {
   if (executionIds.length === 0) return;
   const context = changeContext("user", "live");
   withJournalTransaction((tx) => {
-    tx.delete(executions)
-      .where(and(eq(executions.accountId, accountId), inArray(executions.id, executionIds)))
-      .run();
+    deleteExecutionsForTradesInTx(tx, accountId, executionIds);
     reconcileAccountInTx(tx, accountId, context);
   });
 };

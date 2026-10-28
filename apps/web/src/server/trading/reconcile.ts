@@ -19,7 +19,12 @@ import { newUuid } from "../ids";
 import { getJournalDefaultsInTx, getMultipliersInTx } from "../settings";
 import { appendDomainEvent } from "../domain-event-store";
 import type { ChangeContext, TradeChanged, TradeChangedKind } from "../domain-events";
-import { recordProjectionRevision, resolveIdentity, retireIdentity } from "./identity";
+import {
+  executionMembershipKey,
+  recordProjectionRevision,
+  resolveIdentity,
+  retireIdentity,
+} from "./identity";
 import { fingerprintProjection, type ProjectionInput } from "./projection";
 
 /**
@@ -168,6 +173,17 @@ const emptyResult = (): ReconcileResult => ({
 });
 
 /**
+ * How one reconciliation is told about a proven transfer.
+ */
+export interface ReconcileOptions {
+  /**
+   * The identities a proven transfer continues, keyed by the execution
+   * membership of the projection (`executionMembershipKey`).
+   */
+  readonly transfers?: ReadonlyMap<string, string>;
+}
+
+/**
  * Reconciles one account inside the caller's transaction.
  *
  * The caller must not do any external work here: fetch and parse outside, then
@@ -177,6 +193,7 @@ export const reconcileAccountInTx = (
   tx: JournalTx,
   accountId: string,
   context: ChangeContext,
+  options: ReconcileOptions = {},
 ): ReconcileResult => {
   const result = emptyResult();
   const account = tx.select().from(accounts).where(eq(accounts.id, accountId)).get();
@@ -265,11 +282,15 @@ export const reconcileAccountInTx = (
       result.unchanged++;
       continue;
     }
+    // A projection a proven transfer claims continues the identity it had: the
+    // facts are the same, only the account they belong to changed.
+    const transferSourceId = options.transfers?.get(executionMembershipKey(trip.executionIds));
     const resolution = resolveIdentity(tx, {
       accountId,
       tradeKey: trip.key,
       executionIds: trip.executionIds,
       operationId: context.operationId,
+      explicitTransferSourceId: transferSourceId ?? null,
     });
     if (resolution.kind === "ambiguous") {
       // The projection is written; the identity is not guessed.
@@ -288,7 +309,11 @@ export const reconcileAccountInTx = (
       result.unchanged++;
       continue;
     }
-    const kind = changeKind(priorRow?.status, trip.status, context.mode);
+    // A projection a proven transfer claims is revised, not discovered: its
+    // facts are the same and only the account they belong to changed.
+    const kind: TradeChangedKind = transferSourceId
+      ? "revised"
+      : changeKind(priorRow?.status, trip.status, context.mode);
     result[kind]++;
     if (!isEventCaptureEnabled()) continue;
     const event: TradeChanged = {
