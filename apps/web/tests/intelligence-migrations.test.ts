@@ -172,6 +172,30 @@ const createPhaseThreeJournal = (name: string): Database.Database => {
 };
 
 /**
+ * A journal from the phase before this one: the ledger holds the baseline, the
+ * projection migration and the durable-job migration, and the observation
+ * tables do not exist yet.
+ */
+const createPhaseFourJournal = (name: string): Database.Database => {
+  const sqlite = new Database(scratchFile(name));
+  sqlite.exec(BOOTSTRAP_SQL);
+  sqlite.exec(`
+    DROP TABLE IF EXISTS observation_evidence;
+    DROP TABLE IF EXISTS intelligence_observations;
+    DROP TABLE IF EXISTS intelligence_seed_checkpoints;
+  `);
+  sqlite.exec("DROP TABLE IF EXISTS journal_migrations");
+  sqlite.exec(LEDGER_TABLE_SQL);
+  const insert = sqlite.prepare(
+    "INSERT INTO journal_migrations (version, name, checksum, applied_at) VALUES (?, ?, ?, ?)",
+  );
+  insert.run(1, "legacy-baseline", BASELINE_CHECKSUM, 1);
+  insert.run(2, "trade-projections", MANIFEST.migrations["2"]?.checksum ?? "", 2);
+  insert.run(3, "durable-jobs", MANIFEST.migrations["3"]?.checksum ?? "", 3);
+  return sqlite;
+};
+
+/**
  * Structural schema fingerprint: tables, their columns, their foreign keys and
  * their indexes. Column order is excluded on purpose — SQLite appends a column
  * added with `ALTER TABLE`, so an upgraded journal orders the repaired columns
@@ -418,6 +442,58 @@ describe("migration runner", () => {
           "event_deliveries",
           "intelligence_jobs",
           "intelligence_worker_lease",
+        ]),
+      );
+      expect(ledgerRows(sqlite)).toHaveLength(REGISTERED.length);
+      // The existing row survived the upgrade untouched.
+      expect(sqlite.prepare("SELECT id, name FROM accounts").get()).toEqual({
+        id: "old",
+        name: "Existing",
+      });
+    } finally {
+      sqlite.close();
+    }
+  });
+
+  it("upgrades a journal from the previous phase onto the observation schema", () => {
+    const previous = createPhaseFourJournal("previous-observation-phase.db");
+    previous.exec(
+      "INSERT INTO accounts (id, name, kind, created_at) VALUES ('old', 'Existing', 'manual', '2026-01-01')",
+    );
+    previous.close();
+
+    const sqlite = new Database(scratchFile("previous-observation-phase.db"));
+    try {
+      // Before the upgrade the observation tables do not exist.
+      const before = (
+        sqlite
+          .prepare("SELECT name FROM sqlite_master WHERE type = 'table' ORDER BY name")
+          .all() as { name: string }[]
+      ).map((row) => row.name);
+      expect(before).not.toContain("intelligence_observations");
+      expect(before).not.toContain("observation_evidence");
+      expect(before).not.toContain("intelligence_seed_checkpoints");
+      expect(inspectMigrations(sqlite)).toEqual({
+        currentVersion: 3,
+        pendingVersions: REGISTERED_VERSIONS.filter((version) => version > 3),
+      });
+
+      applyMigrations(sqlite);
+
+      expect(inspectMigrations(sqlite)).toEqual({
+        currentVersion: LATEST_VERSION,
+        pendingVersions: [],
+      });
+      const after = (
+        sqlite
+          .prepare("SELECT name FROM sqlite_master WHERE type = 'table' ORDER BY name")
+          .all() as { name: string }[]
+      ).map((row) => row.name);
+      expect(after).toEqual(
+        expect.arrayContaining([
+          "intelligence_observations",
+          "observation_evidence",
+          "intelligence_seed_checkpoints",
         ]),
       );
       expect(ledgerRows(sqlite)).toHaveLength(REGISTERED.length);

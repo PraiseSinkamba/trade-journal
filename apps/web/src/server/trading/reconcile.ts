@@ -8,6 +8,7 @@ import {
 } from "@luxalgo/journal-core";
 import {
   accounts,
+  executionEvidence,
   executions,
   trades,
   tradeIdentities,
@@ -25,7 +26,12 @@ import {
   resolveIdentity,
   retireIdentity,
 } from "./identity";
-import { fingerprintProjection, type ProjectionInput } from "./projection";
+import {
+  fingerprintProjection,
+  isSyntheticExecutionId,
+  type ProjectionInput,
+  type TimingQuality,
+} from "./projection";
 
 /**
  * The trade reconciliation boundary (Phase 05).
@@ -78,8 +84,163 @@ export const isEventCaptureEnabled = (): boolean => {
   return value === "1" || value === "true" || value === "on";
 };
 
+/**
+ * How strong a quality is.
+ *
+ * The weakest quality wins: `unknown` beats `reconstructed`, which beats
+ * `source_reported`. One fill the source could not time makes the timing of
+ * the whole projection unproven.
+ */
+const QUALITY_RANK: Record<TimingQuality, number> = {
+  source_reported: 0,
+  reconstructed: 1,
+  unknown: 2,
+};
+
+/** The weakest of the given qualities. */
+const weakestQuality = (qualities: readonly TimingQuality[]): TimingQuality => {
+  let weakest: TimingQuality = "source_reported";
+  for (const quality of qualities) {
+    if (QUALITY_RANK[quality] > QUALITY_RANK[weakest]) weakest = quality;
+  }
+  return weakest;
+};
+
+/**
+ * The quality the journal recorded for one projection, read from the snapshot
+ * of the identity's current revision.
+ *
+ * A projection the journal never recorded a revision for has no recorded
+ * quality; the journal falls back to the assumption it made for every
+ * ordinary source fill.
+ */
+const recordedQualityOf = (snapshotJson: string): TimingQuality | null => {
+  try {
+    const snapshot = JSON.parse(snapshotJson) as { timingQuality?: unknown };
+    const quality = snapshot.timingQuality;
+    if (quality === "source_reported" || quality === "reconstructed" || quality === "unknown") {
+      return quality;
+    }
+    return null;
+  } catch {
+    return null;
+  }
+};
+
+/**
+ * The quality context of one reconciliation.
+ *
+ * `derivedOf` answers what the source can prove about a projection's fills
+ * right now. `recordedOf` answers what the journal recorded for a trade the
+ * last time it recorded a revision. The two are compared against each other:
+ * an unchanged projection stays unchanged, and a corrected quality produces
+ * exactly one revision.
+ */
+interface QualityContext {
+  /** The weakest quality among the given fills. */
+  derivedOf: (executionIds: readonly string[]) => TimingQuality;
+  /** The quality the journal recorded for a trade key. */
+  recordedOf: (tradeKey: string) => TimingQuality;
+}
+
+/**
+ * Reads the quality context of one account.
+ *
+ * The evidence sidecar holds what the source could prove about a fill; a fill
+ * without a sidecar row is an ordinary source fill, whose time the source
+ * stated, unless the journal invented the fill — a synthetic opening fill is
+ * never source-reported timing, and without a sidecar row nothing is known
+ * about it.
+ */
+const qualityContextOf = (
+  tx: JournalTx,
+  accountId: string,
+  rows: readonly (typeof executions.$inferSelect)[],
+): QualityContext => {
+  const evidenceByExecution = new Map<string, TimingQuality>();
+  const executionIds = rows.map((row) => row.id);
+  for (let i = 0; i < executionIds.length; i += 500) {
+    const chunk = executionIds.slice(i, i + 500);
+    if (chunk.length === 0) continue;
+    const evidenceRows = tx
+      .select({
+        executionId: executionEvidence.executionId,
+        timingQuality: executionEvidence.timingQuality,
+      })
+      .from(executionEvidence)
+      .where(inArray(executionEvidence.executionId, chunk))
+      .all();
+    for (const row of evidenceRows) evidenceByExecution.set(row.executionId, row.timingQuality);
+  }
+
+  const syntheticByExecution = new Map<string, boolean>();
+  for (const row of rows) {
+    const metadata = row.importMetadataJson
+      ? (JSON.parse(row.importMetadataJson) as { id?: string })
+      : undefined;
+    syntheticByExecution.set(row.id, isSyntheticExecutionId(metadata?.id ?? null));
+  }
+
+  // The quality the journal recorded: the snapshot of the identity's current
+  // revision. A projection the journal never recorded a revision for has no
+  // recorded quality.
+  const identities = tx
+    .select()
+    .from(tradeIdentities)
+    .where(eq(tradeIdentities.accountId, accountId))
+    .all();
+  const snapshotByRevision = new Map<string, string>();
+  const identityIds = identities.map((identity) => identity.id);
+  for (let i = 0; i < identityIds.length; i += 500) {
+    const chunk = identityIds.slice(i, i + 500);
+    if (chunk.length === 0) continue;
+    const revisions = tx
+      .select({
+        tradeId: tradeProjectionRevisions.tradeId,
+        revision: tradeProjectionRevisions.revision,
+        snapshotJson: tradeProjectionRevisions.snapshotJson,
+      })
+      .from(tradeProjectionRevisions)
+      .where(inArray(tradeProjectionRevisions.tradeId, chunk))
+      .all();
+    for (const revision of revisions) {
+      snapshotByRevision.set(`${revision.tradeId}:${revision.revision}`, revision.snapshotJson);
+    }
+  }
+  const recordedByKey = new Map<string, TimingQuality>();
+  for (const identity of identities) {
+    if (!identity.currentKey) continue;
+    const snapshotJson = snapshotByRevision.get(`${identity.id}:${identity.revision}`);
+    if (!snapshotJson) continue;
+    const recorded = recordedQualityOf(snapshotJson);
+    if (recorded) recordedByKey.set(identity.currentKey, recorded);
+  }
+
+  return {
+    derivedOf: (ids: readonly string[]): TimingQuality => {
+      if (ids.length === 0) return "unknown";
+      const qualities: TimingQuality[] = [];
+      for (const id of ids) {
+        const proven = evidenceByExecution.get(id);
+        if (proven) {
+          qualities.push(proven);
+          continue;
+        }
+        qualities.push(syntheticByExecution.get(id) ? "unknown" : "source_reported");
+      }
+      return weakestQuality(qualities);
+    },
+    recordedOf: (tradeKey: string): TimingQuality =>
+      recordedByKey.get(tradeKey) ?? "source_reported",
+  };
+};
+
 /** The projection of one rebuilt cycle, as the fingerprint sees it. */
-const projectionOf = (account: { currency: string }, trip: RoundTrip): ProjectionInput => ({
+const projectionOf = (
+  account: { currency: string },
+  trip: RoundTrip,
+  timingQuality: TimingQuality,
+): ProjectionInput => ({
   accountId: trip.accountId,
   tradeKey: trip.key,
   symbol: trip.symbol,
@@ -100,9 +261,7 @@ const projectionOf = (account: { currency: string }, trip: RoundTrip): Projectio
   exits: trip.exits,
   durationMs: trip.durationMs ?? null,
   currency: account.currency,
-  // Every fill in this phase carries a source-stated time. The evidence
-  // sidecar (Phase 08) refines this without changing the financial facts.
-  timingQuality: "source_reported",
+  timingQuality,
 });
 
 /**
@@ -112,11 +271,13 @@ const projectionOf = (account: { currency: string }, trip: RoundTrip): Projectio
  * The comparison is against this prior persisted projection, not against the
  * identity chain: a journal that predates the evidence layer still knows what
  * it holds, so an unchanged projection is unchanged whether or not an identity
- * has been recorded for it yet.
+ * has been recorded for it yet. The quality is the one the journal recorded,
+ * so the comparison is recorded against derived.
  */
 const projectionOfRow = (
   account: { currency: string },
   row: typeof trades.$inferSelect,
+  timingQuality: TimingQuality,
 ): ProjectionInput => ({
   accountId: row.accountId,
   tradeKey: row.key,
@@ -138,7 +299,7 @@ const projectionOfRow = (
   exits: JSON.parse(row.exitsJson) as ExitAttribution[],
   durationMs: row.durationMs,
   currency: account.currency,
-  timingQuality: "source_reported",
+  timingQuality,
 });
 
 /**
@@ -224,6 +385,11 @@ export const reconcileAccountInTx = (
     multipliers: getMultipliersInTx(tx),
   });
 
+  // The quality of the account's fills and the quality the journal recorded
+  // for its projections. Both are read once: a reconcile of a long history
+  // must not query per fill and per trade.
+  const quality = qualityContextOf(tx, accountId, rows);
+
   // The projection rows. Only the computed columns are written, so the
   // annotations the user owns survive every rebuild.
   const liveKeys = new Set(trips.map((trip) => trip.key));
@@ -269,13 +435,15 @@ export const reconcileAccountInTx = (
   // it is written whether or not the events are captured: it is what makes an
   // unchanged projection recognisable as unchanged.
   for (const trip of trips) {
-    const projection = projectionOf(account, trip);
+    const projection = projectionOf(account, trip, quality.derivedOf(trip.executionIds));
     const priorRow = priorByKey.get(trip.key);
     // The journal's own prior state decides whether anything changed. A
     // projection whose facts are identical to the stored row is unchanged,
-    // whether or not an identity was recorded for it before.
+    // whether or not an identity was recorded for it before. The quality the
+    // journal recorded is compared against the quality the source can prove
+    // now, so a corrected quality is one revision — never two.
     const changed = priorRow
-      ? fingerprintProjection(projectionOfRow(account, priorRow)) !==
+      ? fingerprintProjection(projectionOfRow(account, priorRow, quality.recordedOf(trip.key))) !==
         fingerprintProjection(projection)
       : true;
     if (!changed) {

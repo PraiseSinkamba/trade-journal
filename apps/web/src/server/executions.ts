@@ -1,6 +1,6 @@
 import { and, eq, inArray } from "drizzle-orm";
 import { positionFillProblem, type ImportedExecution } from "@luxalgo/journal-importers";
-import { db, executions, accounts, trades } from "@/db";
+import { db, executions, accounts, executionEvidence, trades } from "@/db";
 import { withJournalTransaction, type JournalTx } from "@/db/transaction";
 import { executionHash, newId, nowIso } from "./ids";
 import { getJournalDefaultsInTx } from "./settings";
@@ -8,6 +8,7 @@ import { defaultFee } from "@/lib/journal-defaults";
 import { requireValue } from "./request-error";
 import { positionImportErrors } from "./position-import";
 import { changeContext, reconcileAccountInTx, type ChangeContext } from "./trading/reconcile";
+import type { TimingQuality } from "@/server/trading/projection";
 
 export interface InsertResult {
   inserted: number;
@@ -19,6 +20,30 @@ export interface InsertResult {
 }
 
 export type ExecutionSource = "sync" | "import" | "manual";
+
+/**
+ * The source quality of one fill.
+ *
+ * The quality is what the source could prove about the fill's timing, never a
+ * conclusion the journal draws from it.
+ */
+export interface ExecutionSourceQuality {
+  readonly timingQuality: TimingQuality;
+  readonly sourceKind: string;
+}
+
+/**
+ * The optional work one insertion does beyond storing the fills.
+ *
+ * `quality` is called for every usable row and returns the source's evidence
+ * about that fill, or null when the source proves nothing. The classification
+ * is written to the `execution_evidence` sidecar before the reconciliation
+ * fingerprints the projection, so the fingerprint sees the resolved quality.
+ */
+export interface InsertExecutionsOptions {
+  preserveFees?: boolean;
+  quality?: (row: ImportedExecution) => ExecutionSourceQuality | null;
+}
 
 const MAX_SKIP_REASONS = 5;
 
@@ -103,6 +128,54 @@ const contextForSource = (source: ExecutionSource): ChangeContext =>
       : changeContext("import", "historical");
 
 /**
+ * Writes the source quality of one fill into the evidence sidecar.
+ *
+ * The write is idempotent and never downgrades a known quality: an `unknown`
+ * quality is upgraded to a known one, a known quality is kept. The sidecar row
+ * lands before the reconciliation fingerprints the projection, so the fingerprint
+ * sees the resolved quality.
+ *
+ * @returns whether the sidecar changed. A changed quality is a change of the
+ * projection's facts, so it must be reconciled even when no fill was inserted.
+ */
+const writeExecutionQualityInTx = (
+  tx: JournalTx,
+  executionId: string,
+  quality: ExecutionSourceQuality,
+  recordedAt: number,
+): boolean => {
+  const existing = tx
+    .select({ timingQuality: executionEvidence.timingQuality })
+    .from(executionEvidence)
+    .where(eq(executionEvidence.executionId, executionId))
+    .get();
+  if (!existing) {
+    tx.insert(executionEvidence)
+      .values({
+        executionId,
+        timingQuality: quality.timingQuality,
+        sourceKind: quality.sourceKind,
+        evidenceVersion: 1,
+        recordedAt,
+      })
+      .run();
+    return true;
+  }
+  if (existing.timingQuality === "unknown" && quality.timingQuality !== "unknown") {
+    tx.update(executionEvidence)
+      .set({
+        timingQuality: quality.timingQuality,
+        sourceKind: quality.sourceKind,
+        recordedAt,
+      })
+      .where(eq(executionEvidence.executionId, executionId))
+      .run();
+    return true;
+  }
+  return false;
+};
+
+/**
  * Insert fills, rebuild the trades, and attach optional manual notes — all in
  * one transaction the caller owns.
  *
@@ -116,7 +189,7 @@ export const insertExecutionsInTx = (
   source: ExecutionSource,
   context: ChangeContext,
   manualNotes?: string,
-  options: { preserveFees?: boolean } = {},
+  options: InsertExecutionsOptions = {},
 ): InsertResult => {
   requireValue(
     manualNotes === undefined ||
@@ -134,6 +207,10 @@ export const insertExecutionsInTx = (
   );
   let inserted = 0;
   let duplicates = 0;
+  // Whether the source proved something new about a fill that was already
+  // stored. A corrected quality changes the projection's fingerprint, so it
+  // has to be reconciled even when no fill was inserted.
+  let qualityChanged = false;
   const createdAt = nowIso();
   const defaults = getJournalDefaultsInTx(tx);
   const note = manualNotes?.trim() ? manualNotes : undefined;
@@ -189,25 +266,37 @@ export const insertExecutionsInTx = (
       })
       .onConflictDoNothing()
       .run();
+    const existingId =
+      result.changes > 0
+        ? id
+        : tx
+            .select({ id: executions.id })
+            .from(executions)
+            .where(
+              and(eq(executions.accountId, accountId), eq(executions.contentHash, contentHash)),
+            )
+            .get()?.id;
     if (result.changes > 0) {
       inserted++;
       if (note) noteExecutionIds.add(id);
     } else {
       duplicates++;
-      if (note) {
-        const existing = tx
-          .select({ id: executions.id })
-          .from(executions)
-          .where(and(eq(executions.accountId, accountId), eq(executions.contentHash, contentHash)))
-          .get();
-        if (existing) noteExecutionIds.add(existing.id);
-      }
+      if (note && existingId) noteExecutionIds.add(existingId);
+    }
+    // The quality of every usable row is classified, not only of the rows this
+    // call inserted: a duplicate is the one chance to learn what the source
+    // could prove about a fill that is already stored.
+    const quality = options.quality?.(row);
+    if (quality && existingId) {
+      if (writeExecutionQualityInTx(tx, existingId, quality, Date.now())) qualityChanged = true;
     }
   }
   // The projections, the revisions and the events are written by the one
   // reconciliation boundary, in this transaction. Nothing changed when no fill
-  // was inserted, so there is nothing to reconcile.
-  if (inserted > 0) reconcileAccountInTx(tx, accountId, context);
+  // was inserted, so there is nothing to reconcile — unless the source proved
+  // something new about a fill that was already stored, because a corrected
+  // quality is a change of the projection's facts.
+  if (inserted > 0 || qualityChanged) reconcileAccountInTx(tx, accountId, context);
   if (note) {
     const affected = tx
       .select({
@@ -242,7 +331,7 @@ export const insertExecutions = (
   rows: ImportedExecution[],
   source: ExecutionSource,
   manualNotes?: string,
-  options: { preserveFees?: boolean } = {},
+  options: InsertExecutionsOptions = {},
 ): InsertResult => {
   const context = contextForSource(source);
   return withJournalTransaction((tx) =>

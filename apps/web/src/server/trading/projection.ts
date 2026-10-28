@@ -10,6 +10,69 @@ import type { ExitAttribution, TradeDirection, TradeStatus } from "@luxalgo/jour
  */
 export type TimingQuality = "source_reported" | "reconstructed" | "unknown";
 
+/** The id prefix a source uses for a fill the journal invented. */
+export const SYNTHETIC_EXECUTION_ID_PREFIX = "synthetic:open:";
+
+/** Whether an id marks a fill the journal invented rather than a source record. */
+export const isSyntheticExecutionId = (id: string | null | undefined): boolean =>
+  typeof id === "string" && id.startsWith(SYNTHETIC_EXECUTION_ID_PREFIX);
+
+/** What the source can prove about one fill. */
+export interface ExecutionEvidenceContext {
+  /** The source the fill came from, e.g. `ctrader_deal`. */
+  readonly sourceKind: string;
+  /** The source stated the fill's own time. */
+  readonly sourceReportedTime: boolean;
+  /** The fill's time was derived from other records of the same source. */
+  readonly reconstructedTime: boolean;
+  /** The fill is a placeholder the journal invented, not a source record. */
+  readonly synthetic: boolean;
+}
+
+/** The fill the classifier judges. */
+export interface ExecutionEvidenceFill {
+  /** The source's own id of the fill. */
+  readonly sourceId?: string | null;
+}
+
+/** The classification of one fill. */
+export interface ClassifiedExecutionEvidence {
+  readonly timingQuality: TimingQuality;
+  readonly sourceKind: string;
+}
+
+/**
+ * Classifies the timing evidence of one fill.
+ *
+ * The rules, in order:
+ * 1. a synthetic fill is never `source_reported`. It is `reconstructed` when the source's own
+ *    records supplied the time, and `unknown` otherwise;
+ * 2. a fill whose time was derived from other source records is `reconstructed`;
+ * 3. a fill whose own time the source stated is `source_reported`;
+ * 4. anything else is `unknown`.
+ *
+ * The classifier never looks at a duration: a synthetic entry with a zero duration and a synthetic
+ * entry with a nonzero duration are classified the same way, so a nonzero duration can never
+ * upgrade a synthetic entry into source-reported timing.
+ */
+export const classifyExecutionEvidence = (
+  fill: ExecutionEvidenceFill,
+  context: ExecutionEvidenceContext,
+): ClassifiedExecutionEvidence => {
+  // The id is the second signal of a synthetic fill: a caller that forgot to set the flag still
+  // cannot get a source-reported timing out of a fill the journal invented.
+  const synthetic = context.synthetic || isSyntheticExecutionId(fill.sourceId);
+  let timingQuality: TimingQuality = "unknown";
+  if (synthetic) {
+    timingQuality = context.reconstructedTime ? "reconstructed" : "unknown";
+  } else if (context.reconstructedTime) {
+    timingQuality = "reconstructed";
+  } else if (context.sourceReportedTime) {
+    timingQuality = "source_reported";
+  }
+  return { timingQuality, sourceKind: context.sourceKind };
+};
+
 /**
  * User-authored context carried by a trade row.
  *

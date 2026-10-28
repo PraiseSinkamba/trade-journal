@@ -5,6 +5,8 @@ import {
   executionEvidence,
   executions,
   intelligenceJobs,
+  intelligenceObservations,
+  intelligenceSeedCheckpoints,
 } from "@/db/schema";
 import type { JournalTx } from "@/db/transaction";
 
@@ -36,6 +38,7 @@ const eachChunk = (ids: readonly string[], fn: (chunk: string[]) => void): void 
  * cancelled first and deleted after: a worker that still holds one is fenced,
  * because its completion finds no job row. The evidence sidecar of the
  * account's fills has no foreign key, so it would otherwise survive them.
+ * The observations of the account's trades and its seed checkpoint go with it.
  */
 export const purgeAccountIntelligence = (tx: JournalTx, accountId: string): void => {
   const eventIds = tx
@@ -89,4 +92,14 @@ export const purgeAccountIntelligence = (tx: JournalTx, accountId: string): void
   eachChunk(executionIds, (chunk) => {
     tx.delete(executionEvidence).where(inArray(executionEvidence.executionId, chunk)).run();
   });
+
+  // The observations of the account's trades are the account's intelligence:
+  // their evidence links cascade with them. The seed checkpoint belongs to the
+  // account and goes with it.
+  tx.delete(intelligenceObservations)
+    .where(eq(intelligenceObservations.accountId, accountId))
+    .run();
+  tx.delete(intelligenceSeedCheckpoints)
+    .where(eq(intelligenceSeedCheckpoints.accountId, accountId))
+    .run();
 };
