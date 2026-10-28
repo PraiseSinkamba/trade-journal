@@ -1,7 +1,7 @@
 {
   "schemaVersion": 1,
   "feature": "ai-native-journal",
-  "updatedAt": "2026-10-28T09:18:23Z",
+  "updatedAt": "2026-10-28T10:54:08Z",
   "owner": "parent OMP coordinator (exclusive owner of this record)",
   "repository": {
     "name": "trade-journal",
@@ -34,8 +34,8 @@
     },
     "featureBranch": "codex/ai-native-journal",
     "featureBootstrapSha": "0a278503fd67c0f9e82138dfecb744f4bfd307ad",
-    "featureHeadSha": "3e7346e2115be4b74d2b65594f9fe3e3ab3044b7",
-    "featureHeadShaNote": "feature branch HEAD at the Phase 07 dispatch and the exact base of the Phase 07 worktree; the coordinator record commit advances the branch by one commit",
+    "featureHeadSha": "93452871ca51e35cb7bc89bb129e1d58228a9f97",
+    "featureHeadShaNote": "feature branch HEAD after the Phase 07 non-fast-forward merge; the coordinator record commit advances the branch by one commit",
     "featureCheckpointCommits": [
       "0a278503fd67c0f9e82138dfecb744f4bfd307ad",
       "80d53ccb62fda801897852a6f4e5d2aab8b0d58b",
@@ -51,7 +51,8 @@
       "926f9d590f295501c77757916d6732e28fcf92ac",
       "5d1bf55cfc3d704d595e1a92df053c1d0592e083",
       "3f672c76ed0da21432eea27a32c30a367d542fca",
-      "3e7346e2115be4b74d2b65594f9fe3e3ab3044b7"
+      "3e7346e2115be4b74d2b65594f9fe3e3ab3044b7",
+      "93452871ca51e35cb7bc89bb129e1d58228a9f97"
     ],
     "featureBranchNote": "Orca slugified the requested name to codex-ai-native-journal at creation; the coordinator renamed the newly created, exclusively owned branch to the contract-required codex/ai-native-journal. Orca reads the renamed ref live (refs/heads/codex/ai-native-journal). No pre-existing branch was overwritten."
   },
@@ -173,7 +174,7 @@
         "startSha": "3e7346e2115be4b74d2b65594f9fe3e3ab3044b7",
         "orcaParentWorktreeId": "aa54a522-a9af-4cb4-9de7-f1d9a349c0fd::E:/4004/orca/workspaces/trade-journal/codex-ai-native-journal",
         "setup": "pnpm install --frozen-lockfile completed in the worker checkout; working tree clean; Node v24.20.0, pnpm 11.0.8",
-        "state": "dispatched"
+        "state": "integrated into codex/ai-native-journal at 9345287 and verified on the destination branch, then cleaned up at the user request: the Orca worktree, the git worktree registration, the branch and the leftover directory were removed after verifying the content was merged."
       }
     ]
   },
@@ -266,11 +267,11 @@
       "wave": 7,
       "branch": "codex/ai-native-journal-p07",
       "deps": ["task_756e02a00efc"],
-      "status": "dispatched",
-      "state": "dispatched",
+      "status": "completed",
+      "state": "integrated",
       "nativeDispatch": "ctx_c108c1988ca7",
       "nativeHandle": "term_18bec6af-f37a-483a-8581-4a77f7a2cceb",
-      "evidence": "separate OMP session in its own Orca child worktree based on the verified feature HEAD; the resolved brief (checkout, base SHA, predecessor handoff, the remaining-mutation scope, transaction and purge-fencing rules, the verification set) was delivered and read before any edit"
+      "evidence": "worker_done succeeded on dispatch ctx_c108c1988ca7; the coordinator reviewed the exact commits against the phase guide, re-ran the full CI sequence and merged into codex/ai-native-journal at 9345287"
     },
     {
       "stable": "T-008",
@@ -558,11 +559,11 @@
       "started": "2026-10-28 09:17:35",
       "base": "3e7346e2115be4b74d2b65594f9fe3e3ab3044b7",
       "purpose": "Phase 07 - remaining mutation commands and settings-driven rebuilds: single and bulk delete, account clear/delete/transfer, method and multiplier changes",
-      "state": "actively executing",
-      "candidate": null,
-      "reviewed": false,
-      "integrated": false,
-      "verified": false
+      "state": "settled",
+      "candidate": ["7ef0a94", "d9dc7d2", "0c4576b"],
+      "reviewed": true,
+      "integrated": true,
+      "verified": true
     }
   ],
   "integration": {
@@ -734,6 +735,27 @@
       "review": "PASS. All six broker and specialized adapters use the committed ingestion/reconciliation ports and commit inside one immediate transaction, with the source-specific XTB and IBKR decisions taken under the same write lock. No schema change.",
       "deviations": "Three: NinjaTrader and demo event provenance moves from system/maintenance to import/historical with classification unchanged; the XTB and IBKR checks move from the route into the transaction with the preview output unchanged; single and bulk trade delete are left to Phase 07 per the phase guide.",
       "report": "docs/superpowers/reports/ai-native-journal-integration-06.md",
+      "reviewed": true,
+      "integrated": true,
+      "verified": true
+    },
+    {
+      "phase": "07",
+      "task": "T-007",
+      "native": "task_816b57885f53",
+      "dispatch": "ctx_c108c1988ca7",
+      "base": "3e7346e2115be4b74d2b65594f9fe3e3ab3044b7",
+      "mergeSha": "93452871ca51e35cb7bc89bb129e1d58228a9f97",
+      "mergeParents": [
+        "76ac942229523006508d36b0d5f4765150b5886b",
+        "0c4576bf45dbd3ea3a9c103a180d6d813639bf8f"
+      ],
+      "commits": ["7ef0a94", "d9dc7d2", "0c4576b"],
+      "checks": "targeted 4 files 53 passed; full pnpm test 98 files 1014 passed; typecheck web/core/importers 0; prettier 0; migrations:check OK; license OK; packages build 0; next build 0",
+      "review": "PASS. The command layer owns every transaction while reconcile.ts takes one; an ambiguous transfer is rejected before anything is written and the IBKR provenance refusal runs first under the lock; purge cancels before deleting so a holding worker is fenced. No schema, migration or dependency change.",
+      "deviations": "Three: deleteAccount writes no removed event because the purge removes the outbox rows in the same transaction (clear writes the tombstones and events, delete purges); the bulk route annotation actions keep their un-transacted per-row writes because they are annotation writes with versioned events planned later; the non-transactional settings readers and writers now delegate to their in-transaction twins.",
+      "risksForward": "Three: the multiplier change write lock grows with the journal and is measured at the Phase 21 release gate; a transfer is refused when moved fills merge with the destination, deliberately, to stop an annotation attaching to the wrong trade; the purge must be extended to the observation tables when migration 0004 arrives in Phase 08.",
+      "report": "docs/superpowers/reports/ai-native-journal-integration-07.md",
       "reviewed": true,
       "integrated": true,
       "verified": true
