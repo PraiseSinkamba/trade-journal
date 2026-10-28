@@ -1,7 +1,7 @@
 {
   "schemaVersion": 1,
   "feature": "ai-native-journal",
-  "updatedAt": "2026-10-27T21:45:00Z",
+  "updatedAt": "2026-10-28T11:05:00Z",
   "owner": "parent OMP coordinator (exclusive owner of this record)",
   "repository": {
     "name": "trade-journal",
@@ -34,8 +34,8 @@
     },
     "featureBranch": "codex/ai-native-journal",
     "featureBootstrapSha": "0a278503fd67c0f9e82138dfecb744f4bfd307ad",
-    "featureHeadSha": "5d1bf55cfc3d704d595e1a92df053c1d0592e083",
-    "featureHeadShaNote": "feature branch HEAD after the Phase 05 non-fast-forward merge and before the coordinator record commit; the Phase 06 worktree base is this exact SHA",
+    "featureHeadSha": "3f672c76ed0da21432eea27a32c30a367d542fca",
+    "featureHeadShaNote": "feature branch HEAD after the Phase 06 non-fast-forward merge; the coordinator record commit advances the branch by one commit",
     "featureCheckpointCommits": [
       "0a278503fd67c0f9e82138dfecb744f4bfd307ad",
       "80d53ccb62fda801897852a6f4e5d2aab8b0d58b",
@@ -49,7 +49,8 @@
       "6541c10c546932032b3944d652ab7ddf0cf172ca",
       "f6ea10cfa408a8357c1c51073e8ba68c9d91186d",
       "926f9d590f295501c77757916d6732e28fcf92ac",
-      "5d1bf55cfc3d704d595e1a92df053c1d0592e083"
+      "5d1bf55cfc3d704d595e1a92df053c1d0592e083",
+      "3f672c76ed0da21432eea27a32c30a367d542fca"
     ],
     "featureBranchNote": "Orca slugified the requested name to codex-ai-native-journal at creation; the coordinator renamed the newly created, exclusively owned branch to the contract-required codex/ai-native-journal. Orca reads the renamed ref live (refs/heads/codex/ai-native-journal). No pre-existing branch was overwritten."
   },
@@ -161,7 +162,7 @@
         "startSha": "5d1bf55cfc3d704d595e1a92df053c1d0592e083",
         "orcaParentWorktreeId": "aa54a522-a9af-4cb4-9de7-f1d9a349c0fd::E:/4004/orca/workspaces/trade-journal/codex-ai-native-journal",
         "setup": "pnpm install --frozen-lockfile pending in the worker checkout; Node v24.20.0, pnpm 11.0.8",
-        "state": "worktree created, dispatch pending"
+        "state": "integrated into codex/ai-native-journal at 3f672c7 and verified on the destination branch, then cleaned up at the user request: the Orca worktree, the git worktree registration, the branch and the leftover directory were removed after verifying the content was merged."
       }
     ]
   },
@@ -242,8 +243,10 @@
       "wave": 6,
       "branch": "codex/ai-native-journal-p06",
       "deps": ["task_a871bc6be4cd"],
-      "status": "pending",
-      "state": "created"
+      "status": "completed",
+      "state": "integrated",
+      "nativeDispatch": "ctx_f72d0a118d1b",
+      "evidence": "worker_done succeeded on dispatch ctx_f72d0a118d1b; the coordinator reviewed the exact commits against the mutation matrix, re-ran the full CI sequence and merged into codex/ai-native-journal at 3f672c7"
     },
     {
       "stable": "T-007",
@@ -512,6 +515,23 @@
       "reviewed": true,
       "integrated": true,
       "verified": true
+    },
+    {
+      "task": "T-006",
+      "native": "task_756e02a00efc",
+      "dispatch": "ctx_f72d0a118d1b",
+      "handle": "term_a5025cbf-46d8-4902-931d-3c83b60a9f45",
+      "agent": "omp",
+      "provider": "omp",
+      "worktree": "aa54a522-a9af-4cb4-9de7-f1d9a349c0fd::E:/4004/orca/workspaces/trade-journal/codex-ai-native-journal-p06",
+      "started": "2026-10-27T22:40:00Z",
+      "base": "5d1bf55cfc3d704d595e1a92df053c1d0592e083",
+      "purpose": "Phase 06 - all broker and specialized import paths",
+      "state": "settled",
+      "candidate": ["be43b52", "5bc48a7", "0dc06df"],
+      "reviewed": true,
+      "integrated": true,
+      "verified": true
     }
   ],
   "integration": {
@@ -663,6 +683,26 @@
       "deviations": "ChangeContext is reused from server/domain-events.ts rather than redeclared, because Phase 04 already shipped the identical contract; insertExecutionsInTx lives beside the execution validation it needs.",
       "scopeNote": "The phase guide narrows Phase 05 to manual and generic ingestion. The broker-specific importers and the account clear/delete/transfer commands are Phase 06 subject, not omissions.",
       "report": "docs/superpowers/reports/ai-native-journal-integration-05.md",
+      "reviewed": true,
+      "integrated": true,
+      "verified": true
+    },
+    {
+      "phase": "06",
+      "task": "T-006",
+      "native": "task_756e02a00efc",
+      "dispatch": "ctx_f72d0a118d1b",
+      "base": "5d1bf55cfc3d704d595e1a92df053c1d0592e083",
+      "mergeSha": "3f672c76ed0da21432eea27a32c30a367d542fca",
+      "mergeParents": [
+        "b2c15cfa3a1c25f50b699180a2ee26d69d4eeb02",
+        "0dc06df7de3ae0052044be965d255a32f96f5768"
+      ],
+      "commits": ["be43b52", "5bc48a7", "0dc06df"],
+      "checks": "targeted 5 files 58 passed; full pnpm test 94 files 968 passed; typecheck web/core/importers 0; prettier 0; migrations:check OK; license OK; packages build 0; next build 0",
+      "review": "PASS. All six broker and specialized adapters use the committed ingestion/reconciliation ports and commit inside one immediate transaction, with the source-specific XTB and IBKR decisions taken under the same write lock. No schema change.",
+      "deviations": "Three: NinjaTrader and demo event provenance moves from system/maintenance to import/historical with classification unchanged; the XTB and IBKR checks move from the route into the transaction with the preview output unchanged; single and bulk trade delete are left to Phase 07 per the phase guide.",
+      "report": "docs/superpowers/reports/ai-native-journal-integration-06.md",
       "reviewed": true,
       "integrated": true,
       "verified": true
