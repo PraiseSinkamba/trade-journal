@@ -33,6 +33,7 @@ const {
   executions,
   intelligenceJobs,
   intelligenceObservations,
+  intelligenceSeedCheckpoints,
   intelligenceWorkerLease,
   domainOutbox,
   observationEvidence,
@@ -45,7 +46,7 @@ const {
 const { insertExecutionsInTx, deleteExecutionsForTradesInTx } =
   await import("../src/server/executions");
 const { changeContext, reconcileAccountInTx } = await import("../src/server/trading/reconcile");
-const { createJobStore, createEffectStore } =
+const { createJobStore, createEffectStore, createReplayService } =
   await import("../src/server/intelligence/infrastructure/jobs");
 const { createWorkerService } = await import("../src/server/intelligence/infrastructure/worker");
 const { createOutboxDispatcher } = await import("../src/server/intelligence/infrastructure/outbox");
@@ -58,6 +59,16 @@ const OWNER = "observation-worker";
 const jobs = createJobStore(db);
 const effects = createEffectStore();
 const dispatcher = createOutboxDispatcher({ db, jobs, handlers: observationOutboxHandlers });
+const replay = createReplayService({
+  db,
+  jobs,
+  handlers: observationOutboxHandlers,
+  clock: () => NOW,
+});
+const requestReplay = (eventId: string): string => {
+  const handler = observationOutboxHandlers[0]!;
+  return replay.requestReplay(eventId, handler.id, handler.version);
+};
 
 /** The worker that observes the committed trade changes of this scratch journal. */
 const worker = createWorkerService({
@@ -245,6 +256,7 @@ beforeEach(() => {
   db.delete(eventDeliveries).run();
   db.delete(intelligenceJobs).run();
   db.delete(intelligenceWorkerLease).run();
+  db.delete(intelligenceSeedCheckpoints).run();
   db.delete(executions).run();
   db.delete(trades).run();
   db.delete(accounts).run();
@@ -602,4 +614,151 @@ describe("a quality the source proves later", () => {
         .all().length,
     ).toBe(revisionsAfterFirst + 1);
   });
+});
+
+describe("explicit durable replay", () => {
+  it("coalesces pending and running work and preserves completed business effects", async () => {
+    const account = createAccount("acct-explicit-replay");
+    insertFills(account, [entry, exit]);
+    const event = eventFor(account, 0);
+    const id = requestReplay(event.id);
+    expect(requestReplay(event.id)).toBe(id);
+    dispatcher.dispatchOutbox(100, NOW);
+    const claim = jobs.claim(OWNER, NOW)!;
+    expect(claim.jobId).toBe(id);
+    expect(requestReplay(event.id)).toBe(id);
+    expect(jobs.load(id)!.fence).toBe(claim.fence);
+    expect(jobs.fail(claim, "TRANSIENT", NOW, true)).toBe(true);
+    expect(requestReplay(event.id)).toBe(id);
+    expect(jobs.load(id)!.status).toBe("retry_wait");
+    expect(jobs.load(id)!.attempts).toBe(1);
+    const retryClaim = jobs.claim(OWNER, NOW + 1_000)!;
+    expect(jobs.fail(retryClaim, "TERMINAL", NOW + 1_000, false)).toBe(true);
+    expect(requestReplay(event.id)).toBe(id);
+    expect(jobs.load(id)).toMatchObject({
+      status: "pending",
+      attempts: 0,
+      owner: null,
+      leaseUntil: null,
+      lastError: null,
+    });
+    expect(jobs.load(id)!.fence).toBeGreaterThan(retryClaim.fence);
+    expect(() => withJournalTransaction((tx) => effects.assertClaim(tx, retryClaim, NOW))).toThrow(
+      "Stale claim",
+    );
+    expect(() => withJournalTransaction((tx) => effects.complete(tx, retryClaim, NOW))).toThrow(
+      "Stale claim",
+    );
+    await drain();
+    const first = observations()[0]!;
+    expect(observations()).toHaveLength(1);
+    expect(requestReplay(event.id)).toBe(id);
+    expect(requestReplay(event.id)).toBe(id);
+    await drain();
+    expect(observations()).toEqual([first]);
+    expect(links()).toHaveLength(1);
+    expect(db.select().from(eventDeliveries).all()).toHaveLength(1);
+    expect(db.select().from(intelligenceJobs).all()).toHaveLength(1);
+    expect(jobs.load(id)!.status).toBe("completed");
+    expect(db.select().from(trades).all()).toHaveLength(1);
+    expect(db.select().from(executions).all()).toHaveLength(2);
+  });
+
+  it.each(["correction", "removal"] as const)(
+    "discards stale replay when %s commits before processing",
+    async (change) => {
+      const account = createAccount(`acct-stale-${change}`);
+      insertFills(account, [entry, exit]);
+      await drain();
+      const first = observations()[0]!;
+      requestReplay(eventFor(account, 0).id);
+      if (change === "correction") correctExit(account, 105);
+      else removeFills(account);
+      await drain();
+      expect(observations().find((row) => row.id === first.id)!.status).toBe(
+        change === "correction" ? "superseded" : "invalidated",
+      );
+      expect(observations()).toHaveLength(change === "correction" ? 2 : 1);
+      expect(links()).toHaveLength(change === "correction" ? 2 : 1);
+      requestReplay(eventFor(account, 0).id);
+      await drain();
+      expect(observations().find((row) => row.id === first.id)!.status).toBe(
+        change === "correction" ? "superseded" : "invalidated",
+      );
+    },
+  );
+
+  it("rejects unregistered versions, missing events and cancelled work", () => {
+    const account = createAccount("acct-replay-validation");
+    insertFills(account, [entry, exit]);
+    const event = eventFor(account, 0);
+    const handler = observationOutboxHandlers[0]!;
+    expect(() => replay.requestReplay("", handler.id, handler.version)).toThrow();
+    expect(() => replay.requestReplay("missing", handler.id, handler.version)).toThrow(
+      "does not exist",
+    );
+    expect(() => replay.requestReplay(event.id, handler.id, "unregistered")).toThrow(
+      "not registered",
+    );
+    const id = requestReplay(event.id);
+    jobs.cancel(id);
+    expect(() => requestReplay(event.id)).toThrow("Cancelled work");
+    expect(jobs.load(id)!.status).toBe("cancelled");
+  });
+
+  it("permits explicitly registered new versions and rejects deleted accounts", () => {
+    const account = createAccount("acct-replay-version");
+    insertFills(account, [entry, exit]);
+    const event = eventFor(account, 0);
+    const handler = observationOutboxHandlers[0]!;
+    const versioned = createReplayService({
+      db,
+      jobs,
+      handlers: [...observationOutboxHandlers, { id: handler.id, version: "2" }],
+      clock: () => NOW,
+    });
+    const original = requestReplay(event.id);
+    const upgraded = versioned.requestReplay(event.id, handler.id, "2");
+    expect(upgraded).not.toBe(original);
+    expect(versioned.requestReplay(event.id, handler.id, "2")).toBe(upgraded);
+    expect(db.select().from(eventDeliveries).all()).toHaveLength(2);
+    db.delete(accounts).where(eq(accounts.id, account)).run();
+    expect(() => requestReplay(event.id)).toThrow("account does not exist");
+  });
+
+  it.each(["queued", "replayed"] as const)(
+    "suppression fences %s old events and rejects further replay",
+    async (state) => {
+      const account = createAccount(`acct-suppressed-${state}`);
+      insertFills(account, [entry, exit]);
+      const event = eventFor(account, 0);
+      if (state === "replayed") {
+        await drain();
+        requestReplay(event.id);
+      } else {
+        dispatcher.dispatchOutbox(100, NOW);
+      }
+      withJournalTransaction((tx) => {
+        tx.delete(intelligenceObservations)
+          .where(eq(intelligenceObservations.accountId, account))
+          .run();
+        tx.insert(intelligenceSeedCheckpoints)
+          .values({
+            accountId: account,
+            status: "suppressed",
+            lastTradeKey: null,
+            baselineOperationId: "explicit-reset",
+            updatedAt: NOW,
+          })
+          .run();
+      });
+      const financial = db.select().from(trades).all();
+      expect(() => requestReplay(event.id)).toThrow("suppressed");
+      await drain();
+      expect(observations()).toHaveLength(0);
+      expect(links()).toHaveLength(0);
+      expect(db.select().from(trades).all()).toEqual(financial);
+      expect(db.select().from(executions).all()).toHaveLength(2);
+    },
+  );
 });

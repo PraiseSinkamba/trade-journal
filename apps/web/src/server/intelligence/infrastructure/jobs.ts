@@ -1,8 +1,16 @@
 import { and, asc, eq, gt, gte, inArray, isNull, lt, lte, or, sql } from "drizzle-orm";
 import type { JournalDb } from "@/db/connection";
 import { withConnectionTransaction, type JournalTx } from "@/db/transaction";
-import { eventDeliveries, intelligenceJobs } from "@/db/schema";
+import {
+  accounts,
+  domainOutbox,
+  eventDeliveries,
+  intelligenceJobs,
+  intelligenceSeedCheckpoints,
+} from "@/db/schema";
 import { newUuid } from "@/server/ids";
+import { requireValue } from "@/server/request-error";
+import type { OutboxHandler } from "./outbox";
 import {
   jobPayloadSchema,
   MAX_JOB_PAYLOAD_BYTES,
@@ -272,6 +280,123 @@ export const createJobStore = (db: JournalDb): JobStore => ({
       createdAt: row.createdAt,
       updatedAt: row.updatedAt,
     };
+  },
+});
+
+/** Trusted operational replay seam; no provider or model access is required. */
+export const createReplayService = (deps: {
+  db: JournalDb;
+  jobs: JobStore;
+  handlers: readonly OutboxHandler[];
+  clock?: () => number;
+}) => ({
+  requestReplay(eventId: string, handlerId: string, handlerVersion: string): string {
+    for (const value of [eventId, handlerId, handlerVersion]) {
+      requireValue(
+        typeof value === "string" && value.trim().length > 0 && !value.includes(":"),
+        "Replay identifiers must be non-empty and must not contain colons.",
+      );
+    }
+    requireValue(
+      deps.handlers.some(
+        (handler) => handler.id === handlerId && handler.version === handlerVersion,
+      ),
+      "Replay handler and version are not registered.",
+    );
+    return withConnectionTransaction(deps.db, (tx) => {
+      const event = tx.select().from(domainOutbox).where(eq(domainOutbox.id, eventId)).get();
+      requireValue(event, "Replay event does not exist.");
+      requireValue(event.accountId, "Replay event has no account.");
+      const account = tx
+        .select({ id: accounts.id })
+        .from(accounts)
+        .where(eq(accounts.id, event.accountId))
+        .get();
+      requireValue(account, "Replay account does not exist.");
+      const checkpoint = tx
+        .select({ status: intelligenceSeedCheckpoints.status })
+        .from(intelligenceSeedCheckpoints)
+        .where(eq(intelligenceSeedCheckpoints.accountId, account.id))
+        .get();
+      requireValue(
+        checkpoint?.status !== "suppressed",
+        "Replay account intelligence is suppressed.",
+      );
+      const key = `${eventId}:${handlerId}:${handlerVersion}`;
+      const existing = tx
+        .select()
+        .from(intelligenceJobs)
+        .where(eq(intelligenceJobs.idempotencyKey, key))
+        .get();
+      const delivery = tx
+        .select()
+        .from(eventDeliveries)
+        .where(
+          and(
+            eq(eventDeliveries.eventId, eventId),
+            eq(eventDeliveries.handlerId, handlerId),
+            eq(eventDeliveries.handlerVersion, handlerVersion),
+          ),
+        )
+        .get();
+      requireValue(
+        existing?.status !== "cancelled" &&
+          !existing?.cancelRequested &&
+          delivery?.state !== "cancelled",
+        "Cancelled work cannot be replayed.",
+      );
+      if (existing && ["pending", "running", "retry_wait"].includes(existing.status)) {
+        return existing.id;
+      }
+      const now = deps.clock?.() ?? Date.now();
+      const jobId = deps.jobs.enqueue(
+        tx,
+        key,
+        {
+          type: "evaluate_trade",
+          eventId,
+          handlerId,
+          handlerVersion,
+        },
+        now,
+      );
+      if (existing) {
+        tx.update(intelligenceJobs)
+          .set({
+            status: "pending",
+            attempts: 0,
+            availableAt: now,
+            owner: null,
+            fence: sql`${intelligenceJobs.fence} + 1`,
+            leaseUntil: null,
+            lastError: null,
+            updatedAt: now,
+          })
+          .where(eq(intelligenceJobs.id, jobId))
+          .run();
+      }
+      tx.insert(eventDeliveries)
+        .values({
+          eventId,
+          handlerId,
+          handlerVersion,
+          state: "pending",
+          jobId,
+          lastError: null,
+          createdAt: now,
+          updatedAt: now,
+        })
+        .onConflictDoUpdate({
+          target: [
+            eventDeliveries.eventId,
+            eventDeliveries.handlerId,
+            eventDeliveries.handlerVersion,
+          ],
+          set: { state: "pending", jobId, lastError: null, updatedAt: now },
+        })
+        .run();
+      return jobId;
+    });
   },
 });
 

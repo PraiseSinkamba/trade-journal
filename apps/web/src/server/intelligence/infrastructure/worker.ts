@@ -211,6 +211,11 @@ export const createWorkerService = (deps: {
   /** The handler registered for a job's kind and version. */
   const findHandler = (job: JobRecord): JobHandler | undefined => {
     const payload = job.payload;
+    if (payload.type === "seed_account") {
+      return deps.handlers.find(
+        (handler) => handler.id === "seed-account" && handler.version === "1",
+      );
+    }
     if (payload.type !== "evaluate_trade") return undefined;
     return deps.handlers.find(
       (handler) => handler.id === payload.handlerId && handler.version === payload.handlerVersion,

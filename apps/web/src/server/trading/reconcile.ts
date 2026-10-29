@@ -144,7 +144,7 @@ interface QualityContext {
 }
 
 /**
- * Reads the quality context of one account.
+ * Reads source-only timing quality without loading recorded projection history.
  *
  * The evidence sidecar holds what the source could prove about a fill; a fill
  * without a sidecar row is an ordinary source fill, whose time the source
@@ -152,11 +152,10 @@ interface QualityContext {
  * never source-reported timing, and without a sidecar row nothing is known
  * about it.
  */
-const qualityContextOf = (
+export const derivedQualityOf = (
   tx: JournalTx,
-  accountId: string,
   rows: readonly (typeof executions.$inferSelect)[],
-): QualityContext => {
+): QualityContext["derivedOf"] => {
   const evidenceByExecution = new Map<string, TimingQuality>();
   const executionIds = rows.map((row) => row.id);
   for (let i = 0; i < executionIds.length; i += 500) {
@@ -180,6 +179,29 @@ const qualityContextOf = (
       : undefined;
     syntheticByExecution.set(row.id, isSyntheticExecutionId(metadata?.id ?? null));
   }
+
+  return (ids: readonly string[]): TimingQuality => {
+    if (ids.length === 0) return "unknown";
+    const qualities: TimingQuality[] = [];
+    for (const id of ids) {
+      const proven = evidenceByExecution.get(id);
+      if (proven) {
+        qualities.push(proven);
+        continue;
+      }
+      qualities.push(syntheticByExecution.get(id) ? "unknown" : "source_reported");
+    }
+    return weakestQuality(qualities);
+  };
+};
+
+/** Combines source quality with the account's previously recorded projection quality. */
+const qualityContextOf = (
+  tx: JournalTx,
+  accountId: string,
+  rows: readonly (typeof executions.$inferSelect)[],
+): QualityContext => {
+  const derivedOf = derivedQualityOf(tx, rows);
 
   // The quality the journal recorded: the snapshot of the identity's current
   // revision. A projection the journal never recorded a revision for has no
@@ -217,19 +239,7 @@ const qualityContextOf = (
   }
 
   return {
-    derivedOf: (ids: readonly string[]): TimingQuality => {
-      if (ids.length === 0) return "unknown";
-      const qualities: TimingQuality[] = [];
-      for (const id of ids) {
-        const proven = evidenceByExecution.get(id);
-        if (proven) {
-          qualities.push(proven);
-          continue;
-        }
-        qualities.push(syntheticByExecution.get(id) ? "unknown" : "source_reported");
-      }
-      return weakestQuality(qualities);
-    },
+    derivedOf,
     recordedOf: (tradeKey: string): TimingQuality =>
       recordedByKey.get(tradeKey) ?? "source_reported",
   };
@@ -274,7 +284,7 @@ const projectionOf = (
  * has been recorded for it yet. The quality is the one the journal recorded,
  * so the comparison is recorded against derived.
  */
-const projectionOfRow = (
+export const projectionOfRow = (
   account: { currency: string },
   row: typeof trades.$inferSelect,
   timingQuality: TimingQuality,
