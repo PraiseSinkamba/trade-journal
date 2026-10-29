@@ -1,7 +1,7 @@
 {
   "schemaVersion": 1,
   "feature": "ai-native-journal",
-  "updatedAt": "2026-10-28T23:13:05Z",
+  "updatedAt": "2026-10-29T14:22:54Z",
   "owner": "parent OMP coordinator (exclusive owner of this record)",
   "repository": {
     "name": "trade-journal",
@@ -34,8 +34,8 @@
     },
     "featureBranch": "codex/ai-native-journal",
     "featureBootstrapSha": "0a278503fd67c0f9e82138dfecb744f4bfd307ad",
-    "featureHeadSha": "c8a6fdc8464169a0d924c7d5f3558c98d3f3e00b",
-    "featureHeadShaNote": "feature branch HEAD after the Phase 08 non-fast-forward merge; the coordinator record commit advances the branch by one commit",
+    "featureHeadSha": "db56d3671b1e6fbfdc92e4cdc039b45cff001386",
+    "featureHeadShaNote": "feature branch HEAD at the Phase 09 dispatch and the exact base of the Phase 09 worktree; the coordinator record commit advances the branch by one commit",
     "featureCheckpointCommits": [
       "0a278503fd67c0f9e82138dfecb744f4bfd307ad",
       "80d53ccb62fda801897852a6f4e5d2aab8b0d58b",
@@ -54,7 +54,8 @@
       "3e7346e2115be4b74d2b65594f9fe3e3ab3044b7",
       "93452871ca51e35cb7bc89bb129e1d58228a9f97",
       "259c89441d4689bfb888b03196dad6113e1e70b4",
-      "c8a6fdc8464169a0d924c7d5f3558c98d3f3e00b"
+      "c8a6fdc8464169a0d924c7d5f3558c98d3f3e00b",
+      "db56d3671b1e6fbfdc92e4cdc039b45cff001386"
     ],
     "featureBranchNote": "Orca slugified the requested name to codex-ai-native-journal at creation; the coordinator renamed the newly created, exclusively owned branch to the contract-required codex/ai-native-journal. Orca reads the renamed ref live (refs/heads/codex/ai-native-journal). No pre-existing branch was overwritten."
   },
@@ -69,10 +70,19 @@
   },
   "authorization": {
     "grantedBy": "user pasted committed orca-execution-prompt.md (revision 4ae868dbbb72f975f9767efb4e212884ecca7803)",
-    "authorizedPhases": ["01", "02", "03", "04", "05", "06", "07", "08"],
-    "authorizedTasks": ["T-001", "T-002", "T-003", "T-004", "T-005", "T-006", "T-007", "T-008"],
+    "authorizedPhases": ["01", "02", "03", "04", "05", "06", "07", "08", "09"],
+    "authorizedTasks": [
+      "T-001",
+      "T-002",
+      "T-003",
+      "T-004",
+      "T-005",
+      "T-006",
+      "T-007",
+      "T-008",
+      "T-009"
+    ],
     "awaitingContinuation": [
-      "T-009",
       "T-010",
       "T-011",
       "T-012",
@@ -187,6 +197,17 @@
         "orcaParentWorktreeId": "aa54a522-a9af-4cb4-9de7-f1d9a349c0fd::E:/4004/orca/workspaces/trade-journal/codex-ai-native-journal",
         "setup": "pnpm install --frozen-lockfile completed in the worker checkout; working tree clean; Node v24.20.0, pnpm 11.0.8",
         "state": "integrated into codex/ai-native-journal at c8a6fdc and verified on the destination branch, then cleaned up at the user request: the Orca worktree, the git worktree registration, the branch and the leftover directory were removed after verifying the content was merged."
+      },
+      {
+        "phase": "09",
+        "stableTask": "T-009",
+        "orcaWorktreeId": "aa54a522-a9af-4cb4-9de7-f1d9a349c0fd::E:/4004/orca/workspaces/trade-journal/codex-ai-native-journal-p09",
+        "path": "E:/4004/orca/workspaces/trade-journal/codex-ai-native-journal-p09",
+        "branch": "codex/ai-native-journal-p09",
+        "startSha": "db56d3671b1e6fbfdc92e4cdc039b45cff001386",
+        "orcaParentWorktreeId": "aa54a522-a9af-4cb4-9de7-f1d9a349c0fd::E:/4004/orca/workspaces/trade-journal/codex-ai-native-journal",
+        "setup": "pnpm install --frozen-lockfile completed in the worker checkout; working tree clean; Node v24.20.0, pnpm 11.0.8",
+        "state": "dispatched"
       }
     ]
   },
@@ -306,8 +327,11 @@
       "wave": 9,
       "branch": "codex/ai-native-journal-p09",
       "deps": ["task_1b9ab56eef54"],
-      "status": "pending",
-      "state": "created"
+      "status": "dispatched",
+      "state": "dispatched",
+      "nativeDispatch": "ctx_9d8af8f668f6",
+      "nativeHandle": "term_4ecb96e5-9063-4fb4-8811-b7a577a6490c",
+      "evidence": "separate OMP session in its own Orca child worktree based on the verified feature HEAD; the resolved brief (checkout, base SHA, predecessor handoff, the phase scope, the verification set and the completion contract) was delivered and read before any edit"
     },
     {
       "stable": "T-010",
@@ -615,6 +639,23 @@
       "reviewed": true,
       "integrated": true,
       "verified": true
+    },
+    {
+      "task": "T-009",
+      "native": "task_5b7ff94b51b9",
+      "dispatch": "ctx_9d8af8f668f6",
+      "handle": "term_4ecb96e5-9063-4fb4-8811-b7a577a6490c",
+      "agent": "omp",
+      "provider": "omp",
+      "worktree": "aa54a522-a9af-4cb4-9de7-f1d9a349c0fd::E:/4004/orca/workspaces/trade-journal/codex-ai-native-journal-p09",
+      "started": "2026-10-29 14:21:46",
+      "base": "db56d3671b1e6fbfdc92e4cdc039b45cff001386",
+      "purpose": "Phase 09",
+      "state": "actively executing",
+      "candidate": null,
+      "reviewed": false,
+      "integrated": false,
+      "verified": false
     }
   ],
   "integration": {
