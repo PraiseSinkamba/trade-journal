@@ -1,7 +1,7 @@
 {
   "schemaVersion": 1,
   "feature": "ai-native-journal",
-  "updatedAt": "2026-10-29T17:53:34Z",
+  "updatedAt": "2026-10-29T19:11:39Z",
   "owner": "parent OMP coordinator (exclusive owner of this record)",
   "repository": {
     "name": "trade-journal",
@@ -208,22 +208,23 @@
         "startSha": "db56d3671b1e6fbfdc92e4cdc039b45cff001386",
         "orcaParentWorktreeId": "aa54a522-a9af-4cb4-9de7-f1d9a349c0fd::E:/4004/orca/workspaces/trade-journal/codex-ai-native-journal",
         "setup": "pnpm install --frozen-lockfile completed in the worker checkout; working tree clean; Node v24.20.0, pnpm 11.0.8",
-        "state": "integrated into codex/ai-native-journal at 0915173 and verified on the destination branch. The worktree and branch are RETAINED because Phase 10 is dispatched into the same worktree and branch, so the branch is merged once to cover both phases.",
+        "state": "integrated into codex/ai-native-journal at 0915173 and verified on the destination branch (101 files, 1052 tests), then cleaned up at the user request: the Orca worktree, the git worktree registration, the branch codex/ai-native-journal-p09 and the leftover directory were removed. The Phase 09 plan, implementation, report and integration report all survive in the feature branch.",
         "ownershipExtension": "Coordinator-approved scoped extension requested by the worker and verified against the merged feature branch: apps/web/src/server/intelligence/infrastructure/worker.ts (to route the existing seed_account payload, because line 214 rejects every payload whose type is not evaluate_trade and line 243 then fails the job with unhandled_job) and apps/web/src/server/trading/reconcile.ts (to export the existing private qualityContextOf at line 155 and projectionOfRow at line 277, avoiding duplicated financial projection and quality logic). No schema change, no payload contract change, operationId stays in the checkpoint baselineOperationId, and the worker is the single owner of both paths. Both files belong to completed and merged phases and there is no concurrent writer in this worktree. Second coordinator approval, requested by the worker at consolidation and verified by reading qualityContextOf: extract the source-only derived quality closure into an exported derivedQualityOf(tx, rows) inside the already-approved reconcile.ts, with qualityContextOf composing it so its behaviour is unchanged. The reason is that qualityContextOf mixes the rows-only derivedOf closure with a recordedOf closure that scans every identity and revision for the account, so calling it once per unmapped trade rescans the account history per trade. Conditions: no financial rule change, no schema change, no payload contract change, the recorded-quality lookup stays in place, backfill calls derivedQualityOf once per account, an equivalence test locks the extraction, and the replay allowlist uses the outbox handler registry so a replay for an unregistered handler is refused.",
         "consolidationReview": "The worker raised an escalation after its first targeted gate ran 27 tests with 26 passing, including all three real child SIGKILL and reopen scenarios. The one failure was a seed deletion assertion comparing dispatchedAt before versus after the outbox drain. The coordinator verified the production mechanic: domain-event-store.ts appends with dispatchedAt null, selects pending events by isNull(dispatchedAt), and sets dispatchedAt on dispatch, so that timestamp is dispatch bookkeeping that legitimately transitions. The corrected assertion compares event id and payloadJson on both sides and excludes the timestamp, so it re-targets the invariant rather than weakening it, and it still fails if an event id or payload changed, if observations leaked, or if a checkpoint survived a deleted account. Accepted with no production change permitted to make it pass.",
-        "workerReported": "Worker-reported results pending coordinator destination verification: targeted consolidated suites 31 of 31 including real event, observation and seed SIGKILL-and-reopen scenarios with throwing provider resolvers; one whole-project pnpm test gate passing 101 files and 1052 tests in 126.46s; license and migration-checksum gates passed; final independent review PASS. The web typecheck then flagged only the new recovery fixture missing the required NODE_ENV, corrected test-only to NODE_ENV=test."
+        "workerReported": "Worker-reported results pending coordinator destination verification: targeted consolidated suites 31 of 31 including real event, observation and seed SIGKILL-and-reopen scenarios with throwing provider resolvers; one whole-project pnpm test gate passing 101 files and 1052 tests in 126.46s; license and migration-checksum gates passed; final independent review PASS. The web typecheck then flagged only the new recovery fixture missing the required NODE_ENV, corrected test-only to NODE_ENV=test.",
+        "cleanupNote": "Phase 09 was briefly hosted Phase 10 as well, at the user request to run both in one worktree. That arrangement was changed: the Phase 10 plan commit and its ten implementation files were relocated to their own worktree codex/ai-native-journal-p10 before the shared worktree was deleted, so nothing was lost. The relocated plan content is byte-identical to the original commit."
       },
       {
         "phase": "10",
         "stableTask": "T-010",
-        "orcaWorktreeId": "aa54a522-a9af-4cb4-9de7-f1d9a349c0fd::E:/4004/orca/workspaces/trade-journal/codex-ai-native-journal-p09",
-        "path": "E:/4004/orca/workspaces/trade-journal/codex-ai-native-journal-p09",
-        "branch": "codex/ai-native-journal-p09",
-        "startSha": "5093db1068715aa104f342c5b8bd0eaa3a554d4f",
+        "orcaWorktreeId": "aa54a522-a9af-4cb4-9de7-f1d9a349c0fd::E:/4004/orca/workspaces/trade-journal/codex-ai-native-journal-p10",
+        "path": "E:/4004/orca/workspaces/trade-journal/codex-ai-native-journal-p10",
+        "branch": "codex/ai-native-journal-p10",
+        "startSha": "a890700e31a3d4128825f6327bec31d7ff86913a",
         "orcaParentWorktreeId": "aa54a522-a9af-4cb4-9de7-f1d9a349c0fd::E:/4004/orca/workspaces/trade-journal/codex-ai-native-journal",
-        "setup": "shared with Phase 09 - pnpm install already done in this checkout; Node v24.20.0, pnpm 11.0.8",
+        "setup": "pnpm install --frozen-lockfile completed in the worker checkout; working tree clean; Node v24.20.0, pnpm 11.0.8; own node_modules and own pnpm virtual store",
         "state": "dispatched",
-        "note": "Phase 10 deliberately reuses the Phase 09 worktree and branch. Its native dependency is Phase 09, and both phases own apps/web/src/server/intelligence/composition.ts, so separate worktrees would guarantee a merge conflict and an out-of-order dependency. The branch is merged once to cover both phases.",
+        "note": "Phase 10 has its own worktree and branch, at the user request. The phase plan commit and the ten implementation files produced by the revoked first attempt were relocated here from the shared Phase 09 worktree before that worktree was deleted: plan commit 3c78961 (byte-identical content to the original d5b876e) then implementation commit a890700 \"feat: supervise and package journal intelligence worker\". The Phase 09 worktree, branch and directory are gone, and Phase 09 was already merged into the feature branch at 0915173.",
         "blockedGate": "The Docker scratch-volume deployment gate is EXPLICITLY BLOCKED host evidence, verified by the coordinator: the Docker client 29.6.1 is installed with the desktop-linux context, but com.docker.service is Stopped (StartType Manual) and the dockerDesktopLinuxEngine named pipe is absent, so docker info cannot connect. It is not a phase failure and it is never mocked. Every other acceptance item must pass: packaged clean-directory smoke, shutdown, parent disconnect, and the native portability and lifecycle suites. The item is carried forward to the release gate as an open deployment item; the user can start Docker Desktop and the smoke can then be run without redoing the phase."
       }
     ]
@@ -355,13 +356,14 @@
       "native": "task_b00115dce3c4",
       "phase": "10",
       "wave": 10,
-      "branch": "codex/ai-native-journal-p09",
+      "branch": "codex/ai-native-journal-p10",
       "deps": ["task_5b7ff94b51b9"],
       "status": "dispatched",
       "state": "dispatched",
-      "nativeDispatch": "ctx_f76b5d0b58d3",
-      "nativeHandle": "term_a320dcbf-080f-4c71-9383-0693d3ebde5a",
-      "evidence": "dispatched into the SAME worktree and branch as Phase 09, with base = the Phase 09 tip 5093db1; the resolved brief carries the fast-execution rules and the parallel-subagent-execution contract"
+      "nativeDispatch": "ctx_9850d5f78296",
+      "nativeHandle": "term_c7f23841-029d-4833-a682-6cfffa7e3c3d",
+      "evidence": "the first attempt produced the implementation and had its 17 native portability and lifecycle tests passing, but its dispatch was revoked by an Orca runtime restart at 2026-07-29T16:04Z before it could write the phase report and send worker_done. The work was preserved, relocated into this worktree as plan 3c78961 plus implementation a890700, and a replacement attempt dispatched to verify, repair, report and close.",
+      "priorDispatch": "ctx_f76b5d0b58d3"
     },
     {
       "stable": "T-011",
@@ -688,6 +690,24 @@
       "started": "2026-10-29 16:04:31",
       "base": "5093db1068715aa104f342c5b8bd0eaa3a554d4f",
       "purpose": "Phase 10 - Node supervisor, worker bundle and Docker startup, excluding the Rust and Tauri edits",
+      "state": "failed by orchestration recovery; implementation committed anyway",
+      "candidate": ["3c78961", "a890700"],
+      "reviewed": true,
+      "integrated": false,
+      "verified": false,
+      "outcome": "capability revoked 2026-07-29T16:04Z by an Orca runtime restart; the worker produced the plan and the implementation and had 17 targeted tests passing, but could not write the phase report or send worker_done"
+    },
+    {
+      "task": "T-010",
+      "native": "task_b00115dce3c4",
+      "dispatch": "ctx_9850d5f78296",
+      "handle": "term_c7f23841-029d-4833-a682-6cfffa7e3c3d",
+      "agent": "omp",
+      "provider": "omp",
+      "worktree": "aa54a522-a9af-4cb4-9de7-f1d9a349c0fd::E:/4004/orca/workspaces/trade-journal/codex-ai-native-journal-p10",
+      "started": "2026-07-29T16:25:00Z",
+      "base": "a890700e31a3d4128825f6327bec31d7ff86913a",
+      "purpose": "Phase 10 - Node supervisor, worker bundle and Docker startup; the implementation is already committed, so this attempt verifies, repairs, writes the phase report and emits the missing worker_done",
       "state": "actively executing",
       "candidate": null,
       "reviewed": false,
