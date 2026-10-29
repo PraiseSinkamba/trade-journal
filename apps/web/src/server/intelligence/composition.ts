@@ -1,4 +1,5 @@
 import { eq } from "drizzle-orm";
+import { db, type JournalDb } from "@/db/connection";
 import { domainOutbox, intelligenceJobs, tradeProjectionRevisions } from "@/db/schema";
 import type { JournalTx } from "@/db/transaction";
 import { parseTradeChanged, type TradeChanged } from "@/server/domain-events";
@@ -8,17 +9,18 @@ import {
   type ObservationResult,
 } from "./contracts/observations";
 import type { JobRecord } from "./contracts/jobs";
+import { createBackfillService } from "./infrastructure/backfill";
+import { createJobStore, createReplayService } from "./infrastructure/jobs";
 import { persistObservationInTx } from "./infrastructure/knowledge-store";
 import type { OutboxHandler } from "./infrastructure/outbox";
 import type { JobHandler } from "./infrastructure/worker";
 
 /**
- * The observation composition (Phase 08).
+ * The intelligence composition.
  *
- * This module is the single wiring point of the observation path: it turns a
- * committed trade change into a durable observation, and it subscribes the
- * outbox to that work. Everything it touches lives in the caller's
- * transaction — there is no network call and no work outside it.
+ * This module wires historical discovery and committed trade changes into
+ * durable observations. Services bind to the supplied journal connection;
+ * handlers run inside the caller's transaction without provider access.
  */
 
 /** The handler that subscribes to the outbox. */
@@ -137,10 +139,51 @@ export const createTradeObservationHandler = (deps?: {
   },
 });
 
-/** Every handler this phase registers with the worker. */
-export const observationHandlers: readonly JobHandler[] = [createTradeObservationHandler()];
+/** Binds historical seed, replay and observation handlers to one journal. */
+export const createIntelligenceServices = (deps: {
+  readonly db: JournalDb;
+  readonly clock?: () => number;
+  readonly seedBatchSize?: number;
+}) => {
+  const clock = deps.clock ?? Date.now;
+  const jobs = createJobStore(deps.db);
+  const backfill = createBackfillService({
+    db: deps.db,
+    jobs,
+    clock,
+    batchSize: deps.seedBatchSize,
+  });
+  const seedHandler: JobHandler = {
+    id: "seed-account",
+    version: "1",
+    run: (tx, job): void => {
+      if (job.payload.type !== "seed_account") return;
+      backfill.seedAccountInTx(tx, job.payload.accountId, job.id);
+    },
+  };
+  const handlers: readonly JobHandler[] = [createTradeObservationHandler({ clock }), seedHandler];
+  const outboxHandlers: readonly OutboxHandler[] = [
+    { id: OBSERVATION_HANDLER_ID, version: OBSERVATION_HANDLER_VERSION },
+  ];
+  const replay = createReplayService({ db: deps.db, jobs, handlers: outboxHandlers, clock });
+  return {
+    seedAccount: backfill.seedAccount,
+    requestReplay: replay.requestReplay,
+    handlers,
+    outboxHandlers,
+  };
+};
 
-/** Every handler this phase registers with the outbox. */
-export const observationOutboxHandlers: readonly OutboxHandler[] = [
-  { id: OBSERVATION_HANDLER_ID, version: OBSERVATION_HANDLER_VERSION },
-];
+const defaultServices = createIntelligenceServices({ db });
+
+/** Seeds one bounded historical batch on the default journal. */
+export const seedAccount = defaultServices.seedAccount;
+
+/** Requests durable replay on the default journal. */
+export const requestReplay = defaultServices.requestReplay;
+
+/** Every handler registered with the default worker. */
+export const observationHandlers: readonly JobHandler[] = defaultServices.handlers;
+
+/** Only observations subscribe to committed trade-change events. */
+export const observationOutboxHandlers: readonly OutboxHandler[] = defaultServices.outboxHandlers;

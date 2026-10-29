@@ -2,6 +2,7 @@ import { and, eq, ne } from "drizzle-orm";
 import {
   accounts,
   intelligenceObservations,
+  intelligenceSeedCheckpoints,
   observationEvidence,
   tradeIdentities,
   tradeProjectionRevisions,
@@ -77,6 +78,13 @@ export const persistObservationInTx = (
     .where(eq(accounts.id, event.payload.accountId))
     .get();
   if (!account) return;
+
+  const checkpoint = tx
+    .select({ status: intelligenceSeedCheckpoints.status })
+    .from(intelligenceSeedCheckpoints)
+    .where(eq(intelligenceSeedCheckpoints.accountId, account.id))
+    .get();
+  if (checkpoint?.status === "suppressed") return;
 
   if (event.payload.kind === "removed") {
     // A removal invalidates what the journal observed: the trade is gone, so
