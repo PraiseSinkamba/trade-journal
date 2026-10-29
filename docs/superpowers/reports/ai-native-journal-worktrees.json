@@ -1,7 +1,7 @@
 {
   "schemaVersion": 1,
   "feature": "ai-native-journal",
-  "updatedAt": "2026-10-29T14:22:54Z",
+  "updatedAt": "2026-10-29T14:32:03Z",
   "owner": "parent OMP coordinator (exclusive owner of this record)",
   "repository": {
     "name": "trade-journal",
@@ -207,7 +207,8 @@
         "startSha": "db56d3671b1e6fbfdc92e4cdc039b45cff001386",
         "orcaParentWorktreeId": "aa54a522-a9af-4cb4-9de7-f1d9a349c0fd::E:/4004/orca/workspaces/trade-journal/codex-ai-native-journal",
         "setup": "pnpm install --frozen-lockfile completed in the worker checkout; working tree clean; Node v24.20.0, pnpm 11.0.8",
-        "state": "dispatched"
+        "state": "dispatched",
+        "ownershipExtension": "Coordinator-approved scoped extension requested by the worker and verified against the merged feature branch: apps/web/src/server/intelligence/infrastructure/worker.ts (to route the existing seed_account payload, because line 214 rejects every payload whose type is not evaluate_trade and line 243 then fails the job with unhandled_job) and apps/web/src/server/trading/reconcile.ts (to export the existing private qualityContextOf at line 155 and projectionOfRow at line 277, avoiding duplicated financial projection and quality logic). No schema change, no payload contract change, operationId stays in the checkpoint baselineOperationId, and the worker is the single owner of both paths. Both files belong to completed and merged phases and there is no concurrent writer in this worktree."
       }
     ]
   },
