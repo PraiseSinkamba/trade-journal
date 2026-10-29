@@ -1,7 +1,7 @@
 {
   "schemaVersion": 1,
   "feature": "ai-native-journal",
-  "updatedAt": "2026-10-29T16:04:45Z",
+  "updatedAt": "2026-10-29T17:53:34Z",
   "owner": "parent OMP coordinator (exclusive owner of this record)",
   "repository": {
     "name": "trade-journal",
@@ -223,7 +223,8 @@
         "orcaParentWorktreeId": "aa54a522-a9af-4cb4-9de7-f1d9a349c0fd::E:/4004/orca/workspaces/trade-journal/codex-ai-native-journal",
         "setup": "shared with Phase 09 - pnpm install already done in this checkout; Node v24.20.0, pnpm 11.0.8",
         "state": "dispatched",
-        "note": "Phase 10 deliberately reuses the Phase 09 worktree and branch. Its native dependency is Phase 09, and both phases own apps/web/src/server/intelligence/composition.ts, so separate worktrees would guarantee a merge conflict and an out-of-order dependency. The branch is merged once to cover both phases."
+        "note": "Phase 10 deliberately reuses the Phase 09 worktree and branch. Its native dependency is Phase 09, and both phases own apps/web/src/server/intelligence/composition.ts, so separate worktrees would guarantee a merge conflict and an out-of-order dependency. The branch is merged once to cover both phases.",
+        "blockedGate": "The Docker scratch-volume deployment gate is EXPLICITLY BLOCKED host evidence, verified by the coordinator: the Docker client 29.6.1 is installed with the desktop-linux context, but com.docker.service is Stopped (StartType Manual) and the dockerDesktopLinuxEngine named pipe is absent, so docker info cannot connect. It is not a phase failure and it is never mocked. Every other acceptance item must pass: packaged clean-directory smoke, shutdown, parent disconnect, and the native portability and lifecycle suites. The item is carried forward to the release gate as an open deployment item; the user can start Docker Desktop and the smoke can then be run without redoing the phase."
       }
     ]
   },
