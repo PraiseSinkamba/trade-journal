@@ -10,10 +10,24 @@ import {
 } from "./contracts/observations";
 import type { JobRecord } from "./contracts/jobs";
 import { createBackfillService } from "./infrastructure/backfill";
-import { createJobStore, createReplayService } from "./infrastructure/jobs";
+import { createEffectStore, createJobStore, createReplayService } from "./infrastructure/jobs";
 import { persistObservationInTx } from "./infrastructure/knowledge-store";
-import type { OutboxHandler } from "./infrastructure/outbox";
-import type { JobHandler } from "./infrastructure/worker";
+import { createOutboxDispatcher, type OutboxHandler } from "./infrastructure/outbox";
+import {
+  createWorkerService,
+  type JobHandler,
+  type WorkerService,
+  type WorkerStatus,
+} from "./infrastructure/worker";
+
+export type { WorkerHandle, WorkerStatus } from "./infrastructure/worker";
+
+/** Consumer lifecycle and sanitized operational controls. */
+export interface IntelligenceWorker extends WorkerService {
+  tick(now: number): Promise<boolean>;
+  status(): WorkerStatus;
+  stop(): Promise<void>;
+}
 
 /**
  * The intelligence composition.
@@ -172,6 +186,32 @@ export const createIntelligenceServices = (deps: {
     handlers,
     outboxHandlers,
   };
+};
+
+/** Wires an independent consumer without starting it or changing lease policy. */
+export const createIntelligenceWorker = (deps: {
+  readonly db: JournalDb;
+  readonly clock?: () => number;
+  readonly enabled?: boolean;
+  readonly owner?: string;
+}): IntelligenceWorker => {
+  const clock = deps.clock ?? Date.now;
+  const services = createIntelligenceServices({ db: deps.db, clock });
+  const jobs = createJobStore(deps.db);
+  return createWorkerService({
+    db: deps.db,
+    clock,
+    enabled: deps.enabled,
+    owner: deps.owner,
+    jobs,
+    effects: createEffectStore(),
+    dispatcher: createOutboxDispatcher({
+      db: deps.db,
+      jobs,
+      handlers: services.outboxHandlers,
+    }),
+    handlers: services.handlers,
+  });
 };
 
 const defaultServices = createIntelligenceServices({ db });

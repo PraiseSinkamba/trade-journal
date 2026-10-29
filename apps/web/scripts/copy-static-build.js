@@ -1,5 +1,15 @@
 // ponytail: minimal static build for Tauri webview — no node_modules
-import { copyFileSync, mkdirSync, readdirSync, readlinkSync, realpathSync, statSync, rmSync, existsSync, writeFileSync } from "node:fs";
+import {
+  copyFileSync,
+  mkdirSync,
+  readdirSync,
+  readlinkSync,
+  realpathSync,
+  statSync,
+  rmSync,
+  existsSync,
+  writeFileSync,
+} from "node:fs";
 import { join, dirname } from "node:path";
 import { fileURLToPath } from "node:url";
 
@@ -18,6 +28,19 @@ mkdirSync(outputDir, { recursive: true });
 // so we put server files at outputDir/apps/web/
 const appsWebDir = join(outputDir, "apps/web");
 mkdirSync(appsWebDir, { recursive: true });
+
+// The independent worker and supervisor are not part of Next's dependency trace.
+// Ship their complete runtime assets in both server distributions.
+for (const destination of [standaloneDir, appsWebDir]) {
+  const workerDir = join(destination, "worker");
+  if (existsSync(workerDir)) rmSync(workerDir, { recursive: true });
+  copyDir(join(root, ".next/worker-dist"), workerDir);
+  const scriptsDir = join(destination, "scripts");
+  mkdirSync(scriptsDir, { recursive: true });
+  for (const name of ["run-journal.mjs", "http-child.mjs"]) {
+    copyFileSync(join(__dirname, name), join(scriptsDir, name));
+  }
+}
 
 // Copy standalone server.js, package.json, .next, data dirs
 for (const name of ["server.js", "package.json"]) {
