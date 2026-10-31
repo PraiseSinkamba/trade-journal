@@ -1,7 +1,7 @@
 {
   "schemaVersion": 1,
   "feature": "ai-native-journal",
-  "updatedAt": "2026-10-31T18:53:24Z",
+  "updatedAt": "2026-10-31T22:13:44Z",
   "owner": "parent OMP coordinator (exclusive owner of this record)",
   "repository": {
     "name": "trade-journal",
@@ -35,8 +35,8 @@
     },
     "featureBranch": "codex/ai-native-journal",
     "featureBootstrapSha": "0a278503fd67c0f9e82138dfecb744f4bfd307ad",
-    "featureHeadSha": "a9478dc4a729b43080fe7186f765b10f41513be3",
-    "featureHeadShaNote": "feature branch HEAD at the Phase 12 integration and the exact base of the Phase 13 worktree; the coordinator record commit advances the branch by one commit",
+    "featureHeadSha": "135fd0ecd7d6252e17d0e406e907e6e76dbbed5f",
+    "featureHeadShaNote": "feature branch HEAD at the Phase 13 dispatch and the exact base of the Phase 13 worktree; the coordinator record commit advances the branch by one commit",
     "featureCheckpointCommits": [
       "0a278503fd67c0f9e82138dfecb744f4bfd307ad",
       "80d53ccb62fda801897852a6f4e5d2aab8b0d58b",
@@ -59,7 +59,8 @@
       "db56d3671b1e6fbfdc92e4cdc039b45cff001386",
       "0915173ce42baecfa59434f2361af92fa5f02436",
       "2ea11ce7d7ed253e50e674a1fbb49c4a85d28870",
-      "a9478dc4a729b43080fe7186f765b10f41513be3"
+      "a9478dc4a729b43080fe7186f765b10f41513be3",
+      "135fd0ecd7d6252e17d0e406e907e6e76dbbed5f"
     ],
     "featureBranchNote": "Orca slugified the requested name to codex-ai-native-journal at creation; the coordinator renamed the newly created, exclusively owned branch to the contract-required codex/ai-native-journal. Orca reads the renamed ref live (refs/heads/codex/ai-native-journal). No pre-existing branch was overwritten."
   },
@@ -243,6 +244,18 @@
         "setup": "pnpm install --frozen-lockfile completed in the worker checkout; working tree clean; Node v24.20.0, pnpm 11.0.8; own node_modules and own pnpm virtual store",
         "state": "integrated into codex/ai-native-journal at 9553de3 and verified on the destination branch (105 test files, 1111 tests passed). The worktree, the git worktree registration, the branch and the leftover directory remain until the user requests cleanup.",
         "note": "Phase 12 produced the first AI feature code: the execution contexts, the deterministic capability registry and the tool gateway. The implementation-diff review failed with one real defect - the execution context refused the tool call at the ceiling before consulting the runtime hook, so the legacy request-level budget error was unreachable - and the phase was reopened and repaired before the merge. The phase updated ADR 0008, which is also one of the 12 hash-pinned sources; the manifest and the validator gained an explicit owned-source rule so the pin keeps its value for the other 11 inputs while the owning ADR can evolve."
+      },
+      {
+        "phase": "13",
+        "stableTask": "T-013",
+        "orcaWorktreeId": "aa54a522-a9af-4cb4-9de7-f1d9a349c0fd::E:/4004/orca/workspaces/trade-journal/codex-ai-native-journal-p13",
+        "path": "E:/4004/orca/workspaces/trade-journal/codex-ai-native-journal-p13",
+        "branch": "codex/ai-native-journal-p13",
+        "startSha": "135fd0ecd7d6252e17d0e406e907e6e76dbbed5f",
+        "orcaParentWorktreeId": "aa54a522-a9af-4cb4-9de7-f1d9a349c0fd::E:/4004/orca/workspaces/trade-journal/codex-ai-native-journal",
+        "setup": "pnpm install --frozen-lockfile completed in the worker checkout; working tree clean; Node v24.20.0, pnpm 11.0.8; own node_modules and own pnpm virtual store",
+        "state": "dispatched: ctx_cfc746c6a601, worker handle term_5e935647-1a53-4972-a882-606a0e45da2d",
+        "note": "Phase 13 is the remainder of detailed plan Task 9: background AI policies, reservations and provider adapter integration. It owns schema allocation 0005, so this is the first phase since Phase 08 to add a migration. The manifest T-013 ownership set was corrected before the dispatch to name apps/web/src/server/intelligence/composition.ts, which the detailed task modifies, and the two Phase 12 test paths were corrected from planned to existing."
       }
     ]
   },
@@ -432,9 +445,11 @@
       "wave": 13,
       "branch": "codex/ai-native-journal-p13",
       "deps": ["task_107db7662f7e"],
-      "status": "ready",
-      "state": "ready",
-      "note": "unblocked after the Phase 12 repair was merged and verified; not dispatched yet"
+      "status": "dispatched",
+      "state": "dispatched",
+      "note": "the remainder of detailed plan Task 9, with schema allocation 0005; the brief pins the migration checklist, the atomic daily reservation, the endpoint and model pinning with no fallback, the review budget of two reviewer runs, and the Phase 12 predecessor reports as required reading",
+      "outcome": null,
+      "nativeDispatch": "ctx_cfc746c6a601"
     },
     {
       "stable": "T-014",
@@ -787,6 +802,22 @@
       "integrated": true,
       "verified": true,
       "outcome": "verified, repaired, committed, reported and merged; the coordinator proved the new regression tests fail against the pre-fix code and pass with the fix"
+    },
+    {
+      "task": "T-013",
+      "native": "task_96e133343b74",
+      "dispatch": "ctx_cfc746c6a601",
+      "agent": "omp",
+      "provider": "omp",
+      "worktree": "aa54a522-a9af-4cb4-9de7-f1d9a349c0fd::E:/4004/orca/workspaces/trade-journal/codex-ai-native-journal-p13",
+      "base": "135fd0ecd7d6252e17d0e406e907e6e76dbbed5f",
+      "purpose": "Phase 13 - background AI policies, reservations and provider adapter integration; schema allocation 0005",
+      "state": "dispatched",
+      "candidate": [],
+      "reviewed": false,
+      "integrated": false,
+      "verified": false,
+      "outcome": null
     }
   ],
   "integration": {

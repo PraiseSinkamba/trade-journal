@@ -1566,6 +1566,7 @@
           "apps/web/src/server/ai-import.ts",
           "apps/web/src/app/api/settings/route.ts",
           "apps/web/src/components/ai-settings.tsx",
+          "apps/web/src/server/intelligence/composition.ts",
           "apps/web/src/server/intelligence/runtime/"
         ],
         "exclusive": true,
@@ -1605,11 +1606,11 @@
       "testPaths": [
         {
           "path": "apps/web/tests/intelligence-runtime.test.ts",
-          "status": "planned"
+          "status": "existing"
         },
         {
           "path": "apps/web/tests/intelligence-scope.test.ts",
-          "status": "planned"
+          "status": "existing"
         },
         {
           "path": "apps/web/tests/intelligence-provider-policy.test.ts",
