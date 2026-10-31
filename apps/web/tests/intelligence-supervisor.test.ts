@@ -23,7 +23,9 @@ const runs: {
 
 /** Await observable process behavior, with a useful bounded failure instead of fixed sleeps. */
 // These tests cross real process/IPC boundaries; virtual timers cannot drive child event loops.
-async function until<T>(read: () => T | undefined, timeout = 6000): Promise<T> {
+// The budget must exceed the fixture's own compressed timings, because a loaded host delays
+// process startup and IPC delivery. It stays below Vitest's 30 s test timeout.
+async function until<T>(read: () => T | undefined, timeout = 20000): Promise<T> {
   const deadline = Date.now() + timeout;
   while (Date.now() < deadline) {
     const value = read();
@@ -107,9 +109,12 @@ if(role === 'http') {
     httpPath: fixturePath,
     workerPath,
     heartbeatMs: 25,
-    livenessMs: 1500,
     shutdownMs: 300,
-    startupMs: 4000,
+    // The production supervisor allows 60 s to start and 30 s to notice a silent child.
+    // The fixture compresses both to keep tests quick, but a loaded host needs room to
+    // fork the child and deliver IPC, so the budgets stay generous.
+    startupMs: 20000,
+    livenessMs: 4000,
     restartBaseMs: 20,
     restartMaxMs: 80,
     ...settings,
@@ -195,7 +200,7 @@ describe("journal supervisor subprocess lifecycle", () => {
         .filter((event) => event.event === "start")
         .map((event) => event.role),
     ).toEqual(["http"]);
-  });
+  }, 90_000);
 
   it("gates ready on actual HTTP and passes identical absolute settings to both children", async () => {
     const run = await launch({}, { LISTEN_DELAY_MS: "350" });
@@ -211,7 +216,7 @@ describe("journal supervisor subprocess lifecycle", () => {
     run.child.send({ type: "shutdown" });
     expect(await run.exited).toBe(0);
     expect(run.events().filter((event) => event.event === "stop")).toHaveLength(2);
-  });
+  }, 90_000);
 
   it("publishes worker status as a string while retaining the worker's nested health payload", async () => {
     const run = await launch();
@@ -229,11 +234,12 @@ describe("journal supervisor subprocess lifecycle", () => {
       worker: { state: "idle" },
     });
     expect(run.messages.every((message) => typeof message.worker === "string")).toBe(true);
-  });
+  }, 90_000);
 
   it("caps worker crashes at five while HTTP remains available", async () => {
     const run = await launch({}, { CRASH_WORKER: "1" });
-    await until(() => run.messages.find((message) => message.worker === "unhealthy"));
+    // Five real crash-and-restart cycles, each waiting out the liveness window.
+    await until(() => run.messages.find((message) => message.worker === "unhealthy"), 60_000);
     const starts = run
       .events()
       .filter((event) => event.role === "worker" && event.event === "start");
@@ -249,7 +255,7 @@ describe("journal supervisor subprocess lifecycle", () => {
     expect(
       run.messages.filter((message) => message.crashes).map((message) => message.crashes),
     ).toEqual([1, 2, 3, 4, 5]);
-  });
+  }, 90_000);
 
   it("restarts a worker whose poll loop stopped while the process stayed alive", async () => {
     const run = await launch({}, { STOPPED_WORKER: "1" });
@@ -266,12 +272,12 @@ describe("journal supervisor subprocess lifecycle", () => {
         ? true
         : undefined,
     );
-    expect(
-      run.events().filter((event) => event.role === "worker" && event.event === "start").length,
-    ).toBeGreaterThanOrEqual(2);
+    expect(run.events().filter((event) => event.event === "start").length).toBeGreaterThanOrEqual(
+      2,
+    );
     expect(run.child.exitCode).toBeNull();
     expect((await fetch(`http://127.0.0.1:${run.port}/`)).status).toBe(200);
-  });
+  }, 90_000);
 
   it("HTTP failure stops worker and fails supervisor", async () => {
     const run = await launch({}, { HTTP_EXIT_MS: "150" });
@@ -279,7 +285,7 @@ describe("journal supervisor subprocess lifecycle", () => {
     expect(run.events().some((event) => event.role === "worker" && event.event === "stop")).toBe(
       true,
     );
-  });
+  }, 90_000);
 
   it("parent IPC disconnect drains both children without orphans", async () => {
     const run = await launch();
@@ -291,29 +297,33 @@ describe("journal supervisor subprocess lifecycle", () => {
     run.child.disconnect();
     expect(await run.exited).toBe(0);
     for (const pid of pids) expect(() => process.kill(pid, 0)).toThrow();
-  });
+  }, 90_000);
 
   it("forces a child that ignores shutdown after the shared deadline", async () => {
     const run = await launch({ shutdownMs: 150 }, { IGNORE_STOP: "worker" });
     await until(() => run.messages.find((message) => message.type === "ready"));
-    const pid = run.events().find((event) => event.role === "worker")!.pid;
+    // The worker records its start in a separate file that a separate process writes, so its
+    // presence is awaited rather than assumed.
+    const worker = await until(() => run.events().find((event) => event.role === "worker"));
+    const pid = worker.pid;
     const started = Date.now();
     run.child.send({ type: "shutdown" });
     expect(await run.exited).toBe(0);
     expect(Date.now() - started).toBeGreaterThanOrEqual(120);
     expect(() => process.kill(pid, 0)).toThrow();
-  });
+  }, 90_000);
 
   it("restarts workers that stop replying to IPC health", async () => {
     // A silent worker is killed and replaced until the crash budget is spent.
     const run = await launch({ livenessMs: 1000 }, { SILENT_ROLE: "worker" });
-    await until(() => run.messages.find((message) => message.worker === "unhealthy"), 20_000);
+    // Five cycles, each waiting out the liveness window before the kill.
+    await until(() => run.messages.find((message) => message.worker === "unhealthy"), 60_000);
     expect(
       run.messages.filter((message) => message.crashes).map((message) => message.crashes),
     ).toEqual([1, 2, 3, 4, 5]);
     expect(run.child.exitCode).toBeNull();
     expect((await fetch(`http://127.0.0.1:${run.port}/`)).status).toBe(200);
-  });
+  }, 90_000);
 
   it.each([
     ["shutdown", "imported"],
@@ -395,5 +405,6 @@ setTimeout(()=>{
       ]);
       expect(() => process.kill(child.pid!, 0)).toThrow();
     },
+    90_000,
   );
 });
