@@ -67,8 +67,14 @@ implementation note only.
   trade search, the same scoped trade detail with at most fifty fills, the same report-mode
   context, and the same error strings ("Invalid tool arguments.", "AI tool limit reached.",
   "Trade is not available in this journal scope.", "Report mode is not enabled for this request.").
-- The tool-call budget is still owned by the AI runtime; the context stops reserving calls at the
-  declared `maxToolCalls`, so a context without a runtime hook cannot run unbounded calls.
+- The tool-call budget has two layers. The execution context owns the ceiling: it stops reserving
+  calls at the declared `maxToolCalls`, so a context without a runtime hook cannot run unbounded
+  calls. The AI runtime owns the request-level counter and is notified at the ceiling: the context
+  always consults the runtime hook, including on the refused call, so the runtime observes the
+  exhaustion and raises the legacy request-level error
+  ("AI request could not complete within the journal context limit. Please try a more specific
+  question."). A model that exceeds the tool-call budget therefore gets that error again, not a
+  normal answer.
 - Provider behaviour is untouched: hosted OpenAI keeps `store:false`, an OpenAI-compatible server
   keeps its own key, and no prompt or credential diagnostic is exposed. No route, response shape or
   import contract changed.
@@ -134,6 +140,64 @@ Accepted with a documented reason:
   capability before it knows what it will run. The contract now states this.
 - A reviewer reported that the trade-detail fills gained an `id` field. Checked against the
   pre-phase source: the legacy fill projection already carried `id`, so the payload is unchanged.
+
+## Repair after the implementation-diff review
+
+The implementation-diff review returned FAIL on one real defect and two documentation claims that
+followed from it. The repair is a separate commit on top of the four phase commits.
+
+### The defect
+
+`createExecutionContext` in `apps/web/src/server/intelligence/runtime/execution.ts` wrapped the
+runtime hook and short-circuited at the declared ceiling: it returned `false` without calling the
+hook. The runtime hook (`reserveToolCall`, handed in from `apps/web/src/server/ai.ts` through
+`createInteractiveContext`) is what sets the runtime's `toolBudgetExceeded` flag, and that flag is
+what raises the request-level error "AI request could not complete within the journal context
+limit. Please try a more specific question."
+
+At base `58209ba`, `apps/web/src/server/ai.ts` called the hook on every tool attempt, including the
+attempt at the ceiling, so the flag was set and the legacy error fired. With the short-circuit, the
+flag was never set: a model that exceeded `maxToolCalls` received a normal answer instead of the
+legacy error, which broke the phase acceptance criterion that the existing AI routes keep their
+unchanged results.
+
+### The fix
+
+The context now always consults the runtime hook, including on the refused call at the ceiling, and
+the context's own ceiling stays authoritative: the call is refused whatever the hook answers, and
+`reserved` still counts only successful reservations. No other file changed: the hook signature,
+the `ExecutionContext` contract, the gateway, the registry, the dispatcher and the AI SDK adapter
+are untouched.
+
+### The new tests
+
+- `apps/web/tests/intelligence-runtime.test.ts` — "consults the runtime hook at the tool-call
+  ceiling and still refuses the call": the hook is called five times for a context with a ceiling
+  of four, and the fifth call is refused. Against the pre-repair code the hook was called four
+  times and the test failed.
+- `apps/web/tests/ai-runtime.test.ts` (additive extension, approved by the coordinator) — "raises
+  the request-level limit error when the model exceeds the tool-call budget": the test runs the
+  production chain (runtime → `createAskJournalTools` → `createInteractiveContext` → gateway) with
+  five parallel tool calls in a single step, more calls than `maxToolCalls` but fewer steps than
+  `maxSteps`, and asserts the exact legacy error and no normal answer. Against the pre-repair code
+  the request resolved with a normal answer and the test failed.
+
+### Repair verification
+
+| Command                                                                                                                                                                        | Exit | Runtime | Result                   |
+| ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ | ---- | ------- | ------------------------ |
+| `pnpm exec vitest run apps/web/tests/intelligence-runtime.test.ts apps/web/tests/intelligence-scope.test.ts apps/web/tests/ai-scope.test.ts apps/web/tests/ai-runtime.test.ts` | 0    | 10.17 s | 4 files, 97 tests passed |
+| `pnpm --filter web typecheck`                                                                                                                                                  | 0    | 15.60 s | clean                    |
+
+The failing-before check was run by stashing only the `execution.ts` change: both new tests failed
+(`expected "spy" to be called 5 times, but got 4 times` and `expected rejection`), and the rest of
+the suite passed. The whole-project suite was not run for the repair; the coordinator runs the
+destination gate.
+
+### Review finding
+
+The finding that produced the repair: "The context's `consumeToolCall` short-circuits before the
+runtime hook, so the legacy request-level budget error is unreachable on the Ask and Reports paths."
 
 ## Deviations from the phase plan
 

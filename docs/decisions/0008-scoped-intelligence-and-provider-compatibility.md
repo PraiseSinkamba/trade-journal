@@ -54,9 +54,11 @@ Phase 12 implements the scoped part of this ADR:
   execution, the access category, the tool-call budget and cancellation, validates the input
   before the call and validates the output before it leaves the gateway. Write access stays with
   the trusted system principal.
-- The Ask and Reports tools now run through that gateway with unchanged results. The existing
-  provider policy is untouched: hosted OpenAI keeps `store:false`, a compatible endpoint keeps
-  its own key, and no prompt or credential diagnostic is exposed.
+- The Ask and Reports tools now run through that gateway. Their results are unchanged, including
+  the budget path: the execution context owns the tool-call ceiling and always notifies the runtime
+  hook, so a model that exceeds the ceiling still gets the request-level limit error instead of a
+  normal answer. The existing provider policy is untouched: hosted OpenAI keeps `store:false`, a
+  compatible endpoint keeps its own key, and no prompt or credential diagnostic is exposed.
 
 Background execution, provider policy and budget reservations remain unimplemented and stay with
 Phase 13; they are not authorised by this note.
