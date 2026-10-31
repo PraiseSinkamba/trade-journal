@@ -57,8 +57,15 @@ export function createExecutionContext(input: ExecutionContextInput): ExecutionC
     budgets: {
       ...parsed.budgets,
       consumeToolCall: () => {
-        if (reserved >= parsed.budgets.maxToolCalls) return false;
-        if (!reserve()) return false;
+        const atCeiling = reserved >= parsed.budgets.maxToolCalls;
+        // The runtime owns the request-level budget, so the hook is always
+        // consulted — including at the ceiling — so it can observe the
+        // exhaustion and raise its own request-level error. The context
+        // ceiling stays authoritative: the call is refused whatever the hook
+        // answers.
+        const granted = reserve();
+        if (atCeiling) return false;
+        if (!granted) return false;
         reserved += 1;
         return true;
       },

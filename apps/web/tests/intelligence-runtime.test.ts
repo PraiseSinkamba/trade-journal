@@ -441,6 +441,25 @@ describe("tool gateway", () => {
     expect(execute).not.toHaveBeenCalled();
   });
 
+  it("consults the runtime hook at the tool-call ceiling and still refuses the call", () => {
+    const hook = vi.fn(() => true);
+    const execution = interactiveContext({
+      allowedToolIds: ["journal.read"],
+      consumeToolCall: hook,
+    });
+
+    expect(execution.budgets.maxToolCalls).toBe(4);
+    for (let call = 0; call < execution.budgets.maxToolCalls; call += 1) {
+      expect(execution.budgets.consumeToolCall()).toBe(true);
+    }
+    expect(hook).toHaveBeenCalledTimes(4);
+
+    // The ceiling is reached: the runtime hook is still consulted so it can
+    // observe the exhaustion, and the context refuses the call anyway.
+    expect(execution.budgets.consumeToolCall()).toBe(false);
+    expect(hook).toHaveBeenCalledTimes(5);
+  });
+
   it("refuses a duplicate tool registration", () => {
     const gateway = createToolGateway();
     const tool = readTool(async () => ({ status: "completed", value: { value: "ok" } }));
