@@ -16,6 +16,8 @@ Repository-relative paths work from every worker checkout. The committed archite
 
 First deliver no-provider trade-change → transactional event → durable worker → factual observation/evidence (Slice A). Then deliver scoped optional AI → opportunity → controlled engagement → native interaction → durable workflow/knowledge (Slice B). Finish retention, recovery, packaging and contention gates. Preserve existing financial calculations, hashes/keys, annotations, imports, cTrader sync and all three provider categories.
 
+Phase 11 closes the Slice A integrated gate and Phase 21 owns the Tauri packaging subset: the ten Section 18 scenarios are implemented across phases 3 to 10, and Phase 11 records them as one coherent no-provider slice with the targeted financial regression and packaged Node smoke, while the Tauri work was blocked by host-side desktop tooling defects, so the feature phases could proceed without it.
+
 Keep the modular monolith. Core and importers remain pure public packages; private intelligence belongs under apps/web. Trading owns reconstruction and source mutation. Infrastructure owns SQLite repositories, outbox, jobs and fenced effects; knowledge/runtime/experience use typed ports; composition wires adapters. No DB/Next/React/AI SDK leakage into pure contracts. A supervised Node process owns HTTP/worker children; Tauri owns that supervisor. No network work in write transactions, implicit import-started worker, model financial writes or unrestricted SQL/HTTP tools.
 
 ## Repository topology and observed drift
@@ -37,6 +39,7 @@ Compared with the original e45707b baseline, current committed changes are plann
 - [Git readiness](git-readiness.md): exact start-ref resolution and dispatch preflight.
 - [Traceability](traceability.md): all design sections and plan subsets mapped to owners/evidence.
 - [Validation report](validation-report.md) and [validator](validate-package.cjs).
+- [ADR 0009 — Defer Tauri packaging to release acceptance](../../decisions/0009-defer-tauri-packaging-to-release-acceptance.md)
 
 - [T-001 — Safe connection/transaction seams; separate request errors from Next](tasks/T-001.md)
 - [T-002 — Versioned migration runner and legacy baseline](tasks/T-002.md)
@@ -48,7 +51,7 @@ Compared with the original e45707b baseline, current committed changes are plann
 - [T-008 — Factual observations and explicit cTrader evidence quality](tasks/T-008.md)
 - [T-009 — Historical seed/replay and no-provider recovery](tasks/T-009.md)
 - [T-010 — Node supervisor, worker bundle and Docker startup](tasks/T-010.md)
-- [T-011 — Tauri lifecycle and packaging; Slice A review](tasks/T-011.md)
+- [T-011 — Slice A integrated gate and financial regression](tasks/T-011.md)
 - [T-012 — Execution contexts, deterministic capability registry and tool gateway](tasks/T-012.md)
 - [T-013 — Background AI policies, reservations and provider adapter integration](tasks/T-013.md)
 - [T-014 — Knowledge-source revisions and invalidation](tasks/T-014.md)
@@ -58,7 +61,7 @@ Compared with the original e45707b baseline, current committed changes are plann
 - [T-018 — Authenticated interaction/control APIs](tasks/T-018.md)
 - [T-019 — Native inbox/control UI and Slice B review](tasks/T-019.md)
 - [T-020 — Retention, backup/restore, deletion and operations documentation](tasks/T-020.md)
-- [T-021 — Performance, complete packaging and CI release acceptance](tasks/T-021.md)
+- [T-021 — Tauri packaging, performance and CI release acceptance](tasks/T-021.md)
 
 ## Confirmed, assumed and unresolved
 

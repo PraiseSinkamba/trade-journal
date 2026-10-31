@@ -76,7 +76,7 @@ T-001 DB/transaction/error seams
  → T-008 factual observations/cTrader evidence
  → T-009 seed/replay/recovery
  → T-010 Node supervisor/Docker
- → T-011 Tauri/Slice A
+ → T-011 Slice A gate
  → T-012 execution context/registry/gateway
  → T-013 background AI policies/providers
  → T-014 source revisions/invalidation
@@ -86,8 +86,10 @@ T-001 DB/transaction/error seams
  → T-018 interaction/control APIs
  → T-019 UI/Slice B
  → T-020 retention/backup/operations
- → T-021 performance/packaging/release acceptance
+ → T-021 Tauri packaging/performance/release acceptance
 ```
+
+Phase 11 delivers the Slice A integrated gate; the Tauri desktop packaging subset moved to Phase 21 under ADR 0009, so the feature phases run without desktop work blocking them. No dependency edge changed.
 
 Use native dependency IDs, not literal T-NNN strings where runtime IDs are required. Record mappings and dispatch/integration state in `docs/superpowers/reports/ai-native-journal-worktrees.json` on the feature branch. You alone own that coordinator record; commit durable checkpoints. Keep credentials out of it.
 
@@ -131,9 +133,9 @@ Require spec-compliance and code-quality review against exact commits, plus the 
 
 Local task→phase and phase→`codex/ai-native-journal` merges are already selected. Serialize integration with one owner; verify clean correct branches, ancestry, reviews and destination SHA. If feature moved, have the worker incorporate it, resolve conflicts and retest/review before merge. Parent may perform the mechanical merge or appoint an integration worker, but may not resolve feature code itself. Verify the merged result and commit `docs/superpowers/reports/ai-native-journal-integration-NN.md` with source/destination/merge SHAs and checks. Failed post-merge checks block all successors. No main merge, push, PR, publication, destructive reset, shared-history rewrite or automatic worktree deletion.
 
-G-A after T-011 requires no-provider recovery, complete mutation/evidence integration and real packaged Node/Docker/Tauri lifecycle evidence. G-B after T-019 requires optional-provider interaction, authorization, correction/dedup and restart-to-workflow continuation. Keep background AI/proactive delivery off by default and partial event capture disabled as specified.
+G-A after T-011 requires the ten Section 18 Slice A scenarios as one coherent no-provider slice, targeted financial regression and full pnpm test, packaged Node smoke and recorded measured results. Docker scratch-volume smoke and actual Tauri lifecycle and ABI evidence are required at G-FINAL, produced by the Phase 21 Tauri packaging subset. G-B after T-019 requires optional-provider interaction, authorization, correction/dedup and restart-to-workflow continuation. Keep background AI/proactive delivery off by default and partial event capture disabled as specified.
 
-G-FINAL after T-021 requires existing CI (format, typecheck, tests, license check, package/app builds), actual Docker/Windows smoke and native SQLite ABI, retention/restore/deletion, public package-content audit and 1k/10k/100k benchmarks. Preserve the zero-lost-effects/zero-escaped-SQLITE_BUSY and <=20% p95 HTTP regression gates. Missing target tooling is blocked evidence, not a mocked pass. Never lower a threshold to finish.
+G-FINAL after T-021 requires existing CI (format, typecheck, tests, license check, package/app builds), actual Docker/Windows smoke and native SQLite ABI, actual Tauri sidecar ABI with desktop restart and quit, retention/restore/deletion, public package-content audit and 1k/10k/100k benchmarks. Preserve the zero-lost-effects/zero-escaped-SQLITE_BUSY and <=20% p95 HTTP regression gates. Missing target tooling is blocked evidence, not a mocked pass. Never lower a threshold to finish.
 
 ## Initial report and stop
 

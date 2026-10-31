@@ -103,7 +103,7 @@
     {
       "id": "G-A",
       "after": "T-011",
-      "requires": "Slice A including no-provider recovery and actual packaged deployment gates"
+      "requires": "Slice A ten scenarios as one no-provider slice, targeted financial regression and full pnpm test, packaged Node smoke, recorded measured results; Docker scratch-volume smoke and actual Tauri lifecycle and ABI evidence are required at G-FINAL"
     },
     {
       "id": "G-B",
@@ -113,7 +113,7 @@
     {
       "id": "G-FINAL",
       "after": "T-021",
-      "requires": "All tasks integrated, full CI, real Docker/Windows smoke, benchmarks, package audit"
+      "requires": "All tasks integrated, full CI, real Docker/Windows smoke, actual Tauri sidecar ABI with desktop restart and quit, benchmarks, package audit"
     }
   ],
   "waves": [
@@ -1178,11 +1178,11 @@
       "testPaths": [
         {
           "path": "apps/web/tests/intelligence-slice-a.test.ts",
-          "status": "planned"
+          "status": "existing"
         },
         {
           "path": "apps/web/tests/intelligence-recovery.test.ts",
-          "status": "planned"
+          "status": "existing"
         }
       ]
     },
@@ -1278,21 +1278,21 @@
       "testPaths": [
         {
           "path": "apps/web/tests/intelligence-supervisor.test.ts",
-          "status": "planned"
+          "status": "existing"
         },
         {
           "path": "apps/web/tests/intelligence-packaging.test.ts",
-          "status": "planned"
+          "status": "existing"
         }
       ]
     },
     {
       "id": "T-011",
-      "title": "Tauri lifecycle and packaging; Slice A review",
+      "title": "Slice A integrated gate and financial regression",
       "phase": "11",
       "milestone": "M3",
-      "objective": "Tauri lifecycle and packaging; Slice A review",
-      "planSubset": "8 Tauri/Slice A",
+      "objective": "Slice A integrated gate and financial regression",
+      "planSubset": "8 Slice A gate",
       "specSections": [8, 18],
       "repository": "trade-journal",
       "packet": "docs/orchestration/ai-native-journal/tasks/T-011.md",
@@ -1313,50 +1313,35 @@
       ],
       "contextPaths": [
         {
-          "path": "desktop/src-tauri/src/server.rs",
+          "path": "apps/web/tests/intelligence-slice-a.test.ts",
           "status": "existing"
         },
         {
-          "path": "desktop/src-tauri/src/lib.rs",
+          "path": "apps/web/tests/intelligence-recovery.test.ts",
           "status": "existing"
         },
         {
-          "path": "desktop/src-tauri/tauri.conf.json",
+          "path": "apps/web/tests/intelligence-supervisor.test.ts",
           "status": "existing"
         },
         {
-          "path": "desktop/package.json",
+          "path": "apps/web/tests/intelligence-packaging.test.ts",
           "status": "existing"
-        },
-        {
-          "path": "desktop/README.md",
-          "status": "existing"
-        },
-        {
-          "path": "apps/web/scripts/run-journal.mjs",
-          "status": "planned"
-        },
-        {
-          "path": "apps/web/scripts/http-child.mjs",
-          "status": "planned"
         }
       ],
       "ownership": {
         "areas": [
-          "desktop/src-tauri/src/server.rs",
-          "desktop/src-tauri/src/lib.rs",
-          "desktop/src-tauri/tauri.conf.json",
-          "desktop/package.json",
-          "desktop/README.md",
-          "apps/web/scripts/run-journal.mjs",
-          "apps/web/scripts/http-child.mjs"
+          "apps/web/tests/intelligence-slice-a.test.ts",
+          "apps/web/tests/intelligence-recovery.test.ts",
+          "apps/web/tests/intelligence-supervisor.test.ts",
+          "apps/web/tests/intelligence-packaging.test.ts"
         ],
         "exclusive": true,
         "sharedFilesPolicy": "Single phase owner; see integration-plan.md. No edits outside task subset without coordinator allocation."
       },
-      "contracts": "Existing SharedServerState ownership; packaged Node/native SQLite ABI, structured readiness",
+      "contracts": "Trade change to event to worker to observation to evidence contracts unchanged; unchanged financial calculations; packaged Node/Docker deployment; no AI provider",
       "schema": "None",
-      "acceptance": "Actual sidecar ABI, collision/restart/quit tests, full financial regression",
+      "acceptance": "Recorded ten Section 18 Slice A scenarios green as one no-provider slice, targeted financial regression and full pnpm test passed, packaged Node/Docker smoke recorded with measured results",
       "tests": [
         "apps/web/tests/intelligence-supervisor.test.ts",
         "apps/web/tests/intelligence-packaging.test.ts",
@@ -1369,8 +1354,8 @@
         "Phase and merged-feature full pnpm test; see integration-plan.md for extra gates"
       ],
       "phasePlan": "docs/superpowers/plans/ai-native-journal/phase-11.md",
-      "planning": "Detailed Windows process ownership, nonzero-port retry, sidecar ABI and installed-artifact test plan required.",
-      "parallelCandidate": "Rust lifecycle and packaging smoke fixtures can split once IPC/artifact contract is stable; do not duplicate native builds concurrently.",
+      "planning": "Plan the integrated no-provider Slice A gate, targeted financial regression, packaged Node/Docker smoke and recorded results. Tauri lifecycle and desktop packaging are out of scope for this phase.",
+      "parallelCandidate": "One serial gate run on one host; no concurrent builds, Docker or native packaging and no shared database fixtures.",
       "worktree": {
         "relationship": "child",
         "parent": "feature worktree full Orca ID",
@@ -1385,19 +1370,19 @@
       "testPaths": [
         {
           "path": "apps/web/tests/intelligence-supervisor.test.ts",
-          "status": "planned"
+          "status": "existing"
         },
         {
           "path": "apps/web/tests/intelligence-packaging.test.ts",
-          "status": "planned"
+          "status": "existing"
         },
         {
           "path": "apps/web/tests/intelligence-slice-a.test.ts",
-          "status": "planned"
+          "status": "existing"
         },
         {
           "path": "apps/web/tests/intelligence-recovery.test.ts",
-          "status": "planned"
+          "status": "existing"
         }
       ]
     },
@@ -2328,12 +2313,12 @@
     },
     {
       "id": "T-021",
-      "title": "Performance, complete packaging and CI release acceptance",
+      "title": "Tauri packaging, performance and CI release acceptance",
       "phase": "21",
       "milestone": "M6",
-      "objective": "Performance, complete packaging and CI release acceptance",
-      "planSubset": "13 acceptance",
-      "specSections": [18, 21],
+      "objective": "Tauri packaging, performance and CI release acceptance",
+      "planSubset": "13 acceptance and 8 Tauri subset",
+      "specSections": [8, 18, 21],
       "repository": "trade-journal",
       "packet": "docs/orchestration/ai-native-journal/tasks/T-021.md",
       "dependsOn": ["T-020"],
@@ -2379,6 +2364,38 @@
         {
           "path": "docs/intelligence-operations.md",
           "status": "planned"
+        },
+        {
+          "path": "desktop/src-tauri/src/server.rs",
+          "status": "existing"
+        },
+        {
+          "path": "desktop/src-tauri/src/lib.rs",
+          "status": "existing"
+        },
+        {
+          "path": "desktop/src-tauri/tauri.conf.json",
+          "status": "existing"
+        },
+        {
+          "path": "desktop/package.json",
+          "status": "existing"
+        },
+        {
+          "path": "desktop/scripts/run-sidecar-setup.js",
+          "status": "existing"
+        },
+        {
+          "path": "desktop/src-tauri/scripts/gen_icons/src/main.rs",
+          "status": "existing"
+        },
+        {
+          "path": "apps/web/scripts/run-journal.mjs",
+          "status": "existing"
+        },
+        {
+          "path": "apps/web/scripts/http-child.mjs",
+          "status": "existing"
         }
       ],
       "ownership": {
@@ -2389,26 +2406,36 @@
           "scripts/verify-features.py",
           "Dockerfile",
           "desktop/README.md",
-          "docs/intelligence-operations.md"
+          "docs/intelligence-operations.md",
+          "desktop/src-tauri/src/server.rs",
+          "desktop/src-tauri/src/lib.rs",
+          "desktop/src-tauri/tauri.conf.json",
+          "desktop/package.json",
+          "desktop/scripts/run-sidecar-setup.js",
+          "desktop/src-tauri/scripts/gen_icons/src/main.rs",
+          "apps/web/scripts/run-journal.mjs",
+          "apps/web/scripts/http-child.mjs"
         ],
         "exclusive": true,
         "sharedFilesPolicy": "Single phase owner; see integration-plan.md. No edits outside task subset without coordinator allocation."
       },
-      "contracts": "Same-machine workload/baseline comparison, no lost effects, zero busy escapes, p95 regression <=20%",
+      "contracts": "Existing SharedServerState ownership; packaged Node/native SQLite ABI, structured readiness; Tauri owns one supervised journal child across start, restart and quit",
       "schema": "None",
-      "acceptance": "Recorded full CI, Docker/Windows smoke, benchmark and package-content results",
+      "acceptance": "Actual sidecar ABI, collision, restart and quit tests without orphan processes; Windows desktop smoke recorded; recorded full CI, Docker/Windows smoke, benchmark and package-content results",
       "tests": [
         "apps/web/tests/intelligence-acceptance.test.ts",
-        "apps/web/tests/intelligence-packaging.test.ts"
+        "apps/web/tests/intelligence-packaging.test.ts",
+        "apps/web/tests/intelligence-supervisor.test.ts"
       ],
       "verification": [
-        "pnpm exec vitest run apps/web/tests/intelligence-acceptance.test.ts apps/web/tests/intelligence-packaging.test.ts",
+        "pnpm exec vitest run apps/web/tests/intelligence-acceptance.test.ts apps/web/tests/intelligence-packaging.test.ts apps/web/tests/intelligence-supervisor.test.ts",
         "pnpm typecheck",
-        "Phase and merged-feature full pnpm test; see integration-plan.md for extra gates"
+        "Phase and merged-feature full pnpm test; see integration-plan.md for extra gates",
+        "cargo check and cargo test in desktop/src-tauri; desktop build and Windows packaged smoke with no leftover processes"
       ],
       "phasePlan": "docs/superpowers/plans/ai-native-journal/phase-21.md",
-      "planning": "Plan reproducible scratch workloads, artifact matrix and gates; this is verification/hardening, not deferred feature implementation.",
-      "parallelCandidate": "Read-only artifact audit, benchmarks and target-specific smoke may run separately with isolated builds/data/ports; feature integration remains serialized.",
+      "planning": "Plan reproducible scratch workloads, artifact matrix, Tauri lifecycle and Windows smoke gates; this is verification and hardening, not deferred feature implementation.",
+      "parallelCandidate": "Rust lifecycle and packaging smoke fixtures can split once IPC/artifact contract is stable; read-only artifact audit and benchmarks may run separately with isolated builds, data and ports; do not duplicate native builds concurrently.",
       "worktree": {
         "relationship": "child",
         "parent": "feature worktree full Orca ID",
@@ -2427,7 +2454,11 @@
         },
         {
           "path": "apps/web/tests/intelligence-packaging.test.ts",
-          "status": "planned"
+          "status": "existing"
+        },
+        {
+          "path": "apps/web/tests/intelligence-supervisor.test.ts",
+          "status": "existing"
         }
       ]
     }
