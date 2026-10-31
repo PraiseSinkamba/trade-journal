@@ -4,6 +4,8 @@ import { runAskAgentAi, runReportsAgentAi, runTextAi, runObjectAi } from "../src
 import { AiRuntimeError } from "../src/server/ai-contracts";
 import { AI_FEATURE_POLICIES, AI_PROMPT_VERSIONS } from "../src/server/ai-contracts";
 import { resolveAiConfiguration } from "../src/server/settings";
+import { createAskJournalTools } from "../src/server/ai";
+import type { FrozenApprovedScope } from "../src/server/ai-scope";
 
 const { mockGenerateText, mockCreateOpenAI, mockCreateAnthropic } = vi.hoisted(() => ({
   mockGenerateText: vi.fn(),
@@ -236,6 +238,58 @@ describe("runAskAgentAi provider boundary", () => {
       reserveToolCall(),
       reserveToolCall(),
     ]).toEqual([true, true, true, true, false]);
+  });
+});
+
+describe("tool-call budget exhaustion through the Ask tool chain", () => {
+  const scope: FrozenApprovedScope = {
+    filters: {},
+    timeZone: "UTC",
+    accounts: [{ id: "a", name: "Account A", currency: "USD" }],
+    question: "How did the session go?",
+    date: undefined,
+    scope: { label: "All accounts · UTC", timeZone: "UTC" },
+    context: "Journal scope: All accounts · UTC.",
+    dataSource: "trades",
+    tradeCritiqueKey: undefined,
+  };
+
+  it("raises the request-level limit error when the model exceeds the tool-call budget", async () => {
+    // Five parallel tool calls in a single step: more than the four calls the
+    // policy allows, but fewer steps than the policy allows.
+    mockGenerateText.mockImplementation(
+      async (options: {
+        tools: Record<string, { execute: (input: unknown, options: unknown) => Promise<unknown> }>;
+      }) => {
+        const tool = options.tools.get_journal_summary;
+        if (tool === undefined) throw new Error("The Ask tool set has no journal summary tool.");
+        await Promise.all(
+          Array.from({ length: 5 }, () => tool.execute({}, { toolCallId: "call" })),
+        );
+        return {
+          text: "answer",
+          finishReason: "tool-calls",
+          usage: { inputTokens: 12, outputTokens: 7 },
+          steps: [{}],
+        };
+      },
+    );
+
+    const error = await captureError(
+      runAskAgentAi({
+        feature: "askJournalAgent",
+        configuration: openAiConfig,
+        promptVersion: "ask-journal-agent-v1",
+        system: "system",
+        prompt: "task",
+        createTools: (reserveToolCall) =>
+          createAskJournalTools(scope, "Scoped context", reserveToolCall) as never,
+      }),
+    );
+
+    expect(error.message).toBe(
+      "AI request could not complete within the journal context limit. Please try a more specific question.",
+    );
   });
 });
 
