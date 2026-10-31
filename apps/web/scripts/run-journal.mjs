@@ -1,9 +1,15 @@
 import { fork } from "node:child_process";
+import { existsSync } from "node:fs";
 import { request } from "node:http";
 import { isAbsolute, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 
 const appRoot = fileURLToPath(new URL("../", import.meta.url));
+// Packaged tree: scripts/ next to worker/worker-entry.cjs; checkout: .next/worker-dist.
+const packagedWorkerPath = fileURLToPath(new URL("../worker/worker-entry.cjs", import.meta.url));
+const defaultWorkerPath = existsSync(packagedWorkerPath)
+  ? packagedWorkerPath
+  : resolve(appRoot, ".next/worker-dist/worker-entry.cjs");
 
 /** Resolve CLI settings once so both children receive identical explicit settings. */
 export function parseArguments(args = process.argv.slice(2), env = process.env) {
@@ -21,7 +27,7 @@ export function parseArguments(args = process.argv.slice(2), env = process.env) 
   const host = values.host ?? env.HOSTNAME ?? "127.0.0.1";
   const portText = values.port ?? env.PORT ?? "3000";
   const port = Number(portText);
-  const dataDir = values["data-dir"] ?? env.JOURNAL_DATA_DIR ?? resolve(appRoot, "data");
+  const dataDir = values["data-dir"] ?? env.JOURNAL_DATA_DIR ?? resolve(process.cwd(), "data");
   const worker = values.worker ?? (mode === "production" ? "enabled" : "disabled");
   if (!["dev", "production"].includes(mode)) throw new Error("Mode must be dev or production");
   if (!host.trim()) throw new Error("Host must not be empty");
@@ -52,7 +58,7 @@ export function probeHttp(host, port, timeoutMs = 1000) {
 export function startSupervisor(config, options = {}) {
   const {
     httpPath = fileURLToPath(new URL("./http-child.mjs", import.meta.url)),
-    workerPath = fileURLToPath(new URL("../worker/worker-entry.cjs", import.meta.url)),
+    workerPath = defaultWorkerPath,
     shutdownMs = 10_000,
     startupMs = 60_000,
     heartbeatMs = 5_000,
@@ -145,6 +151,8 @@ export function startSupervisor(config, options = {}) {
         workerState =
           message.type === "ready" ? "ready" : typeof state === "string" ? state : "healthy";
         health({ workerHealth: message });
+        // A stopped poll loop leaves the process alive; terminate it so the exit path restarts it.
+        if (workerState === "stopped") child.kill("SIGTERM");
       } else if (message.type === "ready") {
         child.httpReady = true;
         void checkReady();

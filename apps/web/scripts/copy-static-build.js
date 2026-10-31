@@ -12,6 +12,7 @@ import {
 } from "node:fs";
 import { join, dirname } from "node:path";
 import { fileURLToPath } from "node:url";
+import { repairBrokenLinks } from "./repair-links.mjs";
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const root = join(__dirname, "..");
@@ -22,6 +23,11 @@ const outputDir = join(root, ".next/tauri-dist");
 
 if (existsSync(outputDir)) rmSync(outputDir, { recursive: true });
 mkdirSync(outputDir, { recursive: true });
+
+// Next's standalone output copies pnpm's package links as they are. Windows cannot
+// resolve some of them, so the packaged server dies with EPERM before it serves.
+// Point every unresolvable link at the target it already names.
+repairBrokenLinks(join(root, ".next/standalone"));
 
 // Structure: tauri-dist/ = webview files (no node_modules)
 // server.rs looks for resource_dir/apps/web/server.js
@@ -55,6 +61,12 @@ if (existsSync(standaloneNext)) copyDir(standaloneNext, join(appsWebDir, ".next"
 // Copy data dir if present
 const dataDir = join(standaloneDir, "data");
 if (existsSync(dataDir)) copyDir(dataDir, join(appsWebDir, "data"));
+
+// Next never copies .next/static or public into the standalone output. The packaged
+// standalone server (apps/web/package.json "start") runs from .next/standalone/apps/web,
+// so both must sit next to its server.js or it serves HTML without CSS/JS and 404s public files.
+copyDir(staticDir, join(standaloneDir, ".next/static"));
+if (existsSync(publicDir)) copyDir(publicDir, join(standaloneDir, "public"));
 
 // Copy node_modules. The standalone output uses pnpm's structure: apps/web/node_modules/{next,...}
 // are junctions to .pnpm/next@15.5.23_.../node_modules/next. Node walks up from `next` and finds

@@ -1,11 +1,23 @@
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { execFile, fork, type ChildProcess } from "node:child_process";
 import { once } from "node:events";
-import { cp, mkdtemp, readdir, rm, stat } from "node:fs/promises";
+import {
+  cp,
+  lstat,
+  mkdir,
+  mkdtemp,
+  readdir,
+  readFile,
+  rm,
+  stat,
+  symlink,
+  writeFile,
+} from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { promisify } from "node:util";
+import { repairBrokenLinks } from "../scripts/repair-links.mjs";
 
 const appRoot = resolve(dirname(fileURLToPath(import.meta.url)), "..");
 const execute = promisify(execFile);
@@ -107,4 +119,62 @@ describe("independent worker deployment artifact", () => {
     expect(await exited).toEqual([0, null]);
     expect((await stat(join(data, "journal.db"))).size).toBeGreaterThan(0);
   }, 120_000);
+});
+
+describe("packaged dependency links", () => {
+  it("re-points links the host cannot resolve at the target they name", async () => {
+    const directory = await mkdtemp(join(tmpdir(), "journal link repair "));
+    const target = join(directory, "target");
+    await mkdir(target);
+    await writeFile(join(target, "marker.txt"), "content");
+    const link = join(directory, "link");
+    await symlink(target, link, "junction");
+    // A host that cannot follow the link must still end up with a resolvable one.
+    const repaired = repairBrokenLinks(directory, () => false);
+    expect(repaired).toBe(1);
+    expect(await readFile(join(link, "marker.txt"), "utf8")).toBe("content");
+    await rm(directory, { recursive: true, force: true });
+  });
+
+  it("leaves links that already resolve untouched", async () => {
+    const directory = await mkdtemp(join(tmpdir(), "journal link repair "));
+    const target = join(directory, "target");
+    await mkdir(target);
+    const link = join(directory, "link");
+    await symlink(target, link, "junction");
+    expect(repairBrokenLinks(directory)).toBe(0);
+    expect((await lstat(link)).isSymbolicLink()).toBe(true);
+    expect((await stat(link)).isDirectory()).toBe(true);
+    await rm(directory, { recursive: true, force: true });
+  });
+
+  it("keeps a link whose target is gone instead of inventing one", async () => {
+    const directory = await mkdtemp(join(tmpdir(), "journal link repair "));
+    const link = join(directory, "link");
+    await symlink(join(directory, "absent"), link, "junction");
+    expect(repairBrokenLinks(directory, () => false)).toBe(0);
+    expect((await lstat(link)).isSymbolicLink()).toBe(true);
+    await rm(directory, { recursive: true, force: true });
+  });
+
+  it("keeps the content of a file link the host cannot follow", async (ctx) => {
+    const directory = await mkdtemp(join(tmpdir(), "journal link repair "));
+    const target = join(directory, "target.txt");
+    await writeFile(target, "content");
+    const link = join(directory, "link.txt");
+    try {
+      await symlink(target, link, "file");
+    } catch (error) {
+      // Windows only permits file symlinks with elevated rights.
+      const code = (error as NodeJS.ErrnoException).code;
+      if (code === "EPERM" || code === "EACCES") {
+        ctx.skip();
+        return;
+      }
+      throw error;
+    }
+    expect(repairBrokenLinks(directory, () => false)).toBe(1);
+    expect(await readFile(link, "utf8")).toBe("content");
+    await rm(directory, { recursive: true, force: true });
+  });
 });

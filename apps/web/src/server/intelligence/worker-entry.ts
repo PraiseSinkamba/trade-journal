@@ -65,7 +65,10 @@ export const main = async (): Promise<void> => {
     singletonDb = connection.db;
     ownedDb = connection.openConnection(directory);
     const { createIntelligenceWorker } = await import("./composition");
-    worker = createIntelligenceWorker({ db: ownedDb });
+    worker = createIntelligenceWorker({
+      db: ownedDb,
+      enabled: process.env.JOURNAL_WORKER_ENABLED !== "0",
+    });
     if (controller.signal.aborted) return;
     handle = await worker.start(controller.signal);
     report({ type: "ready", role: "worker", worker: worker.status() });

@@ -6,7 +6,13 @@ import { join } from "node:path";
 import { createServer } from "node:net";
 import { fileURLToPath, pathToFileURL } from "node:url";
 
-type Message = { type: string; worker?: string; crashes?: number; [key: string]: unknown };
+type Message = {
+  type: string;
+  worker?: string;
+  crashes?: number;
+  at?: number;
+  [key: string]: unknown;
+};
 const scripts = fileURLToPath(new URL("../scripts/", import.meta.url));
 const runs: {
   directory: string;
@@ -55,8 +61,11 @@ async function launch(
     fixturePath,
     `
 import { createServer } from 'node:http';
-import { appendFileSync } from 'node:fs';
+import { appendFileSync, existsSync, writeFileSync } from 'node:fs';
 const role = process.argv[1].includes('worker') ? 'worker' : 'http';
+const marker = process.env.EVENTS + '.stopped-marker';
+let misbehave = role === 'worker' && process.env.STOPPED_WORKER === '1' && !existsSync(marker);
+if(misbehave) writeFileSync(marker,'stopped');
 const log = (event) => appendFileSync(process.env.EVENTS, JSON.stringify({role,event,at:Date.now(),pid:process.pid,data:process.env.JOURNAL_DATA_DIR,host:process.env.HOSTNAME,port:process.env.PORT})+'\\n');
 log('start');
 let server;
@@ -69,8 +78,14 @@ const stop = () => {
 process.on('disconnect', stop);
 process.on('message', message => {
   if(message.type === 'shutdown') stop();
-  if(message.type === 'health' && process.env.SILENT_ROLE !== role)
-    send(role === 'worker' ? {type:'health',role,worker:{state:'idle'}} : {type:'health',state:'running'});
+  if(message.type === 'health' && process.env.SILENT_ROLE !== role) {
+    if(role === 'worker' && misbehave) {
+      misbehave = false;
+      send({type:'health',role,worker:{state:'stopped'}});
+    } else {
+      send(role === 'worker' ? {type:'health',role,worker:{state:'idle'}} : {type:'health',state:'running'});
+    }
+  }
 });
 if(role === 'http') {
   send({type:'ready'});
@@ -114,7 +129,7 @@ if(process.connected) process.disconnect();
     stdio: ["ignore", "ignore", "pipe", "ipc"],
   });
   const messages: Message[] = [];
-  child.on("message", (message) => messages.push(message as Message));
+  child.on("message", (message) => messages.push({ ...(message as Message), at: Date.now() }));
   const exited = new Promise<number | null>((resolve) => child.once("exit", resolve));
   const run = { directory, child, messages, exited };
   runs.push(run);
@@ -184,12 +199,10 @@ describe("journal supervisor subprocess lifecycle", () => {
 
   it("gates ready on actual HTTP and passes identical absolute settings to both children", async () => {
     const run = await launch({}, { LISTEN_DELAY_MS: "350" });
-    await until(() =>
-      run.events().filter((event) => event.event === "start").length === 2 ? true : undefined,
-    );
-    expect(run.messages.some((message) => message.type === "ready")).toBe(false);
-    await until(() => run.messages.find((message) => message.type === "ready"));
-    expect(run.events().some((event) => event.event === "listening")).toBe(true);
+    const ready = await until(() => run.messages.find((message) => message.type === "ready"));
+    const listening = await until(() => run.events().find((event) => event.event === "listening"));
+    // Readiness follows a real HTTP answer, never the HTTP child's own ready claim.
+    expect(ready.at).toBeGreaterThanOrEqual(listening.at);
     for (const event of run.events().filter((entry) => entry.event === "start")) {
       expect(event.data).toBe(run.directory);
       expect(event.host).toBe("127.0.0.1");
@@ -238,6 +251,28 @@ describe("journal supervisor subprocess lifecycle", () => {
     ).toEqual([1, 2, 3, 4, 5]);
   });
 
+  it("restarts a worker whose poll loop stopped while the process stayed alive", async () => {
+    const run = await launch({}, { STOPPED_WORKER: "1" });
+    await until(() => run.messages.find((message) => message.type === "ready"));
+    const restart = await until(() =>
+      run.messages.find(
+        (message) =>
+          message.type === "health" && message.crashes === 1 && message.worker === "restarting",
+      ),
+    );
+    expect(restart.crashes).toBe(1);
+    await until(() =>
+      run.events().filter((event) => event.role === "worker" && event.event === "start").length >= 2
+        ? true
+        : undefined,
+    );
+    expect(
+      run.events().filter((event) => event.role === "worker" && event.event === "start").length,
+    ).toBeGreaterThanOrEqual(2);
+    expect(run.child.exitCode).toBeNull();
+    expect((await fetch(`http://127.0.0.1:${run.port}/`)).status).toBe(200);
+  });
+
   it("HTTP failure stops worker and fails supervisor", async () => {
     const run = await launch({}, { HTTP_EXIT_MS: "150" });
     expect(await run.exited).toBe(1);
@@ -270,12 +305,14 @@ describe("journal supervisor subprocess lifecycle", () => {
   });
 
   it("restarts workers that stop replying to IPC health", async () => {
-    const run = await launch({ livenessMs: 2000 }, { SILENT_ROLE: "worker" });
-    await until(() => run.messages.find((message) => message.worker === "unhealthy"), 25_000);
+    // A silent worker is killed and replaced until the crash budget is spent.
+    const run = await launch({ livenessMs: 1000 }, { SILENT_ROLE: "worker" });
+    await until(() => run.messages.find((message) => message.worker === "unhealthy"), 20_000);
     expect(
-      run.events().filter((event) => event.role === "worker" && event.event === "start"),
-    ).toHaveLength(5);
+      run.messages.filter((message) => message.crashes).map((message) => message.crashes),
+    ).toEqual([1, 2, 3, 4, 5]);
     expect(run.child.exitCode).toBeNull();
+    expect((await fetch(`http://127.0.0.1:${run.port}/`)).status).toBe(200);
   });
 
   it.each([
