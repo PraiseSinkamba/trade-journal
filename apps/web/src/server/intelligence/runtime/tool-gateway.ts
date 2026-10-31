@@ -35,7 +35,9 @@ export function createToolGateway(tools: readonly ToolDefinition[] = []): ToolGa
       return { status: "failed", reason: TOOL_FAILURE.toolNotPermitted };
     }
     // Write access stays with the trusted system principal; an interactive
-    // request never reaches a mutating tool through this gateway.
+    // request never reaches a mutating tool through this gateway. A propose
+    // tool only suggests a change for approval, so it needs no extra gate —
+    // no propose tool is registered in this phase.
     if (tool.access === "write" && context.principal !== "system") {
       return { status: "failed", reason: TOOL_FAILURE.writeNotPermitted };
     }
