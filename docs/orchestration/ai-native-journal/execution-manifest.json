@@ -65,7 +65,8 @@
     },
     {
       "path": "docs/decisions/0008-scoped-intelligence-and-provider-compatibility.md",
-      "sha256": "95ac5442c577a24e2dd674492043e8c455d96c40efe6fff127c18847c084e994"
+      "sha256": "ca3a2f9d98afb2f6ec5e2918ee12f5b971ba8eaa7d4398ad4743828b84d10e1e",
+      "ownedBy": "T-012"
     },
     {
       "path": "docs/architecture-discovery/CODE_NAVIGATION.md",
@@ -1449,6 +1450,7 @@
           "apps/web/src/server/ai-report-context.ts",
           "apps/web/src/server/ai-contracts.ts",
           "apps/web/src/server/intelligence/contracts/",
+          "apps/web/src/server/intelligence/runtime/",
           "docs/decisions/0008-scoped-intelligence-and-provider-compatibility.md"
         ],
         "exclusive": true,
@@ -1460,7 +1462,8 @@
       "tests": [
         "apps/web/tests/intelligence-runtime.test.ts",
         "apps/web/tests/intelligence-scope.test.ts",
-        "apps/web/tests/ai-scope.test.ts"
+        "apps/web/tests/ai-scope.test.ts",
+        "apps/web/tests/ai-runtime.test.ts"
       ],
       "verification": [
         "pnpm exec vitest run apps/web/tests/intelligence-runtime.test.ts apps/web/tests/intelligence-scope.test.ts apps/web/tests/ai-scope.test.ts",
@@ -1484,14 +1487,18 @@
       "testPaths": [
         {
           "path": "apps/web/tests/intelligence-runtime.test.ts",
-          "status": "planned"
+          "status": "existing"
         },
         {
           "path": "apps/web/tests/intelligence-scope.test.ts",
-          "status": "planned"
+          "status": "existing"
         },
         {
           "path": "apps/web/tests/ai-scope.test.ts",
+          "status": "existing"
+        },
+        {
+          "path": "apps/web/tests/ai-runtime.test.ts",
           "status": "existing"
         }
       ]

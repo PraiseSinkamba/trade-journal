@@ -1,7 +1,7 @@
 {
   "schemaVersion": 1,
   "feature": "ai-native-journal",
-  "updatedAt": "2026-10-31",
+  "updatedAt": "2026-10-31T18:53:24Z",
   "owner": "parent OMP coordinator (exclusive owner of this record)",
   "repository": {
     "name": "trade-journal",
@@ -22,20 +22,21 @@
     "ancestryVerified": "executionDocsSha descends from handoffCommit (git merge-base --is-ancestor returned 0)",
     "interveningDiffScope": "docs/orchestration/ai-native-journal/README.md, coordinator-handoff.md, git-readiness.md, orca-execution-prompt.md, validate-package.cjs, validation-report.md — prompt plus documentation/validation support only; no source or task-packet changes",
     "packageValidation": {
-      "command": "node docs/orchestration/ai-native-journal/validate-package.cjs --require-committed --ref 4ae868dbbb72f975f9767efb4e212884ecca7803",
+      "command": "node docs/orchestration/ai-native-journal/validate-package.cjs",
       "tasks": 21,
       "waves": 21,
       "dependencyEdges": 20,
       "sources": 12,
-      "localLinks": 78,
+      "localLinks": 79,
       "acyclic": true,
-      "committed": true,
-      "errors": []
+      "committed": false,
+      "errors": [],
+      "note": "The 12 sources are the frozen inputs the phases read. Eleven are byte-identical to the baseline commit 548656b. The twelfth, ADR 0008, is owned by T-012 and may evolve when that phase runs: the manifest records its owner and its current hash, and the validator requires the owning task to really claim the path. The Phase 12 integration added that owner concept after the phase legitimately updated its own ADR."
     },
     "featureBranch": "codex/ai-native-journal",
     "featureBootstrapSha": "0a278503fd67c0f9e82138dfecb744f4bfd307ad",
-    "featureHeadSha": "0915173ce42baecfa59434f2361af92fa5f02436",
-    "featureHeadShaNote": "feature branch HEAD after the Phase 09 non-fast-forward merge; the Phase 10 worktree base is the Phase 09 branch tip 5093db1, and this coordinator record commit advances the feature branch by one commit",
+    "featureHeadSha": "2ea11ce7d7ed253e50e674a1fbb49c4a85d28870",
+    "featureHeadShaNote": "feature branch HEAD at the Phase 12 integration and the exact base of the Phase 13 worktree; the coordinator record commit advances the branch by one commit",
     "featureCheckpointCommits": [
       "0a278503fd67c0f9e82138dfecb744f4bfd307ad",
       "80d53ccb62fda801897852a6f4e5d2aab8b0d58b",
@@ -56,7 +57,8 @@
       "259c89441d4689bfb888b03196dad6113e1e70b4",
       "c8a6fdc8464169a0d924c7d5f3558c98d3f3e00b",
       "db56d3671b1e6fbfdc92e4cdc039b45cff001386",
-      "0915173ce42baecfa59434f2361af92fa5f02436"
+      "0915173ce42baecfa59434f2361af92fa5f02436",
+      "2ea11ce7d7ed253e50e674a1fbb49c4a85d28870"
     ],
     "featureBranchNote": "Orca slugified the requested name to codex-ai-native-journal at creation; the coordinator renamed the newly created, exclusively owned branch to the contract-required codex/ai-native-journal. Orca reads the renamed ref live (refs/heads/codex/ai-native-journal). No pre-existing branch was overwritten."
   },
@@ -228,6 +230,18 @@
         "merge": "54463d7800f4e72d2b7f109e02c0f02c76458383",
         "verified": "103 files, 1074 tests passed on the destination branch",
         "cleanupNote": "The worker completed the work and committed it, but the runtime revoked the dispatch and refused its worker_done, so the coordinator settled task_b00115dce3c4 directly against the committed evidence. The worktree, branch and directory were removed after the merge was verified."
+      },
+      {
+        "phase": "12",
+        "stableTask": "T-012",
+        "orcaWorktreeId": "aa54a522-a9af-4cb4-9de7-f1d9a349c0fd::E:/4004/orca/workspaces/trade-journal/codex-ai-native-journal-p12",
+        "path": "E:/4004/orca/workspaces/trade-journal/codex-ai-native-journal-p12",
+        "branch": "codex/ai-native-journal-p12",
+        "startSha": "58209ba32ebb29a9c74b8d7ba4ebe48c766203ec",
+        "orcaParentWorktreeId": "aa54a522-a9af-4cb4-9de7-f1d9a349c0fd::E:/4004/orca/workspaces/trade-journal/codex-ai-native-journal",
+        "setup": "pnpm install --frozen-lockfile completed in the worker checkout; working tree clean; Node v24.20.0, pnpm 11.0.8; own node_modules and own pnpm virtual store",
+        "state": "integrated into codex/ai-native-journal at 9553de3 and verified on the destination branch (105 test files, 1111 tests passed). The worktree, the git worktree registration, the branch and the leftover directory remain until the user requests cleanup.",
+        "note": "Phase 12 produced the first AI feature code: the execution contexts, the deterministic capability registry and the tool gateway. The implementation-diff review failed with one real defect - the execution context refused the tool call at the ceiling before consulting the runtime hook, so the legacy request-level budget error was unreachable - and the phase was reopened and repaired before the merge. The phase updated ADR 0008, which is also one of the 12 hash-pinned sources; the manifest and the validator gained an explicit owned-source rule so the pin keeps its value for the other 11 inputs while the owning ADR can evolve."
       }
     ]
   },
@@ -392,9 +406,23 @@
       "wave": 12,
       "branch": "codex/ai-native-journal-p12",
       "deps": ["task_3b1725afcaa2"],
-      "status": "dispatched",
-      "state": "dispatched",
-      "note": "in flight on branch codex/ai-native-journal-p12, with the T-011 gate reports as its predecessor evidence"
+      "status": "completed",
+      "state": "integrated",
+      "note": "the first AI feature phase of the run; the execution manifest T-012 ownership set was corrected in the same commit to name apps/web/src/server/intelligence/runtime/ and the coordinator-approved additive extension apps/web/tests/ai-runtime.test.ts ADR 0008 was updated by the phase and is now an explicitly owned source in the manifest.",
+      "outcome": "succeeded",
+      "nativeDispatch": "ctx_b68b9aa7c5d3",
+      "priorDispatch": "ctx_85d5cd47e7fa",
+      "commits": [
+        "a2f1f72",
+        "a80af56",
+        "ead9b98",
+        "85a4226",
+        "60c4f25",
+        "3483915",
+        "2ea11ce7d7ed253e50e674a1fbb49c4a85d28870"
+      ],
+      "verified": "destination gate green on the destination branch after the merge at 9553de3: pnpm install --frozen-lockfile, pnpm --filter web typecheck, the core and importers typecheck, pnpm --filter web migrations:check, node scripts/check-licenses.mjs, prettier --check on every changed file and pnpm build all exit 0; pnpm test 105 test files, 1111 tests passed, 143.18s",
+      "evidence": "the independent implementation-diff review raised 3 findings (1 BLOCK, 2 FAIL); the coordinator reopened the phase, dispatched the repair on the same branch, then proved the two new regression tests fail against the pre-fix code (expected 5 hook calls, got 4) and pass with the fix (47/47). Evidence: docs/superpowers/plans/ai-native-journal/phase-12.md, docs/superpowers/reports/ai-native-journal-phase-12.md, docs/superpowers/reports/ai-native-journal-integration-12.md"
     },
     {
       "stable": "T-013",
@@ -403,8 +431,9 @@
       "wave": 13,
       "branch": "codex/ai-native-journal-p13",
       "deps": ["task_107db7662f7e"],
-      "status": "pending",
-      "state": "created"
+      "status": "ready",
+      "state": "ready",
+      "note": "unblocked after the Phase 12 repair was merged and verified; not dispatched yet"
     },
     {
       "stable": "T-014",
@@ -725,6 +754,38 @@
       "integrated": true,
       "verified": true,
       "outcome": "verified, repaired, committed and reported; the coordinator settled the task"
+    },
+    {
+      "task": "T-012",
+      "native": "task_107db7662f7e",
+      "dispatch": "ctx_85d5cd47e7fa",
+      "agent": "omp",
+      "provider": "omp",
+      "worktree": "aa54a522-a9af-4cb4-9de7-f1d9a349c0fd::E:/4004/orca/workspaces/trade-journal/codex-ai-native-journal-p12",
+      "base": "58209ba32ebb29a9c74b8d7ba4ebe48c766203ec",
+      "purpose": "Phase 12 - execution contexts, capability registry and tool gateway; the first AI feature phase of the run",
+      "state": "completed; the worker was nudged once after 105 assistant turns with the implementation still uncommitted, then committed the implementation and the phase report",
+      "candidate": ["a2f1f72", "a80af56", "ead9b98", "85a4226"],
+      "reviewed": true,
+      "integrated": true,
+      "verified": true,
+      "outcome": "candidate superseded by the repair dispatch after the implementation-diff review failed"
+    },
+    {
+      "task": "T-012",
+      "native": "task_107db7662f7e",
+      "dispatch": "ctx_b68b9aa7c5d3",
+      "agent": "omp",
+      "provider": "omp",
+      "worktree": "aa54a522-a9af-4cb4-9de7-f1d9a349c0fd::E:/4004/orca/workspaces/trade-journal/codex-ai-native-journal-p12",
+      "base": "58209ba32ebb29a9c74b8d7ba4ebe48c766203ec",
+      "purpose": "Phase 12 repair - restore the legacy request-level tool-call budget error that the new execution context made unreachable, and correct the two documentation claims that followed from it",
+      "state": "completed; the repair was dispatched on the same worktree and branch with the four phase commits preserved",
+      "candidate": ["60c4f25", "3483915"],
+      "reviewed": true,
+      "integrated": true,
+      "verified": true,
+      "outcome": "verified, repaired, committed, reported and merged; the coordinator proved the new regression tests fail against the pre-fix code and pass with the fix"
     }
   ],
   "integration": {
@@ -990,6 +1051,29 @@
       "review": "An independent review of the package diff raised 11 findings (1 BLOCK, 10 FAIL); all 11 were fixed and re-verified. Validator: 21 tasks, 21 waves, 20 dependency edges, 12 sources, 79 local links, acyclic, 0 errors; Prettier clean on all changed files; all 12 hash-pinned sources byte-identical.",
       "note": "No candidate branch and no worker merge existed because the phase produced no production code change: the coordinator acted as designated phase verification owner and recorded the Slice A gate evidence. ADR 0009 re-scoped Phase 11 to the gate only and moved the Tauri packaging subset to Phase 21.",
       "report": "docs/superpowers/reports/ai-native-journal-integration-11.md"
+    },
+    {
+      "phase": "12",
+      "stable": "T-012",
+      "native": "task_107db7662f7e",
+      "branch": "codex/ai-native-journal-p12",
+      "merge": "9553de3940485b1a8492a61817f357d89a45753e",
+      "head": "2ea11ce7d7ed253e50e674a1fbb49c4a85d28870",
+      "commits": [
+        "a2f1f72",
+        "a80af56",
+        "ead9b98",
+        "85a4226",
+        "60c4f25",
+        "3483915",
+        "2ea11ce7d7ed253e50e674a1fbb49c4a85d28870"
+      ],
+      "files": 20,
+      "schema": "none",
+      "verification": "destination gate green: pnpm install --frozen-lockfile, pnpm --filter web typecheck, pnpm --filter @luxalgo/journal-core --filter @luxalgo/journal-importers typecheck, pnpm --filter web migrations:check, node scripts/check-licenses.mjs, prettier --check on every changed file, pnpm build all exit 0; pnpm test 105 test files, 1111 tests passed, 143.18s",
+      "review": "one implementation-diff review, then one repair round and one coordinator re-verification; the review found the execution context refusing the tool call at the ceiling before consulting the runtime hook, which made the legacy request-level budget error unreachable, and two documentation claims that followed from it",
+      "note": "no schema, no migration, no dependency and no lockfile change; no cross-boundary import in the pure runtime layer; no push, no pull request and no merge into main ADR 0008 is both a hash-pinned source and a T-012-owned artifact; the integration reconciled the contradiction by recording the owner in the manifest and teaching the validator that an owned source may evolve, so the other 11 sources stay byte-identical to the baseline.",
+      "report": "docs/superpowers/reports/ai-native-journal-integration-12.md"
     }
   ],
   "recordShape": "This file is the index and the authoritative stable-to-native task mapping: stable/native task mapping, worktree and dispatch identifiers, and one compact entry per integrated phase. Narrative, findings, deviations and command output live in the per-phase reports under docs/superpowers/reports/. Keep this file compact - one entry per phase, no duplicated prose. Resolve a native task id from taskMap here or from the native task list, never from a chat summary: a transcription slip once named T-019 as T-005, and the near miss was caught because the native task list disagreed with the prose."

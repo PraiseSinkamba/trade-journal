@@ -38,6 +38,18 @@ for (const s of m.sources) {
   assert(exists(s.path), "Missing source: " + s.path);
   if (!exists(s.path)) continue;
   assert(hash(read(s.path)) === s.sha256, "Source drift: " + s.path);
+  // A source that a phase owns may legitimately evolve when that phase runs, so it
+  // is not required to stay byte-identical to the baseline. The owning phase must
+  // exist and must actually claim the path, and the recorded hash still pins the
+  // current content exactly.
+  if (s.ownedBy) {
+    const owner = m.tasks.find((t) => t.id === s.ownedBy);
+    assert(owner, "Owned source has no owning task: " + s.path);
+    const claimed =
+      owner && (owner.ownership?.areas || []).some((a) => s.path.startsWith(a) || a === s.path);
+    assert(claimed, "Owning task does not claim the owned source: " + s.path);
+    continue;
+  }
   try {
     assert(
       hash(

@@ -22,27 +22,27 @@ The phase report is `docs/superpowers/reports/ai-native-journal-phase-12.md` and
 
 ## Changed-file summary
 
-.omp/reviewer-report.md                            | 140 ++----
- apps/web/src/server/ai-capabilities.ts             | 423 ++++++++++++++++
- apps/web/src/server/ai-contracts.ts                |  54 +++
- apps/web/src/server/ai-scope.ts                    |  98 +++-
- apps/web/src/server/ai.ts                          | 242 +--------
- .../server/intelligence/contracts/capabilities.ts  |  87 ++++
- .../src/server/intelligence/contracts/execution.ts | 143 ++++++
- .../web/src/server/intelligence/contracts/tools.ts |  50 ++
- .../server/intelligence/runtime/ai-sdk-tools.ts    |  57 +++
- .../src/server/intelligence/runtime/dispatcher.ts  |  71 +++
- .../src/server/intelligence/runtime/execution.ts   |  76 +++
- .../intelligence/runtime/journal-capabilities.ts   | 174 +++++++
- .../src/server/intelligence/runtime/registry.ts    |  46 ++
- .../server/intelligence/runtime/tool-gateway.ts    |  68 +++
- apps/web/tests/ai-runtime.test.ts                  |  54 +++
- apps/web/tests/intelligence-runtime.test.ts        | 539 +++++++++++++++++++++
- apps/web/tests/intelligence-scope.test.ts          | 269 ++++++++++
- ...oped-intelligence-and-provider-compatibility.md |  23 +
- .../plans/ai-native-journal/phase-12.md            | 156 ++++++
- .../reports/ai-native-journal-phase-12.md          | 222 +++++++++
- 20 files changed, 2665 insertions(+), 327 deletions(-)
+.omp/reviewer-report.md | 140 ++----
+apps/web/src/server/ai-capabilities.ts | 423 ++++++++++++++++
+apps/web/src/server/ai-contracts.ts | 54 +++
+apps/web/src/server/ai-scope.ts | 98 +++-
+apps/web/src/server/ai.ts | 242 +--------
+.../server/intelligence/contracts/capabilities.ts | 87 ++++
+.../src/server/intelligence/contracts/execution.ts | 143 ++++++
+.../web/src/server/intelligence/contracts/tools.ts | 50 ++
+.../server/intelligence/runtime/ai-sdk-tools.ts | 57 +++
+.../src/server/intelligence/runtime/dispatcher.ts | 71 +++
+.../src/server/intelligence/runtime/execution.ts | 76 +++
+.../intelligence/runtime/journal-capabilities.ts | 174 +++++++
+.../src/server/intelligence/runtime/registry.ts | 46 ++
+.../server/intelligence/runtime/tool-gateway.ts | 68 +++
+apps/web/tests/ai-runtime.test.ts | 54 +++
+apps/web/tests/intelligence-runtime.test.ts | 539 +++++++++++++++++++++
+apps/web/tests/intelligence-scope.test.ts | 269 ++++++++++
+...oped-intelligence-and-provider-compatibility.md | 23 +
+.../plans/ai-native-journal/phase-12.md | 156 ++++++
+.../reports/ai-native-journal-phase-12.md | 222 +++++++++
+20 files changed, 2665 insertions(+), 327 deletions(-)
 
 20 candidate files, 20 files in the merge.
 
@@ -78,19 +78,26 @@ No path outside that set changed, so the integration did not abort on an out-of-
   module, no Next module, no AI SDK module and no workspace package. The runtime layer
   (`intelligence/runtime/`) imports no database module and no Next module; its AI SDK import is
   the intended adapter boundary in `ai-sdk-tools.ts`.
+- Frozen sources: `docs/decisions/0008-scoped-intelligence-and-provider-compatibility.md` is both
+  one of the 12 hash-pinned sources and a file T-012 owns, so the phase legitimately updated it and
+  the package validator reported the drift. The manifest now records the owner on that source and
+  the validator requires the owning task to claim the path, so the other 11 sources stay
+  byte-identical to the baseline commit and the owned ADR's current hash is still pinned exactly.
+  Package validation after the change: 21 tasks, 21 waves, 20 dependency edges, 12 sources, 79
+  local links, acyclic, 0 errors.
 
 ## Destination gate
 
-| Command | Exit | Result |
-| --- | --- | --- |
-| `pnpm install --frozen-lockfile` | 0 | passed |
-| `pnpm --filter web typecheck` | 0 | passed |
-| `pnpm --filter @luxalgo/journal-core --filter @luxalgo/journal-importers typecheck` | 0 | passed |
-| `pnpm --filter web migrations:check` | 0 | passed |
-| `node scripts/check-licenses.mjs` | 0 | passed |
-| `pnpm exec prettier --check .omp/reviewer-report.md apps/web/src/server/ai-capabilities.ts apps/web/src/server/ai-contracts.ts apps/web/src/server/ai-scope.ts apps/web/src/server/ai.ts apps/web/src/server/intelligence/contracts/capabilities.ts apps/web/src/server/intelligence/contracts/execution.ts apps/web/src/server/intelligence/contracts/tools.ts apps/web/src/server/intelligence/runtime/ai-sdk-tools.ts apps/web/src/server/intelligence/runtime/dispatcher.ts apps/web/src/server/intelligence/runtime/execution.ts apps/web/src/server/intelligence/runtime/journal-capabilities.ts apps/web/src/server/intelligence/runtime/registry.ts apps/web/src/server/intelligence/runtime/tool-gateway.ts apps/web/tests/ai-runtime.test.ts apps/web/tests/intelligence-runtime.test.ts apps/web/tests/intelligence-scope.test.ts docs/decisions/0008-scoped-intelligence-and-provider-compatibility.md docs/superpowers/plans/ai-native-journal/phase-12.md docs/superpowers/reports/ai-native-journal-phase-12.md` | 0 | passed |
-| `pnpm build` | 0 | passed |
-| `pnpm test` | 0 | passed |
+| Command                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                         | Exit | Result |
+| ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ---- | ------ |
+| `pnpm install --frozen-lockfile`                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                | 0    | passed |
+| `pnpm --filter web typecheck`                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                   | 0    | passed |
+| `pnpm --filter @luxalgo/journal-core --filter @luxalgo/journal-importers typecheck`                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                             | 0    | passed |
+| `pnpm --filter web migrations:check`                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                            | 0    | passed |
+| `node scripts/check-licenses.mjs`                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                               | 0    | passed |
+| `pnpm exec prettier --check .omp/reviewer-report.md apps/web/src/server/ai-capabilities.ts apps/web/src/server/ai-contracts.ts apps/web/src/server/ai-scope.ts apps/web/src/server/ai.ts apps/web/src/server/intelligence/contracts/capabilities.ts apps/web/src/server/intelligence/contracts/execution.ts apps/web/src/server/intelligence/contracts/tools.ts apps/web/src/server/intelligence/runtime/ai-sdk-tools.ts apps/web/src/server/intelligence/runtime/dispatcher.ts apps/web/src/server/intelligence/runtime/execution.ts apps/web/src/server/intelligence/runtime/journal-capabilities.ts apps/web/src/server/intelligence/runtime/registry.ts apps/web/src/server/intelligence/runtime/tool-gateway.ts apps/web/tests/ai-runtime.test.ts apps/web/tests/intelligence-runtime.test.ts apps/web/tests/intelligence-scope.test.ts docs/decisions/0008-scoped-intelligence-and-provider-compatibility.md docs/superpowers/plans/ai-native-journal/phase-12.md docs/superpowers/reports/ai-native-journal-phase-12.md` | 0    | passed |
+| `pnpm build`                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                    | 0    | passed |
+| `pnpm test`                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                     | 0    | passed |
 
 The gate ran alone on the host, sequentially, after the merge. Every exit code above is the
 exit status of the command itself, never the status of a pipe.
