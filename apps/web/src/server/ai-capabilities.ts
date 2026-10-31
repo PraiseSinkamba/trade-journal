@@ -452,6 +452,7 @@ export function createAskJournalToolDefinitions(
         .strict(),
       outputSchema: findTradesOutputSchema,
       execute: async (input: unknown) => {
+        // The gateway validated the input against the schema above.
         const args = input as { symbol?: string; outcome?: string; dateOrder?: string };
         const direction = args.dateOrder === "oldest" ? 1 : -1;
         const trades = scopedTrades()
@@ -480,6 +481,7 @@ export function createAskJournalToolDefinitions(
       inputSchema: z.object({ key: z.string().min(1).max(300) }).strict(),
       outputSchema: tradeDetailOutputSchema,
       execute: async (input: unknown) => {
+        // The gateway validated the input against the schema above.
         const { key } = input as { key: string };
         const trade = scopedTrades().find((candidate) => candidate.key === key);
         if (!trade) {
@@ -522,6 +524,7 @@ export function createAskJournalToolDefinitions(
         .strict(),
       outputSchema: reportModeOutputSchema,
       execute: async (input: unknown) => {
+        // The gateway validated the input against the schema above.
         const args = input as { mode: string; primary?: string; secondary?: string };
         if (options.reportMode !== true) {
           return { status: "completed", value: { ...AI_TOOL_RESULTS.reportModeDisabled } };

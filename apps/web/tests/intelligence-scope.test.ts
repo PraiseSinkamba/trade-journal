@@ -203,9 +203,8 @@ it("never reads a trade outside the approved scope", async () => {
     registry.register(capability);
   }
   const dispatcher = createCapabilityDispatcher(registry);
-  const execution = createInteractiveContext(scope, new AbortController().signal, {
-    allowedCapabilityIds: [JOURNAL_CAPABILITY_IDS.tradeCritique],
-  });
+  const execution = createInteractiveContext(scope, new AbortController().signal);
+  expect(execution.allowedCapabilityIds).toContain(JOURNAL_CAPABILITY_IDS.tradeCritique);
   const otherAccountKey = queryTrades({ accounts: "b" }).trades[0]!.key;
 
   const outcome = await dispatcher.execute(
