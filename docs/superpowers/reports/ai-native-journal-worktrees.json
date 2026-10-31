@@ -1,7 +1,7 @@
 {
   "schemaVersion": 1,
   "feature": "ai-native-journal",
-  "updatedAt": "2026-10-29T21:47:58Z",
+  "updatedAt": "2026-10-31T10:24:42Z",
   "owner": "parent OMP coordinator (exclusive owner of this record)",
   "repository": {
     "name": "trade-journal",
@@ -223,9 +223,12 @@
         "startSha": "a890700e31a3d4128825f6327bec31d7ff86913a",
         "orcaParentWorktreeId": "aa54a522-a9af-4cb4-9de7-f1d9a349c0fd::E:/4004/orca/workspaces/trade-journal/codex-ai-native-journal",
         "setup": "pnpm install --frozen-lockfile completed in the worker checkout; working tree clean; Node v24.20.0, pnpm 11.0.8; own node_modules and own pnpm virtual store",
-        "state": "dispatched",
+        "state": "integrated and verified on the destination branch, then cleaned up",
         "note": "Phase 10 has its own worktree and branch, at the user request. The phase plan commit and the ten implementation files produced by the revoked first attempt were relocated here from the shared Phase 09 worktree before that worktree was deleted: plan commit 3c78961 (byte-identical content to the original d5b876e) then implementation commit a890700 \"feat: supervise and package journal intelligence worker\". The Phase 09 worktree, branch and directory are gone, and Phase 09 was already merged into the feature branch at 0915173.",
-        "blockedGate": "The Docker scratch-volume deployment gate is EXPLICITLY BLOCKED host evidence, verified by the coordinator: the Docker client 29.6.1 is installed with the desktop-linux context, but com.docker.service is Stopped (StartType Manual) and the dockerDesktopLinuxEngine named pipe is absent, so docker info cannot connect. It is not a phase failure and it is never mocked. Every other acceptance item must pass: packaged clean-directory smoke, shutdown, parent disconnect, and the native portability and lifecycle suites. The item is carried forward to the release gate as an open deployment item; the user can start Docker Desktop and the smoke can then be run without redoing the phase."
+        "blockedGate": "The Docker scratch-volume deployment gate is EXPLICITLY BLOCKED host evidence, verified by the coordinator: the Docker client 29.6.1 is installed with the desktop-linux context, but com.docker.service is Stopped (StartType Manual) and the dockerDesktopLinuxEngine named pipe is absent, so docker info cannot connect. It is not a phase failure and it is never mocked. Every other acceptance item must pass: packaged clean-directory smoke, shutdown, parent disconnect, and the native portability and lifecycle suites. The item is carried forward to the release gate as an open deployment item; the user can start Docker Desktop and the smoke can then be run without redoing the phase.",
+        "merge": "54463d7800f4e72d2b7f109e02c0f02c76458383",
+        "verified": "103 files, 1074 tests passed on the destination branch",
+        "cleanupNote": "The worker completed the work and committed it, but the runtime revoked the dispatch and refused its worker_done, so the coordinator settled task_b00115dce3c4 directly against the committed evidence. The worktree, branch and directory were removed after the merge was verified."
       }
     ]
   },
@@ -358,12 +361,15 @@
       "wave": 10,
       "branch": "codex/ai-native-journal-p10",
       "deps": ["task_5b7ff94b51b9"],
-      "status": "dispatched",
-      "state": "dispatched",
+      "status": "completed",
+      "state": "completed",
       "nativeDispatch": "ctx_9850d5f78296",
       "nativeHandle": "term_c7f23841-029d-4833-a682-6cfffa7e3c3d",
-      "evidence": "the first attempt produced the implementation and had its 17 native portability and lifecycle tests passing, but its dispatch was revoked by an Orca runtime restart at 2026-07-29T16:04Z before it could write the phase report and send worker_done. The work was preserved, relocated into this worktree as plan 3c78961 plus implementation a890700, and a replacement attempt dispatched to verify, repair, report and close.",
-      "priorDispatch": "ctx_f76b5d0b58d3"
+      "evidence": "The replacement worker verified the implementation, repaired three packaging and supervisor defects, proved a real packaged startup on a disposable port, and committed the phase report. Its worker_done was refused because the runtime revoked the dispatch; the coordinator settled the task against the committed evidence.",
+      "priorDispatch": "ctx_f76b5d0b58d3",
+      "outcome": "succeeded",
+      "merged": "54463d7800f4e72d2b7f109e02c0f02c76458383",
+      "verified": "103 files, 1074 tests passed on the destination branch"
     },
     {
       "stable": "T-011",
@@ -708,11 +714,12 @@
       "started": "2026-07-29T16:25:00Z",
       "base": "a890700e31a3d4128825f6327bec31d7ff86913a",
       "purpose": "Phase 10 - Node supervisor, worker bundle and Docker startup; the implementation is already committed, so this attempt verifies, repairs, writes the phase report and emits the missing worker_done",
-      "state": "actively executing",
-      "candidate": null,
-      "reviewed": false,
-      "integrated": false,
-      "verified": false
+      "state": "completed; the worker committed the work but the runtime revoked the dispatch before worker_done",
+      "candidate": ["3c78961", "a890700", "37f338a", "28c663d"],
+      "reviewed": true,
+      "integrated": true,
+      "verified": true,
+      "outcome": "verified, repaired, committed and reported; the coordinator settled the task"
     }
   ],
   "integration": {
@@ -949,6 +956,20 @@
       "reviewed": true,
       "integrated": true,
       "verified": true
+    },
+    {
+      "phase": "10",
+      "stable": "T-010",
+      "native": "task_b00115dce3c4",
+      "branch": "codex/ai-native-journal-p10",
+      "merge": "54463d7800f4e72d2b7f109e02c0f02c76458383",
+      "head": "aaf8212a504fda17654a8ca99ef4b790e904de06",
+      "commits": ["3c78961", "a890700", "37f338a", "28c663d", "aaf8212"],
+      "files": 14,
+      "schema": "none",
+      "verification": "destination gate green: install, typechecks, migrations:check, license, format:check on every changed file, build all 0; pnpm test 103 files, 1074 tests passed",
+      "dockerGate": "blocked by host evidence: the daemon is stopped and was not started; no Docker result claimed; carried to the release gate",
+      "report": "docs/superpowers/reports/ai-native-journal-integration-10.md"
     }
   ],
   "recordShape": "This file is the index and the authoritative stable-to-native task mapping: stable/native task mapping, worktree and dispatch identifiers, and one compact entry per integrated phase. Narrative, findings, deviations and command output live in the per-phase reports under docs/superpowers/reports/. Keep this file compact - one entry per phase, no duplicated prose. Resolve a native task id from taskMap here or from the native task list, never from a chat summary: a transcription slip once named T-019 as T-005, and the near miss was caught because the native task list disagreed with the prose."
