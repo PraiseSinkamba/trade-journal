@@ -1,7 +1,7 @@
 {
   "schemaVersion": 1,
   "feature": "ai-native-journal",
-  "updatedAt": "2026-10-31T10:24:42Z",
+  "updatedAt": "2026-10-31",
   "owner": "parent OMP coordinator (exclusive owner of this record)",
   "repository": {
     "name": "trade-journal",
@@ -62,7 +62,7 @@
   },
   "orchestration": {
     "runId": "run_7a7c8b5c2ffa",
-    "runObjective": "AI-native Journal Architecture Modernization: 21-phase implementation (T-001..T-021) on branch codex/ai-native-journal, base 4ae868dbbb72f975f9767efb4e212884ecca7803, repository trade-journal. Authorized scope this pass: Phase 01 / T-001 only.",
+    "runObjective": "AI-native Journal Architecture Modernization: 21-phase implementation (T-001..T-021) on branch codex/ai-native-journal, base 4ae868dbbb72f975f9767efb4e212884ecca7803, repository trade-journal. Authorized scope this pass: Phase 01 / T-001 only. Phase 11 was re-scoped by ADR 0009: the Tauri desktop packaging and sidecar lifecycle subset moved to Phase 21, and Phase 11 closed as the Slice A integrated gate. Phase 12 (execution contexts, deterministic capability registry and tool gateway) is the phase now in flight.",
     "coordinatorHandle": "term_be3e17cd-d192-4fd4-8a5f-143d03720fc0",
     "orcaCli": "orca 1.4.237 (C:/Users/4004/AppData/Local/Programs/orca/resources/bin/orca.cmd)",
     "runtimeId": "c79da73a-53a2-43bc-9349-32d539edaf93",
@@ -71,7 +71,7 @@
   },
   "authorization": {
     "grantedBy": "user pasted committed orca-execution-prompt.md (revision 4ae868dbbb72f975f9767efb4e212884ecca7803)",
-    "authorizedPhases": ["01", "02", "03", "04", "05", "06", "07", "08", "09", "10"],
+    "authorizedPhases": ["01", "02", "03", "04", "05", "06", "07", "08", "09", "10", "11"],
     "authorizedTasks": [
       "T-001",
       "T-002",
@@ -82,11 +82,10 @@
       "T-007",
       "T-008",
       "T-009",
-      "T-010"
+      "T-010",
+      "T-011"
     ],
     "awaitingContinuation": [
-      "T-011",
-      "T-012",
       "T-013",
       "T-014",
       "T-015",
@@ -97,7 +96,7 @@
       "T-020",
       "T-021"
     ],
-    "note": "Each later phase requires an explicit user continuation instruction after its predecessor is integrated and verified. A status request does not authorize starting another phase."
+    "note": "Each later phase requires an explicit user continuation instruction after its predecessor is integrated and verified. A status request does not authorize starting another phase. On 2026-10-31 the maintainer instructed to defer the Phase 11 Tauri packaging subset to Phase 21 and to focus on the feature phases; ADR 0009 records the re-sequencing. Phase 11 was completed by the coordinator as a verification-only gate with no production code change."
   },
   "worktrees": {
     "feature": {
@@ -376,10 +375,15 @@
       "native": "task_3b1725afcaa2",
       "phase": "11",
       "wave": 11,
-      "branch": "codex/ai-native-journal-p11",
+      "branch": "none - verification-only phase, no candidate branch",
       "deps": ["task_b00115dce3c4"],
-      "status": "pending",
-      "state": "created"
+      "status": "completed",
+      "state": "integrated",
+      "outcome": "succeeded",
+      "verified": "gate evidence on branch codex/ai-native-journal at base 8648412: integrated no-provider Slice A slice (10 intelligence test files) exit 0, 118 tests passed, 35.60s; phase gate command (4 owned test files) exit 0, 37 tests passed, 26.65s; targeted financial regression (packages/core/tests, execution-storage, import-formats-regression, history-import) exit 0, 89 tests passed, 10.01s; full pnpm test exit 0, 103 test files, 1074 tests passed, 197.93s; pnpm typecheck exit 101 - packages/core, packages/importers and apps/web pass, the failure is the desktop workspace cargo check on the missing Tauri sidecar resource",
+      "evidence": "the coordinator ran the Slice A gate itself and recorded it in docs/superpowers/reports/ai-native-journal-phase-11.md and docs/superpowers/reports/ai-native-journal-integration-11.md; ADR 0009 (docs/decisions/0009-defer-tauri-packaging-to-release-acceptance.md, Accepted, 2026-10-31) re-scoped Phase 11 to the Slice A integrated gate only and moved the Tauri desktop packaging and sidecar lifecycle subset to Phase 21",
+      "commits": ["6c030d6", "58209ba"],
+      "note": "no worker dispatch occurred because the phase produced no code; the two blocked host-evidence items, the Docker scratch-volume smoke and the desktop cargo check sidecar defect, were carried to the release gate G-FINAL"
     },
     {
       "stable": "T-012",
@@ -388,8 +392,9 @@
       "wave": 12,
       "branch": "codex/ai-native-journal-p12",
       "deps": ["task_3b1725afcaa2"],
-      "status": "pending",
-      "state": "created"
+      "status": "dispatched",
+      "state": "dispatched",
+      "note": "in flight on branch codex/ai-native-journal-p12, with the T-011 gate reports as its predecessor evidence"
     },
     {
       "stable": "T-013",
@@ -730,7 +735,7 @@
   },
   "gates": {
     "G-BOOTSTRAP": "passed: resolved executionDocsSha, validated committed package, topology rechecked, authorized phase recorded, starting refs pinned",
-    "G-A": "after T-011",
+    "G-A": "passed: the ten design §18 Vertical Slice A scenarios ran as one coherent no-provider slice (10 intelligence test files, 118 tests, exit 0); the targeted financial regression and the full pnpm test (103 files, 1074 tests) are green; the packaged Node smoke is recorded. The Docker scratch-volume smoke and the actual Tauri lifecycle/ABI evidence are required at G-FINAL.",
     "G-B": "after T-019",
     "G-FINAL": "after T-021"
   },
@@ -743,16 +748,17 @@
     },
     {
       "tool": "desktop cargo check (root pnpm typecheck)",
-      "status": "DIAGNOSED and awaiting the user decision to land the fixes. Root cause of the original RC2175 symptom, a stale shared cargo target artifact pointing at a deleted worktree icon, was cleared by the coordinator; the two remaining defects are real repository bugs.",
+      "status": "DIAGNOSED; the two remaining defects are real repository bugs, now owned by Phase 21 under ADR 0009. The root cause of the original RC2175 symptom, a stale shared cargo target artifact pointing at a deleted worktree icon, was cleared by the coordinator.",
       "findings": [
         "RESOLVED by the coordinator: a stale shared cargo target artifact at E:/build-cache/target/debug/build/trade-journal-desktop-119a88e22edbe3fa/out/resource.rc hardcoded the ICON path of the now-deleted Phase 01 worktree (codex-ai-native-journal-p01). rc.exe cannot read a file that no longer exists and reports it as 'RC2175 resource file is not in 3.00 format', which is a misleading message for a missing file. Clearing the stale trade-journal-desktop-* build dirs in the shared target removed the RC2175 entirely.",
         "REPO DEFECT: desktop/scripts/run-sidecar-setup.js uses CommonJS require() while desktop/package.json declares type: module, so the repository's own 'pnpm --filter desktop setup:sidecar' fails with 'ReferenceError: require is not defined in ES module scope'. The sidecar binaries/node-x86_64-pc-windows-msvc.exe is therefore never produced, and cargo check then fails with \"resource path binaries/node-x86_64-pc-windows-msvc.exe doesn't exist\". Fix is a one-line import conversion.",
         "REPO DEFECT: desktop/src-tauri/scripts/gen_icons/src/main.rs write_ico emits an invalid ICO despite its comment claiming Windows rc.exe compatibility. The generated icon.ico has ICONDIR type=0 (must be 1 for an icon), count=1 where six sizes were written, entry width=6 height=0, and entry size/offset values (73924640 / 6684672) that point far beyond the end of the 370072-byte file."
       ],
-      "impact": "The root pnpm typecheck fails in the desktop workspace for reasons independent of the AI-native journal work: this is pre-existing on main and blocks the CI typecheck step and the G-FINAL whole-project gate. The per-phase gate is unaffected - web, core and importers typecheck all exit 0.",
+      "impact": "The two repository defects are owned by the Phase 21 Tauri packaging subset. The root cause of the missing sidecar resource is the sidecar setup script's CommonJS require() in an ESM package. They block the desktop cargo check element of the root pnpm typecheck and the Windows smoke, and they block no feature phase.",
       "decision": "The coordinator diagnosed but did not fix the two repository defects: desktop tooling is outside the AI-native journal scope and is owned by the later operational phase. They need an explicitly scoped change, not silent scope creep.",
-      "blocking": "blocks the root pnpm typecheck element of the whole-project gate only",
-      "phase11Impact": "This is now a HARD PREREQUISITE for Phase 11, not a later-phase nicety. Phase 11 owns the Tauri lifecycle and packaging and its acceptance requires the ACTUAL bundled sidecar ABI, which needs the broken sidecar setup script to run, and its cargo check needs the invalid ICO fixed. Both defects must be repaired before Phase 11 is dispatched. The coordinator staged Phase 11 dispatch at go-p11.cjs and has offered to land both fixes as one explicitly scoped mechanical change on the feature branch before that dispatch."
+      "owner": "Phase 21 (T-021) Tauri packaging subset, per ADR 0009",
+      "blocking": "blocks the desktop cargo check element of the root pnpm typecheck and the Windows smoke; blocks no feature phase",
+      "phase21Impact": "ADR 0009 moved the Tauri desktop packaging and sidecar lifecycle subset from Phase 11 to Phase 21. Both defects must be repaired before Phase 21 acceptance, because its acceptance requires the ACTUAL bundled sidecar ABI, which needs the broken sidecar setup script to run, and its cargo check needs the invalid ICO fixed. The Tauri lifecycle and ABI evidence requirement moved from G-A to G-FINAL and was not dropped."
     }
   ],
   "dispatchGuidance": {
@@ -768,7 +774,10 @@
       "keep the dispatch brief to the delta: resolved runtime values, handoff facts and the few real traps, pointing at the committed packet for the contract instead of restating it, because restating the contract invites a clause-by-clause checking mode",
       "the coordinator nudges the worker once when it appears to be idling, rather than letting it sit in a loop"
     ],
-    "alsoLearned": "the worker-read transcript source can serve a stale bounded window and make a live worker look hung; the terminal source is the reliable view of what the agent is actually doing"
+    "alsoLearned": "the worker-read transcript source can serve a stale bounded window and make a live worker look hung; the terminal source is the reliable view of what the agent is actually doing",
+    "directives": [
+      "2026-10-31, maintainer: defer the Phase 11 Tauri packaging subset to Phase 21 and focus on the feature phases. Honoured by re-scoping Phase 11 to the Slice A integrated gate under ADR 0009, not by skipping a gate."
+    ]
   },
   "secretsPolicy": "this record contains no credentials, keys, tokens or provider payloads",
   "integrations": [
@@ -970,6 +979,17 @@
       "verification": "destination gate green: install, typechecks, migrations:check, license, format:check on every changed file, build all 0; pnpm test 103 files, 1074 tests passed",
       "dockerGate": "blocked by host evidence: the daemon is stopped and was not started; no Docker result claimed; carried to the release gate",
       "report": "docs/superpowers/reports/ai-native-journal-integration-10.md"
+    },
+    {
+      "phase": "11",
+      "task": "T-011",
+      "native": "task_3b1725afcaa2",
+      "base": "8648412",
+      "commits": ["6c030d6", "58209ba"],
+      "checks": "integrated no-provider Slice A slice (10 intelligence test files) exit 0, 118 tests passed, 35.60s; phase gate command (4 owned test files) exit 0, 37 tests passed, 26.65s; targeted financial regression exit 0, 89 tests passed, 10.01s; full pnpm test exit 0, 103 test files, 1074 tests passed, 197.93s; pnpm typecheck exit 101 - packages/core, packages/importers and apps/web pass, the failure is the desktop workspace cargo check on the missing Tauri sidecar resource. Blocked host evidence, never mocked: the Docker scratch-volume smoke (daemon stopped on this host) and the desktop cargo check sidecar defect.",
+      "review": "An independent review of the package diff raised 11 findings (1 BLOCK, 10 FAIL); all 11 were fixed and re-verified. Validator: 21 tasks, 21 waves, 20 dependency edges, 12 sources, 79 local links, acyclic, 0 errors; Prettier clean on all changed files; all 12 hash-pinned sources byte-identical.",
+      "note": "No candidate branch and no worker merge existed because the phase produced no production code change: the coordinator acted as designated phase verification owner and recorded the Slice A gate evidence. ADR 0009 re-scoped Phase 11 to the gate only and moved the Tauri packaging subset to Phase 21.",
+      "report": "docs/superpowers/reports/ai-native-journal-integration-11.md"
     }
   ],
   "recordShape": "This file is the index and the authoritative stable-to-native task mapping: stable/native task mapping, worktree and dispatch identifiers, and one compact entry per integrated phase. Narrative, findings, deviations and command output live in the per-phase reports under docs/superpowers/reports/. Keep this file compact - one entry per phase, no duplicated prose. Resolve a native task id from taskMap here or from the native task list, never from a chat summary: a transcription slip once named T-019 as T-005, and the near miss was caught because the native task list disagreed with the prose."
