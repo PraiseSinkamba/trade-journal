@@ -8,12 +8,20 @@ import {
   byWeekday,
   computeMetrics,
   dayKeyOf,
+  type AnnotatedTrade,
   type BucketStats,
 } from "@luxalgo/journal-core";
+import { z } from "zod";
 import { queryTrades } from "./trades-query";
 import { getTradeByKey, rowToTrade } from "./trades-query";
 import { listExecutions } from "./executions";
 import { accountContext, type FrozenApprovedScope } from "./ai-scope";
+import { AI_TOOL_IDS, AI_TOOL_RESULTS, aiToolFailure } from "./ai-contracts";
+import { reportContext, type ReportMode } from "./ai-report-context";
+import type { JournalCapabilityPort } from "./intelligence/contracts/capabilities";
+import type { ExecutionContext } from "./intelligence/contracts/execution";
+import type { ToolDefinition, ToolGateway } from "./intelligence/contracts/tools";
+import { createGatewayTool, type ExecutableSdkTool } from "./intelligence/runtime/ai-sdk-tools";
 import {
   db,
   playbooks,
@@ -326,4 +334,416 @@ export async function progressHistory(
   const overallPct = totalAll > 0 ? Math.round((totalDone / totalAll) * 100) : 0;
   lines.push(`Overall: ${totalDone}/${totalAll} completed (${overallPct}%)`);
   return { context: cap(lines.join("\n")), scope };
+}
+
+/* ---------------------------------------------------------------------------
+ * The registered Ask and Reports tools.
+ *
+ * A tool is the model-facing view of a scoped journal read. Every tool is
+ * registered with strict schemas so the gateway can refuse a malformed or
+ * out-of-scope call before it reaches a query. No tool can widen the scope,
+ * and no tool writes to the journal.
+ * ------------------------------------------------------------------------ */
+
+const tradeSummarySchema = z
+  .object({
+    key: z.string(),
+    symbol: z.string(),
+    direction: z.string(),
+    outcome: z.string(),
+    openedAt: z.string(),
+    closedAt: z.string().optional(),
+    quantity: z.number(),
+    netPnl: z.number(),
+    fees: z.number(),
+  })
+  .strict();
+
+const fillSummarySchema = z
+  .object({
+    id: z.string(),
+    symbol: z.string(),
+    side: z.string(),
+    quantity: z.number(),
+    price: z.number(),
+    fee: z.number(),
+    executedAt: z.string(),
+  })
+  .strict();
+
+const errorResultSchema = z.object({ error: z.string() }).strict();
+
+const summaryOutputSchema = z.union([
+  z.object({ context: z.string() }).strict(),
+  errorResultSchema,
+]);
+
+const findTradesOutputSchema = z.union([
+  z.object({ trades: z.array(tradeSummarySchema) }).strict(),
+  errorResultSchema,
+]);
+
+const tradeDetailOutputSchema = z.union([
+  z.object({ trade: tradeSummarySchema, fills: z.array(fillSummarySchema) }).strict(),
+  errorResultSchema,
+]);
+
+const reportModeOutputSchema = z.union([
+  z.object({ context: z.string(), mode: z.string() }).strict(),
+  errorResultSchema,
+]);
+
+/** Return a bounded trade projection rather than user notes or arbitrary annotations. */
+const summarizeTrade = (trade: AnnotatedTrade) => ({
+  key: trade.key,
+  symbol: trade.symbol,
+  direction: trade.direction,
+  outcome: trade.status,
+  openedAt: trade.openedAt,
+  closedAt: trade.closedAt,
+  quantity: trade.quantity,
+  netPnl: trade.netPnl,
+  fees: trade.fees,
+});
+
+/** The options that decide whether the report-mode tool is enabled. */
+export type AskJournalToolOptions = Readonly<{ reportMode?: boolean }>;
+
+/**
+ * Register the Ask and Reports tools over one approved scope.
+ *
+ * The tools are bound to the scope that the route already approved, so they
+ * can only read what that scope allows. The report-mode tool stays registered
+ * for every feature because the legacy tool set exposed it; it refuses
+ * itself when the feature is not the reports agent.
+ */
+export function createAskJournalToolDefinitions(
+  scope: FrozenApprovedScope,
+  context: string,
+  options: AskJournalToolOptions = {},
+): ToolDefinition[] {
+  const scopedTrades = () => queryTrades(scope.filters, scope.timeZone).trades;
+
+  return [
+    {
+      id: AI_TOOL_IDS.journalSummary,
+      requiredDataSources: ["trades"],
+      version: "1",
+      description:
+        "Return the current aggregate and bucket summary for the selected journal scope.",
+      access: "read",
+      inputSchema: z.object({}).strict(),
+      outputSchema: summaryOutputSchema,
+      execute: async () => ({ status: "completed", value: { context } }),
+    },
+    {
+      id: AI_TOOL_IDS.findTrades,
+      requiredDataSources: ["trades"],
+      version: "1",
+      description:
+        "Find at most five trade summaries within the current journal scope, narrowed only by symbol, outcome, and chronological order.",
+      access: "read",
+      inputSchema: z
+        .object({
+          symbol: z.string().min(1).max(64).optional(),
+          outcome: z.enum(["win", "loss", "breakeven", "open"]).optional(),
+          dateOrder: z.enum(["newest", "oldest"]).optional(),
+        })
+        .strict(),
+      outputSchema: findTradesOutputSchema,
+      execute: async (input: unknown) => {
+        const args = input as { symbol?: string; outcome?: string; dateOrder?: string };
+        const direction = args.dateOrder === "oldest" ? 1 : -1;
+        const trades = scopedTrades()
+          .filter(
+            (trade) =>
+              (args.symbol === undefined || trade.symbol === args.symbol) &&
+              (args.outcome === undefined || trade.status === args.outcome),
+          )
+          .sort(
+            (left, right) =>
+              direction *
+              (left.openedAt.localeCompare(right.openedAt) || left.key.localeCompare(right.key)),
+          )
+          .slice(0, 5)
+          .map(summarizeTrade);
+        return { status: "completed", value: { trades } };
+      },
+    },
+    {
+      id: AI_TOOL_IDS.tradeDetail,
+      requiredDataSources: ["trades"],
+      version: "1",
+      description:
+        "Return one scoped trade and at most fifty of its chronological fills after verifying its key.",
+      access: "read",
+      inputSchema: z.object({ key: z.string().min(1).max(300) }).strict(),
+      outputSchema: tradeDetailOutputSchema,
+      execute: async (input: unknown) => {
+        const { key } = input as { key: string };
+        const trade = scopedTrades().find((candidate) => candidate.key === key);
+        if (!trade) {
+          return { status: "completed", value: { ...AI_TOOL_RESULTS.tradeUnavailable } };
+        }
+        const fills = listExecutions(trade.accountId, trade.executionIds)
+          .sort(
+            (left, right) =>
+              left.executedAt.localeCompare(right.executedAt) || left.id.localeCompare(right.id),
+          )
+          .slice(0, 50)
+          .map((fill) => ({
+            id: fill.id,
+            symbol: fill.symbol,
+            side: fill.side,
+            quantity: fill.quantity,
+            price: fill.price,
+            fee: fill.fee,
+            executedAt: fill.executedAt,
+          }));
+        return { status: "completed", value: { trade: summarizeTrade(trade), fills } };
+      },
+    },
+    {
+      id: AI_TOOL_IDS.reportMode,
+      requiredDataSources: ["trades"],
+      version: "1",
+      description:
+        "Switch the active report mode and return its bounded context summary. " +
+        "Modes: overview, trends, explorer, breakdown, compare. " +
+        "compare mode requires a primary key (symbol). " +
+        "Never pass account, date, filter, or timezone — the tool operates within the frozen journal scope.",
+      access: "read",
+      inputSchema: z
+        .object({
+          mode: z.string(),
+          primary: z.string().optional(),
+          secondary: z.string().optional(),
+        })
+        .strict(),
+      outputSchema: reportModeOutputSchema,
+      execute: async (input: unknown) => {
+        const args = input as { mode: string; primary?: string; secondary?: string };
+        if (options.reportMode !== true) {
+          return { status: "completed", value: { ...AI_TOOL_RESULTS.reportModeDisabled } };
+        }
+        // The report context validates the mode and the keys it is given.
+        const result = await reportContext(scope, args.mode as ReportMode, {
+          primary: args.primary,
+          secondary: args.secondary,
+        });
+        if ("error" in result) return { status: "completed", value: { ...result } };
+        return { status: "completed", value: { ...result, mode: args.mode } };
+      },
+    },
+  ];
+}
+
+/**
+ * Bind the read-only journal capabilities to one approved scope.
+ *
+ * The port is the only path the pure runtime has into the journal; the
+ * adapter keeps the existing queries and their existing results.
+ */
+export function createScopedJournalPort(scope: FrozenApprovedScope): JournalCapabilityPort {
+  return {
+    askContext: async () => await askJournalContext(scope),
+    dailyRecap: async (date: string, existingNote: string | undefined) => {
+      try {
+        return await dailyRecapContext(scope, date, existingNote);
+      } catch (error) {
+        return {
+          error:
+            error instanceof Error
+              ? error.message
+              : "No closed trades match this day and the selected filters",
+        };
+      }
+    },
+    tradeCritique: async (key: string) => {
+      const scoped = queryTrades(scope.filters, scope.timeZone).trades.find(
+        (trade) => trade.key === key,
+      );
+      if (!scoped) return undefined;
+      return (await tradeCritiqueContext(key)) ?? undefined;
+    },
+    playbookRules: async (key: string) => await playbookRulesForTrade(scope, key),
+    missedObservations: async (since: string, until: string | undefined) =>
+      await missedObservations(scope, since, until),
+    notebookEntries: async (folderId: string | undefined, query: string | undefined) =>
+      await notebookEntries(scope, folderId, query),
+    progressHistory: async (weeks: number | undefined) => await progressHistory(scope, weeks),
+  };
+}
+
+/* ---------------------------------------------------------------------------
+ * The AI SDK view of the Ask and Reports tools.
+ *
+ * The provider schema tells the model what an argument looks like; the Zod
+ * contract is the authority that decides whether the call is valid. The
+ * gateway decides whether the call may run at all.
+ * ------------------------------------------------------------------------ */
+
+/** The narrow, deterministic trade-search input. */
+export type FindTradesInput = Readonly<{
+  symbol?: string;
+  outcome?: "win" | "loss" | "breakeven" | "open";
+  dateOrder?: "newest" | "oldest";
+}>;
+
+/** The sole opaque identifier accepted by the trade-detail tool. */
+export type TradeDetailInput = Readonly<{ key: string }>;
+
+/** The report-mode input; the report context validates the mode and the keys. */
+export type ReportModeInput = Readonly<{ mode: string; primary?: string; secondary?: string }>;
+
+/** The bounded trade projection the tools return. */
+export type TradeSummary = Readonly<{
+  key: string;
+  symbol: string;
+  direction: string;
+  outcome: string;
+  openedAt: string;
+  closedAt?: string;
+  quantity: number;
+  netPnl: number;
+  fees: number;
+}>;
+
+/** The bounded fill projection the trade-detail tool returns. */
+export type FillSummary = Readonly<{
+  id: string;
+  symbol: string;
+  side: string;
+  quantity: number;
+  price: number;
+  fee: number;
+  executedAt: string;
+}>;
+
+/** The result a refused call returns. */
+export type ToolErrorResult = Readonly<{ error: string }>;
+
+/** The Ask and Reports tool set as the AI SDK sees it. */
+export type AskJournalSdkTools = {
+  get_journal_summary: ExecutableSdkTool<
+    Record<string, never>,
+    { context: string } | ToolErrorResult
+  >;
+  find_trades: ExecutableSdkTool<FindTradesInput, { trades: TradeSummary[] } | ToolErrorResult>;
+  get_trade_detail: ExecutableSdkTool<
+    TradeDetailInput,
+    { trade: TradeSummary; fills: FillSummary[] } | ToolErrorResult
+  >;
+  switch_report_mode: ExecutableSdkTool<
+    ReportModeInput,
+    { context: string; mode: string } | ToolErrorResult
+  >;
+};
+
+/**
+ * Expose the registered Ask and Reports tools to the AI SDK.
+ *
+ * Only the registered tools are exposed, and every call runs through the
+ * gateway, so the model can never reach an operation that the execution
+ * context does not allow.
+ */
+export function createAskJournalSdkTools(options: {
+  scope: FrozenApprovedScope;
+  context: string;
+  reportMode: boolean;
+  gateway: ToolGateway;
+  execution: ExecutionContext;
+}): AskJournalSdkTools {
+  const shared = {
+    gateway: options.gateway,
+    context: options.execution,
+    onFailure: aiToolFailure,
+  };
+
+  return {
+    get_journal_summary: createGatewayTool<
+      Record<string, never>,
+      { context: string } | ToolErrorResult
+    >({
+      ...shared,
+      id: AI_TOOL_IDS.journalSummary,
+      description:
+        "Return the current aggregate and bucket summary for the selected journal scope.",
+      providerSchema: { type: "object", additionalProperties: false, properties: {} },
+      inputSchema: z.object({}).strict(),
+    }),
+    find_trades: createGatewayTool<FindTradesInput, { trades: TradeSummary[] } | ToolErrorResult>({
+      ...shared,
+      id: AI_TOOL_IDS.findTrades,
+      description:
+        "Find at most five trade summaries within the current journal scope, narrowed only by symbol, outcome, and chronological order.",
+      providerSchema: {
+        type: "object",
+        additionalProperties: false,
+        properties: {
+          symbol: { type: "string", minLength: 1, maxLength: 64 },
+          outcome: { type: "string", enum: ["win", "loss", "breakeven", "open"] },
+          dateOrder: { type: "string", enum: ["newest", "oldest"] },
+        },
+      },
+      inputSchema: z
+        .object({
+          symbol: z.string().min(1).max(64).optional(),
+          outcome: z.enum(["win", "loss", "breakeven", "open"]).optional(),
+          dateOrder: z.enum(["newest", "oldest"]).optional(),
+        })
+        .strict(),
+    }),
+    get_trade_detail: createGatewayTool<
+      TradeDetailInput,
+      { trade: TradeSummary; fills: FillSummary[] } | ToolErrorResult
+    >({
+      ...shared,
+      id: AI_TOOL_IDS.tradeDetail,
+      description:
+        "Return one scoped trade and at most fifty of its chronological fills after verifying its key.",
+      providerSchema: {
+        type: "object",
+        additionalProperties: false,
+        properties: { key: { type: "string", minLength: 1, maxLength: 300 } },
+        required: ["key"],
+      },
+      inputSchema: z.object({ key: z.string().min(1).max(300) }).strict(),
+    }),
+    switch_report_mode: createGatewayTool<
+      ReportModeInput,
+      { context: string; mode: string } | ToolErrorResult
+    >({
+      ...shared,
+      id: AI_TOOL_IDS.reportMode,
+      description:
+        "Switch the active report mode and return its bounded context summary. " +
+        "Modes: overview, trends, explorer, breakdown, compare. " +
+        "compare mode requires a primary key (symbol). " +
+        "Never pass account, date, filter, or timezone — the tool operates within the frozen journal scope.",
+      providerSchema: {
+        type: "object",
+        additionalProperties: false,
+        properties: {
+          mode: {
+            type: "string",
+            enum: ["overview", "trends", "explorer", "breakdown", "compare"],
+          },
+          primary: { type: "string", minLength: 1, maxLength: 64 },
+          secondary: { type: "string", minLength: 1, maxLength: 64 },
+        },
+        required: ["mode"],
+      },
+      // The report context validates the mode and the keys it is given, so the
+      // contract stays permissive here and the report context stays the
+      // authority on its own arguments.
+      inputSchema: z
+        .object({
+          mode: z.string(),
+          primary: z.string().optional(),
+          secondary: z.string().optional(),
+        })
+        .strict(),
+    }),
+  };
 }

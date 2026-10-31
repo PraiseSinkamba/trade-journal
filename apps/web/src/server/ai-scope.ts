@@ -6,6 +6,14 @@ import {
 } from "@luxalgo/journal-core";
 import { db, accounts, playbooks } from "@/db";
 import { describeFilters } from "@/lib/filter-description";
+import { AI_FEATURE_POLICIES, AI_FEATURE_TOOL_IDS, type AiFeature } from "./ai-contracts";
+import { JOURNAL_CAPABILITY_IDS } from "./intelligence/contracts/capabilities";
+import {
+  DATA_SOURCES,
+  type DataSource,
+  type ExecutionContext,
+} from "./intelligence/contracts/execution";
+import { createExecutionContext } from "./intelligence/runtime/execution";
 import { requireValue } from "./request-error";
 import { getTimeZone } from "./settings";
 
@@ -21,8 +29,7 @@ export function deepFreeze<T>(value: T): T {
 }
 
 /** Narrow data-source selector for typed read-only capabilities. */
-export type DataSource =
-  "trades" | "trades+playbooks" | "trades+missed" | "trades+notes" | "trades+progress";
+export type { DataSource } from "./intelligence/contracts/execution";
 
 /** Deep-frozen snapshot of the validated AI request scope. */
 export type FrozenApprovedScope = Readonly<{
@@ -61,10 +68,8 @@ export function readAiRequest(value: unknown, field: "question" | "date") {
   requireValue(
     rawDataSource === undefined ||
       (typeof rawDataSource === "string" &&
-        ["trades", "trades+playbooks", "trades+missed", "trades+notes", "trades+progress"].includes(
-          rawDataSource,
-        )),
-    "dataSource must be one of: trades, trades+playbooks, trades+missed, trades+notes, trades+progress",
+        (DATA_SOURCES as readonly string[]).includes(rawDataSource)),
+    `dataSource must be one of: ${DATA_SOURCES.join(", ")}`,
   );
   const dataSource = (rawDataSource ?? "trades") as DataSource;
 
@@ -197,4 +202,85 @@ export function accountContext(trades: AnnotatedTrade[], scope: FrozenApprovedSc
       ? "\nAccounts use different currencies. Combined amounts below are unconverted sums, not a common-currency portfolio return. Do not compare monetary performance across currencies."
       : "")
   );
+}
+
+/** The capabilities one approved data source may use. */
+const DATA_SOURCE_CAPABILITY_IDS: Readonly<Record<DataSource, readonly string[]>> = {
+  trades: [
+    JOURNAL_CAPABILITY_IDS.askContext,
+    JOURNAL_CAPABILITY_IDS.dailyRecap,
+    JOURNAL_CAPABILITY_IDS.tradeCritique,
+  ],
+  "trades+playbooks": [
+    JOURNAL_CAPABILITY_IDS.askContext,
+    JOURNAL_CAPABILITY_IDS.dailyRecap,
+    JOURNAL_CAPABILITY_IDS.tradeCritique,
+    JOURNAL_CAPABILITY_IDS.playbookRules,
+  ],
+  "trades+missed": [
+    JOURNAL_CAPABILITY_IDS.askContext,
+    JOURNAL_CAPABILITY_IDS.dailyRecap,
+    JOURNAL_CAPABILITY_IDS.tradeCritique,
+    JOURNAL_CAPABILITY_IDS.missedObservations,
+  ],
+  "trades+notes": [
+    JOURNAL_CAPABILITY_IDS.askContext,
+    JOURNAL_CAPABILITY_IDS.dailyRecap,
+    JOURNAL_CAPABILITY_IDS.tradeCritique,
+    JOURNAL_CAPABILITY_IDS.notebookEntries,
+  ],
+  "trades+progress": [
+    JOURNAL_CAPABILITY_IDS.askContext,
+    JOURNAL_CAPABILITY_IDS.dailyRecap,
+    JOURNAL_CAPABILITY_IDS.tradeCritique,
+    JOURNAL_CAPABILITY_IDS.progressHistory,
+  ],
+};
+
+/** The options that bind an execution context to one AI request. */
+export type InteractiveContextOptions = Readonly<{
+  feature?: Extract<AiFeature, "askJournalAgent" | "reportsAgent">;
+  /** Reserves one tool call from the runtime-owned budget. */
+  consumeToolCall?: () => boolean;
+  executionId?: string;
+  correlationId?: string;
+}>;
+
+/**
+ * Build the execution context of an interactive AI request.
+ *
+ * The approved scope decides what the execution may read — accounts, filters,
+ * timezone and the data-source allowlist. The feature decides which tools the
+ * request may use. Nothing here widens the scope that was already approved.
+ */
+export function createInteractiveContext(
+  scope: FrozenApprovedScope,
+  signal: AbortSignal,
+  options: InteractiveContextOptions = {},
+): ExecutionContext {
+  const feature = options.feature ?? "askJournalAgent";
+  const policy = AI_FEATURE_POLICIES[feature];
+  return createExecutionContext({
+    executionId: options.executionId ?? crypto.randomUUID(),
+    correlationId: options.correlationId ?? crypto.randomUUID(),
+    principal: "interactive",
+    mode: "interactive",
+    triggerSource: "user.request",
+    scope: {
+      accountIds: scope.accounts.map((account) => account.id),
+      filters: scope.filters,
+      timeZone: scope.timeZone,
+      dataSources: [scope.dataSource],
+    },
+    allowedCapabilityIds: [...DATA_SOURCE_CAPABILITY_IDS[scope.dataSource]],
+    allowedToolIds: [...AI_FEATURE_TOOL_IDS[feature]],
+    budgets: {
+      maxSteps: policy.maxSteps ?? 1,
+      maxToolCalls: policy.maxToolCalls ?? 0,
+      maxOutputTokens: policy.maxOutputTokens,
+      ...(policy.timeoutMs === undefined ? {} : { timeoutMs: policy.timeoutMs }),
+      consumeToolCall: options.consumeToolCall ?? (() => true),
+    },
+    signal,
+  });
 }

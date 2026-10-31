@@ -39,3 +39,24 @@ Alternatives rejected: a new public intelligence package (premature publishing c
 chat as authoritative memory (no evidence lifecycle), and wholesale AI replacement (unnecessary
 compatibility risk). Adapter migration is reversible; persisted workflow/knowledge versions
 require explicit migration once released. This ADR does not supersede UI ADRs 0003–0005.
+
+## Implementation note (Phase 12)
+
+Phase 12 implements the scoped part of this ADR:
+
+- The pure runtime contracts (`ExecutionContext`, `Capability`, `Eligibility`, `Outcome`,
+  `ToolDefinition`) live in the intelligence contracts module and hold no database, no Next and no
+  AI SDK reference. The runtime reaches the journal only through typed query ports that a
+  composition supplies.
+- The capability registry registers capabilities explicitly and answers in a stable order;
+  eligibility is deterministic and never asks a model which capability to run.
+- The tool gateway is the only path to a registered tool. It checks the tool allowlist of the
+  execution, the access category, the tool-call budget and cancellation, validates the input
+  before the call and validates the output before it leaves the gateway. Write access stays with
+  the trusted system principal.
+- The Ask and Reports tools now run through that gateway with unchanged results. The existing
+  provider policy is untouched: hosted OpenAI keeps `store:false`, a compatible endpoint keeps
+  its own key, and no prompt or credential diagnostic is exposed.
+
+Background execution, provider policy and budget reservations remain unimplemented and stay with
+Phase 13; they are not authorised by this note.
