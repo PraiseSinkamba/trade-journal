@@ -18,9 +18,12 @@ WORKDIR /app
 COPY --from=builder /repo/apps/web/.next/standalone ./
 COPY --from=builder /repo/apps/web/.next/static ./apps/web/.next/static
 COPY --from=builder /repo/apps/web/public ./apps/web/public
+# Worker native dependencies are independent of Next's traced node_modules.
+COPY --from=builder /repo/apps/web/.next/worker-dist ./apps/web/worker
+COPY --from=builder /repo/apps/web/scripts/run-journal.mjs /repo/apps/web/scripts/http-child.mjs ./apps/web/scripts/
 RUN mkdir -p /data && chown -R node:node /data /app
 USER node
 VOLUME /data
 EXPOSE 3000
 ENV PORT=3000 HOSTNAME=0.0.0.0
-CMD ["node", "apps/web/server.js"]
+CMD ["node", "apps/web/scripts/run-journal.mjs", "--mode", "production", "--worker", "enabled", "--host", "0.0.0.0"]
