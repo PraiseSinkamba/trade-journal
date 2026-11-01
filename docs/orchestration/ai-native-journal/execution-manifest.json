@@ -1569,7 +1569,12 @@
           "apps/web/src/server/intelligence/composition.ts",
           "apps/web/src/server/intelligence/contracts/policy.ts",
           "apps/web/src/server/intelligence/infrastructure/policy-store.ts",
-          "apps/web/src/server/intelligence/runtime/"
+          "apps/web/src/server/intelligence/runtime/",
+          "apps/web/src/db/schema.ts",
+          "apps/web/src/db/migrations.ts",
+          "apps/web/src/db/bootstrap.ts",
+          "apps/web/src/db/migration-checksums.json",
+          "apps/web/src/db/migrations/0005-intelligence-runtime.ts"
         ],
         "exclusive": true,
         "sharedFilesPolicy": "Single phase owner; see integration-plan.md. No edits outside task subset without coordinator allocation."
@@ -1688,7 +1693,7 @@
         },
         {
           "path": "apps/web/src/server/domain-events.ts",
-          "status": "planned"
+          "status": "existing"
         },
         {
           "path": "apps/web/src/server/intelligence/knowledge/",
@@ -1704,7 +1709,12 @@
           "apps/web/src/app/api/trades/[key]/",
           "apps/web/src/app/api/trades/bulk/",
           "apps/web/src/server/domain-events.ts",
-          "apps/web/src/server/intelligence/knowledge/"
+          "apps/web/src/server/intelligence/knowledge/",
+          "apps/web/src/db/schema.ts",
+          "apps/web/src/db/migrations.ts",
+          "apps/web/src/db/bootstrap.ts",
+          "apps/web/src/db/migration-checksums.json",
+          "apps/web/src/db/migrations/"
         ],
         "exclusive": true,
         "sharedFilesPolicy": "Single phase owner; see integration-plan.md. No edits outside task subset without coordinator allocation."
