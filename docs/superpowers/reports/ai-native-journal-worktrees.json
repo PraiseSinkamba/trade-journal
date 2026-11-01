@@ -1,7 +1,7 @@
 {
   "schemaVersion": 1,
   "feature": "ai-native-journal",
-  "updatedAt": "2026-10-31T22:13:44Z",
+  "updatedAt": "2026-11-01T05:11:45Z",
   "owner": "parent OMP coordinator (exclusive owner of this record)",
   "repository": {
     "name": "trade-journal",
@@ -35,8 +35,8 @@
     },
     "featureBranch": "codex/ai-native-journal",
     "featureBootstrapSha": "0a278503fd67c0f9e82138dfecb744f4bfd307ad",
-    "featureHeadSha": "135fd0ecd7d6252e17d0e406e907e6e76dbbed5f",
-    "featureHeadShaNote": "feature branch HEAD at the Phase 13 dispatch and the exact base of the Phase 13 worktree; the coordinator record commit advances the branch by one commit",
+    "featureHeadSha": "c6fbcd411efa049b95e58f041b7a0ed5f8c2c4e4",
+    "featureHeadShaNote": "feature branch HEAD at the Phase 13 integration and the exact base of the Phase 14 worktree; the coordinator record commit advances the branch by one commit",
     "featureCheckpointCommits": [
       "0a278503fd67c0f9e82138dfecb744f4bfd307ad",
       "80d53ccb62fda801897852a6f4e5d2aab8b0d58b",
@@ -60,7 +60,8 @@
       "0915173ce42baecfa59434f2361af92fa5f02436",
       "2ea11ce7d7ed253e50e674a1fbb49c4a85d28870",
       "a9478dc4a729b43080fe7186f765b10f41513be3",
-      "135fd0ecd7d6252e17d0e406e907e6e76dbbed5f"
+      "135fd0ecd7d6252e17d0e406e907e6e76dbbed5f",
+      "c6fbcd411efa049b95e58f041b7a0ed5f8c2c4e4"
     ],
     "featureBranchNote": "Orca slugified the requested name to codex-ai-native-journal at creation; the coordinator renamed the newly created, exclusively owned branch to the contract-required codex/ai-native-journal. Orca reads the renamed ref live (refs/heads/codex/ai-native-journal). No pre-existing branch was overwritten."
   },
@@ -254,8 +255,8 @@
         "startSha": "135fd0ecd7d6252e17d0e406e907e6e76dbbed5f",
         "orcaParentWorktreeId": "aa54a522-a9af-4cb4-9de7-f1d9a349c0fd::E:/4004/orca/workspaces/trade-journal/codex-ai-native-journal",
         "setup": "pnpm install --frozen-lockfile completed in the worker checkout; working tree clean; Node v24.20.0, pnpm 11.0.8; own node_modules and own pnpm virtual store",
-        "state": "the implementation-diff review failed with 4 findings; the phase was reopened and the repair dispatched",
-        "note": "Phase 13 is the remainder of detailed plan Task 9: background AI policies, reservations and provider adapter integration. It owns schema allocation 0005, so this is the first phase since Phase 08 to add a migration. The manifest T-013 ownership set was corrected before the dispatch to name apps/web/src/server/intelligence/composition.ts, which the detailed task modifies, and the two Phase 12 test paths were corrected from planned to existing. The independent implementation-diff review returned 4 findings: three tests could not fail for the reason they claimed - the cancellation tests aborted their own controller so removing the abort plumbing stayed green, and the reservation test checked the row only after the call returned with no concurrent-writer case - and the plan and the report claimed 0005-specific test coverage that did not exist. The reviewer and the coordinator confirmed the production code is correct: runBackgroundAi forwards AbortSignal.any([caller, timeout]) to generateText and executeBackgroundRun reserves inside its own transaction before the provider request."
+        "state": "integrated into codex/ai-native-journal at bf15f30 and verified on the destination branch (destination gate green on the destination branch after the merge: pnpm install --frozen-lockfile, pnpm --filter web typecheck, the core and importers typecheck, pnpm --filter web migrations:check, node scripts/check-licenses.mjs, prettier --check on every merged file and pnpm build all exit 0; pnpm test 106 test files, 1144 tests passed, 178.22s). The worktree, the git worktree registration, the branch and the leftover directory remain until the user requests cleanup.",
+        "note": "Phase 13 is the remainder of detailed plan Task 9: background AI policies, reservations and provider adapter integration. It owns schema allocation 0005, so this is the first phase since Phase 08 to add a migration. The manifest T-013 ownership set was corrected before the dispatch to name apps/web/src/server/intelligence/composition.ts, which the detailed task modifies, and the two Phase 12 test paths were corrected from planned to existing. The independent implementation-diff review returned 4 findings: three tests could not fail for the reason they claimed - the cancellation tests aborted their own controller so removing the abort plumbing stayed green, and the reservation test checked the row only after the call returned with no concurrent-writer case - and the plan and the report claimed 0005-specific test coverage that did not exist. The reviewer and the coordinator confirmed the production code is correct: runBackgroundAi forwards AbortSignal.any([caller, timeout]) to generateText and executeBackgroundRun reserves inside its own transaction before the provider request. The destination gate failed on the first run at prettier --check, because seven candidate files had never been formatted; the formatting was applied with prettier --write in 1df91a2, proven to change nothing beyond whitespace, and the whole gate was re-run alone on the host. The integration report was committed as a2f6590 and updated in 0a77f84."
       }
     ]
   },
@@ -445,12 +446,26 @@
       "wave": 13,
       "branch": "codex/ai-native-journal-p13",
       "deps": ["task_107db7662f7e"],
-      "status": "dispatched",
-      "state": "dispatched",
-      "note": "the remainder of detailed plan Task 9, with schema allocation 0005; the brief pins the migration checklist, the atomic daily reservation, the endpoint and model pinning with no fallback, the review budget of two reviewer runs, and the Phase 12 predecessor reports as required reading The implementation-diff review failed with 4 findings - three tests that could not fail for the reason they claimed, and one false coverage claim in the plan and the report. The production code was confirmed correct by both the reviewer and the coordinator, so the repair is test-only plus the documentation correction.",
-      "outcome": null,
+      "status": "completed",
+      "state": "integrated",
+      "note": "the remainder of detailed plan Task 9, with schema allocation 0005; the brief pins the migration checklist, the atomic daily reservation, the endpoint and model pinning with no fallback, the review budget of two reviewer runs, and the Phase 12 predecessor reports as required reading The implementation-diff review failed with 4 findings - three tests that could not fail for the reason they claimed, and one false coverage claim in the plan and the report. The production code was confirmed correct by both the reviewer and the coordinator, so the repair is test-only plus the documentation correction. The coordinator recorded the Phase 13 ownership set before the merge: the background policy contract and the policy store are owned as exact files, not directory prefixes, because the contracts and infrastructure directories also hold files owned by other phases.",
+      "outcome": "succeeded",
       "nativeDispatch": "ctx_64eb477bd7a3",
-      "priorDispatch": "ctx_cfc746c6a601"
+      "priorDispatch": "ctx_cfc746c6a601",
+      "commits": [
+        "d5fdfbe",
+        "6012ab4",
+        "0d31edf",
+        "640226b",
+        "a0a14a2",
+        "a46ccda",
+        "bf15f30590a29917c192378b470d474c503259a6",
+        "1df91a2",
+        "a2f6590",
+        "0a77f84"
+      ],
+      "verified": "destination gate green on the destination branch after the merge: pnpm install --frozen-lockfile, pnpm --filter web typecheck, the core and importers typecheck, pnpm --filter web migrations:check, node scripts/check-licenses.mjs, prettier --check on every merged file and pnpm build all exit 0; pnpm test 106 test files, 1144 tests passed, 178.22s",
+      "evidence": "the independent implementation-diff review raised 4 findings: the two cancellation cases aborted their own controller so removing the abort plumbing stayed green, the reservation case checked the row only after the call returned and had no concurrent-writer case, and the plan and the report claimed 0005-specific test coverage that did not exist. The reviewer and the coordinator both confirmed the production code was correct. The coordinator then proved the repaired tests have teeth with three mutations of the production plumbing, each of which broke exactly the expected test and each of which passed again after the restore. Evidence: docs/superpowers/plans/ai-native-journal/phase-13.md, docs/superpowers/reports/ai-native-journal-phase-13.md, docs/superpowers/reports/ai-native-journal-integration-13.md"
     },
     {
       "stable": "T-014",
@@ -813,12 +828,13 @@
       "worktree": "aa54a522-a9af-4cb4-9de7-f1d9a349c0fd::E:/4004/orca/workspaces/trade-journal/codex-ai-native-journal-p13",
       "base": "135fd0ecd7d6252e17d0e406e907e6e76dbbed5f",
       "purpose": "Phase 13 - background AI policies, reservations and provider adapter integration; schema allocation 0005",
-      "state": "dispatched",
-      "candidate": [],
-      "reviewed": false,
+      "state": "completed; the implementation-diff review failed with 4 findings and the phase was reopened for repair",
+      "candidate": ["d5fdfbe", "6012ab4", "0d31edf"],
+      "reviewed": true,
       "integrated": false,
       "verified": false,
-      "outcome": null
+      "outcome": "candidate superseded by the repair dispatch after the implementation-diff review failed",
+      "tip": "a0a14a2a0ed2d45f0bf14827badd0e69892b73a4"
     },
     {
       "task": "T-013",
@@ -829,12 +845,13 @@
       "worktree": "aa54a522-a9af-4cb4-9de7-f1d9a349c0fd::E:/4004/orca/workspaces/trade-journal/codex-ai-native-journal-p13",
       "base": "135fd0ecd7d6252e17d0e406e907e6e76dbbed5f",
       "purpose": "Phase 13 repair - make the three background policy tests fail when the behaviour breaks, and add the 0005-specific assertions the plan and the report claim",
-      "state": "dispatched",
-      "candidate": [],
-      "reviewed": false,
-      "integrated": false,
-      "verified": false,
-      "outcome": null
+      "state": "completed; the repair strengthened the three background policy tests, added the 0005 assertions and corrected the plan and the report",
+      "candidate": ["640226b", "a0a14a2"],
+      "reviewed": true,
+      "integrated": true,
+      "verified": true,
+      "outcome": "verified by the coordinator with an independent teeth proof, merged and verified on the destination branch",
+      "tip": "a0a14a2a0ed2d45f0bf14827badd0e69892b73a4"
     }
   ],
   "integration": {
@@ -1124,6 +1141,33 @@
       "review": "one implementation-diff review, then one repair round and one coordinator re-verification; the review found the execution context refusing the tool call at the ceiling before consulting the runtime hook, which made the legacy request-level budget error unreachable, and two documentation claims that followed from it",
       "note": "no schema, no migration, no dependency and no lockfile change; no cross-boundary import in the pure runtime layer; no push, no pull request and no merge into main ADR 0008 is both a hash-pinned source and a T-012-owned artifact; the integration reconciled the contradiction by recording the owner in the manifest and teaching the validator that an owned source may evolve, so the other 11 sources stay byte-identical to the baseline.",
       "report": "docs/superpowers/reports/ai-native-journal-integration-12.md"
+    },
+    {
+      "phase": "13",
+      "stable": "T-013",
+      "native": "task_96e133343b74",
+      "branch": "codex/ai-native-journal-p13",
+      "merge": "bf15f30590a29917c192378b470d474c503259a6",
+      "destinationBefore": "a46ccda8e2f8705ff59c9e55533a025c3b0c8451",
+      "head": "c6fbcd4",
+      "commits": [
+        "d5fdfbe",
+        "6012ab4",
+        "0d31edf",
+        "640226b",
+        "a0a14a2",
+        "1df91a2",
+        "a2f6590",
+        "0a77f84",
+        "afe5f83",
+        "c6fbcd4"
+      ],
+      "files": 18,
+      "schema": "0005",
+      "verification": "destination gate green on the destination branch after the merge: pnpm install --frozen-lockfile, pnpm --filter web typecheck, the core and importers typecheck, pnpm --filter web migrations:check, node scripts/check-licenses.mjs, prettier --check on every merged file and pnpm build all exit 0; pnpm test 106 test files, 1144 tests passed, 178.22s",
+      "review": "one implementation-diff review, then one repair round and one coordinator re-verification; the review found three tests that could not fail for the reason they claimed and one false coverage claim in the plan and the report. The coordinator ran an independent teeth proof with three mutations of the production plumbing.",
+      "note": "schema allocation 0005: intelligence_runs, intelligence_policy and intelligence_budget_reservations, with the registry entry and the regenerated checksum artifact; migrations 0001 through 0004 byte-unchanged. No dependency and no lockfile change. The contracts layer stayed pure and the runtime reached persistence through the infrastructure layer. The destination gate failed once at prettier --check and passed after a formatting-only fix. No push, no pull request and no merge into main.",
+      "report": "docs/superpowers/reports/ai-native-journal-integration-13.md"
     }
   ],
   "recordShape": "This file is the index and the authoritative stable-to-native task mapping: stable/native task mapping, worktree and dispatch identifiers, and one compact entry per integrated phase. Narrative, findings, deviations and command output live in the per-phase reports under docs/superpowers/reports/. Keep this file compact - one entry per phase, no duplicated prose. Resolve a native task id from taskMap here or from the native task list, never from a chat summary: a transcription slip once named T-019 as T-005, and the near miss was caught because the native task list disagreed with the prose."
