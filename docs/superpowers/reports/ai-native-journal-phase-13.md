@@ -53,7 +53,8 @@ Modified:
 | `apps/web/src/db/bootstrap.ts`                               | Splices the same DDL constant into the final-schema snapshot                                                                                           |
 | `apps/web/src/db/migration-checksums.json`                   | Regenerated artifact                                                                                                                                     |
 
-Tests: `apps/web/tests/intelligence-provider-policy.test.ts` (new, 30 tests).
+Tests: `apps/web/tests/intelligence-provider-policy.test.ts` (new, 33 tests: 30 phase cases plus
+the racing-reservation case and the two `0005` migration cases added by the test-coverage repair).
 
 ## Migrations
 
@@ -69,6 +70,10 @@ same schema.
 
 - Migrations `0001`–`0004` are untouched; the checksum artifact was regenerated with
   `pnpm --filter web migrations:build` and verified with `pnpm --filter web migrations:check`.
+- The phase test carries the `0005`-specific assertions: the three tables `intelligence_runs`,
+  `intelligence_policy` and `intelligence_budget_reservations` exist in the journal, the registered
+  checksum of migration `0005` is the checksum of the migration source, and the ledger row the
+  runner applied holds that checksum.
 - `BOOTSTRAP_SQL` splices the same `INTELLIGENCE_RUNTIME_SQL` constant the migration applies, so a
   migrated journal and the declared schema cannot drift.
 - No new dependency, therefore no new ADR. ADR 0008 already covers the provider-compatibility
@@ -149,9 +154,10 @@ The defects that mattered most:
   with `run_finished`, and a configuration or policy refusal is recorded on the run.
 - The composed execution path had no test coverage, so the provider-request assertions were
   vacuous. `intelligence-provider-policy.test.ts` now drives `executeBackgroundRun` end to end:
-  one request to the pinned endpoint after the reservation commits, no request on a refusal, no
-  request without a key, a cancelled run recorded as cancelled, a refused run recorded as
-  unavailable, and a terminal run refused.
+  one request to the pinned endpoint with the reservation row already committed at call time, no
+  request on a refusal, no request without a key, a cancelled run recorded as cancelled and
+  aborted through the caller's own signal, a refused run recorded as unavailable, and a terminal
+  run refused.
 - Deleting an opted-in account locked the Background AI card out of saving, because the policy kept
   the deleted id and the save refused it. The save now drops accounts that no longer exist.
 - `executeBackgroundRun` re-read the live provider settings instead of the pinned ones. The
@@ -169,6 +175,71 @@ Accepted with a documented reason:
   phase plan lists them next to the policy reasons.
 - The background policy is stored in `intelligence_policy` rather than in the settings key/value
   table: it is revisioned and pinned per run, and the settings route is its only writer.
+
+## Test coverage repair (implementation-diff review)
+
+The implementation-diff review of this phase found the production code correct, but three test
+cases that could not fail for the reason they claimed, and one coverage claim that was not true.
+The repair touches `apps/web/tests/intelligence-provider-policy.test.ts` and this plan/report
+pair only: `git diff 6012ab4 -- apps/web/src/` is empty, so no production behaviour changed.
+
+### Findings and resolutions
+
+1. **The cancellation case could not fail.** "Stops the request when the caller cancels" aborted
+   the controller inside the fetch stub and threw an `AbortError`, so it still passed when
+   `runBackgroundAi` forwarded no signal at all — it pinned an error kind instead of the
+   behaviour. The stub now captures the signal the provider call actually received
+   (`init.signal`), the caller cancels while the request is in flight, and the case asserts that
+   the captured signal was aborted and carries the caller's own abort reason. The existing
+   "the request was stopped" assertion is kept.
+2. **The recorded-cancellation case had the same root cause.** "Records a cancelled run as
+   cancelled, not as a timeout" proved only the stored status, so it survived the removal of the
+   abort plumbing and could not tell a real cancellation from a self-inflicted stub error. It now
+   also asserts that the composed path aborted the in-flight provider request through the
+   caller's signal.
+3. **The reservation order was checked too late.** "Calls the pinned endpoint once, after the
+   reservation is committed" read the reservation rows after the call returned, so it survived a
+   reservation taken after the provider request. The stub now reads the reservations at call time,
+   and the case asserts that the row of the run already exists then. A racing-reservation case was
+   added: two reservations for the same run and day race for the day's last slot through a second
+   connection, exactly one succeeds, the day's rows never exceed the allowance, and the loser
+   leaves no row behind. The journal's transactions are synchronous, so the two racers serialise;
+   what the case proves is that the winner's committed reservation is visible to the second
+   connection and that the allowance is spent exactly once.
+4. **The `0005` coverage claim was false.** The plan's checklist said "the phase test adds the
+   0005-specific assertions", and the test file held no `0005`, `intelligence_runs` or checksum
+   assertion at all. Two cases were added: the three tables `intelligence_runs`,
+   `intelligence_policy` and `intelligence_budget_reservations` exist in the journal, and the
+   registered checksum of migration `0005` matches both the migration source and the ledger row
+   the runner applied. The plan checklist, the plan's step 2 and its acceptance bullets, and this
+   report now describe what the test actually does.
+
+### Proof of teeth
+
+Every strengthened case was seen to fail against broken production code, and the production code
+was then restored exactly.
+
+| Case                                                                          | Broken production code                                                                    | Result with the strengthened test | Result after the restore |
+| ----------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------ | --------------------------------- | ------------------------- |
+| `stops the request when the caller cancels`                                   | `abortSignal` removed from the `generateText` call in `runBackgroundAi`                    | FAIL — `expected false to be true` | PASS               |
+| `records a cancelled run as cancelled, not as a timeout`                      | the same removal                                                                            | FAIL — `expected false to be true` | PASS               |
+| `calls the pinned endpoint once, after the reservation is committed`           | the reservation in `executeBackgroundRun` moved after the provider call                     | FAIL — `expected [] to have a length of 1 but got +0` | PASS     |
+
+### Repair verification
+
+| Command                                                                                                                                                                                                                          | Exit | Runtime    | Result                 |
+| ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ---- | ---------- | ---------------------- |
+| `pnpm exec vitest run apps/web/tests/intelligence-provider-policy.test.ts apps/web/tests/intelligence-runtime.test.ts apps/web/tests/intelligence-scope.test.ts apps/web/tests/ai-runtime.test.ts apps/web/tests/ai-settings.test.ts apps/web/tests/ai-scope.test.ts apps/web/tests/ai-feedback.test.ts` | 0    | 8.49 s     | 7 files, 160 tests passed |
+| `pnpm --filter web typecheck`                                                                                                                                                                                                     | 0    | 25.03 s    | clean                  |
+
+The whole-project `pnpm test` suite was not run: the coordinator runs the destination gate once,
+alone, after the merge. The repaired test file was brought back to the repository's Prettier
+formatting; the repo-wide `pnpm format:check` drift (77 files, including these two documents)
+pre-exists this phase — both documents were already Prettier-dirty when the phase committed them,
+and the repair edited their lines without reformatting the files.
+
+One review pass ran over the repair diff and returned `PASS` (15 PASS, 0 FAIL, 0 BLOCK); its
+report is `.omp/reviewer-report.md`.
 
 ## Deviations from the phase plan
 
