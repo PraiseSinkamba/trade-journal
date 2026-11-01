@@ -124,7 +124,8 @@ and a sanitized `meta_json` (never a prompt, a response or a credential).
 | --------------------------------- | ---------------------------------------------------------------- |
 | `run_not_found`                   | no run row for the id                                            |
 | `cancelled`                       | the run was cancelled, or the abort signal already fired         |
-| `policy_missing` / `policy_invalid` | no policy row, or the stored document does not parse           |
+| `run_finished`                    | the run already ended; it needs an explicit reschedule           |
+| `policy_missing` / `policy_invalid` | no policy row, or the stored document does not parse          |
 | `policy_disabled`                 | background AI is not opted in                                     |
 | `policy_changed`                  | the policy was revised after the run was queued                   |
 | `account_not_opted_in`            | a scope account is not in the policy's opted-in accounts          |
@@ -133,6 +134,16 @@ and a sanitized `meta_json` (never a prompt, a response or a credential).
 | `tools_unsupported`               | the run requires tools and the policy does not allow them         |
 | `structured_output_unsupported`   | the run requires structured output and the policy forbids it      |
 | `capacity_unknown`                | the policy has no usable context bound                            |
+| `context_too_large`               | the run wants more context than the policy allows                 |
+
+The run service refuses two more reasons outside the policy decision:
+`daily_budget_exhausted` (the day's allowance is spent) and
+`provider_not_configured` (the pinned provider has no key or no server URL). Both are
+refused before any provider request.
+
+A refusal that will not change on its own — `configuration_changed` and
+`policy_changed` — is recorded on the run, which becomes `unavailable` until it is
+explicitly rescheduled.
 
 On success the run becomes a background `ExecutionContext`: trusted `system` principal, concrete
 account ids, the background budgets (four steps, four tool calls, 1200 output tokens, 30 s) and the

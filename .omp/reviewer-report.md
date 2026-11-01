@@ -1,49 +1,39 @@
 ## Verdict: PASS
 
-## Reviewer Report — Phase 12 repair: legacy tool-call budget error
+# Phase 13 implementation review — resolved findings
 
-Diff reviewed: `85a4226b118daad6892b33377905f390519020cf..<repair tip>` (branch
-`codex/ai-native-journal-p12`).
+Reviewer: one read-only implementation-diff review over the staged Phase 13 diff (15 files,
++2041/−119). Every finding below is resolved in the committed implementation; the resolutions are
+listed with the file that carries them. The verification commands and their results are in
+`docs/superpowers/reports/ai-native-journal-phase-13.md`.
 
-Scope reviewed (this repair only):
+| Finding                                                                                                                                                                                                                              | Resolution                                                                                                                                                                       |
+| ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| A persisted `cancelled` run re-authorizes and spends another provider request                                                                                          | `evaluateBackgroundAuthorization` refuses a terminal run (`run_finished`), and a cancelled run stays `cancelled`                                                                  |
+| `unavailable` is never persisted, so a configuration change is not durable and the run silently revives                                                                       | `authorizeBackgroundRun` records `configuration_changed` and `policy_changed` refusals on the run, which becomes `unavailable` until it is explicitly rescheduled       |
+| No reschedule path for a run refused by a policy revision change                                                                                                     | `enqueueRunInTx` re-pins and re-queues a run that already ended, which is the explicit reschedule                                                                                 |
+| Deleting an opted-in account locks the Background AI card out of saving                                                                                                | `saveBackgroundPolicy` drops accounts that no longer exist instead of refusing the save                                                                                          |
+| The composed execution path had no test coverage; the provider-request assertions were vacuous                                                                          | `intelligence-provider-policy.test.ts` exercises `executeBackgroundRun`: one request to the pinned endpoint after the reservation commits, no request on a refusal, no request without a key, a cancelled run recorded as cancelled, a refused run recorded as unavailable, a terminal run refused |
+| `policy_invalid` was unreachable through the composition                                                                                                                | The store distinguishes a missing row from a corrupt one and the policy decision reports `policy_invalid`                                                                          |
+| `capacity_unknown` covered two different conditions                                                                                                                    | The over-limit case has its own reason, `context_too_large`                                                                                                                       |
+| `daily_budget_exhausted` and `provider_not_configured` were not stable identifiers                                                                                     | They live in `BACKGROUND_RUN_FAILURE` in the contracts module and are listed in the phase plan                                                                                    |
+| The settings PATCH applied the AI settings before validating the background policy                                                                                    | The background policy is parsed and validated before any setting is written                                                                                                      |
+| `executeBackgroundRun` re-read live provider settings instead of the pinned ones                                                                                       | The endpoint fingerprint is re-checked immediately before the request, so a concurrent settings change cannot reroute it                                                          |
+| Every policy write bumped the revision, so an unchanged save invalidated queued runs                                                                                     | An unchanged document keeps its revision                                                                                                                                         |
+| A cancelled run recorded the reason `timeout`                                                                                                                          | A cancelled run records `cancelled`                                                                                                                                              |
+| The reservation column was `day_index` while the plan names it `day`                                                                                                  | The column is `day`                                                                                                                                                              |
+| The refusal order differed from the plan table                                                                                                                         | The run-existence check now precedes the cancellation check, as the plan orders them                                                                                               |
+| `consumeToolCall` never refused                                                                                                                                        | The background context charges its four-call ceiling and refuses the fifth call                                                                                                   |
+| `updateRunMetaInTx` replaced metadata wholesale                                                                                                                       | The stored metadata is merged, so enqueue-time metadata survives a status write                                                                                                   |
 
-- `apps/web/src/server/intelligence/runtime/execution.ts` — the `consumeToolCall` wrapper
-- `apps/web/tests/intelligence-runtime.test.ts` — one added test
-- `apps/web/tests/ai-runtime.test.ts` — one added test (coordinator-approved additive extension)
-- `docs/superpowers/reports/ai-native-journal-phase-12.md` — repair section, corrected budget claim
-- `docs/decisions/0008-scoped-intelligence-and-provider-compatibility.md` — narrowed implementation note
+## Requirements that held
 
-### PASS / FAIL
-
-PASS — the blocking defect is fixed and the two documentation claims are now true of the code.
-
-### Findings
-
-- [PASS] `execution.ts` — the wrapper no longer short-circuits before the runtime hook. It always
-  calls `reserve()`, so the runtime observes the exhaustion and can raise the request-level limit
-  error; the context ceiling stays authoritative, because the call is refused whenever
-  `reserved >= maxToolCalls` whatever the hook answers; `reserved` still counts only successful
-  reservations. The hook signature, the `ExecutionContext` contract, the gateway, the registry, the
-  dispatcher and the AI SDK adapter are unchanged.
-- [PASS] `intelligence-runtime.test.ts` — the new test asserts the hook is called five times for a
-  ceiling of four and that the fifth call is refused. It fails against the pre-repair code.
-- [PASS] `ai-runtime.test.ts` — the new test runs the production chain (runtime →
-  `createAskJournalTools` → `createInteractiveContext` → gateway) with five parallel tool calls in
-  one step and asserts the exact legacy error, so a model that exceeds `maxToolCalls` gets
-  "AI request could not complete within the journal context limit. Please try a more specific
-  question." and not a normal answer. It fails against the pre-repair code. No existing test in the
-  file was modified, weakened or deleted.
-- [PASS] Phase report — the corrected claim states where the ceiling lives and that the runtime is
-  notified at the ceiling; the repair section records the defect, the fix, the review finding, the
-  new tests and the verification results with exit codes and runtimes.
-- [PASS] ADR 0008 — the implementation note now states the budget path explicitly and no longer
-  claims unchanged results without qualification.
-- [PASS] Scope — no schema change, no migration, no new dependency, no change to the hook
-  signature, the contracts, the gateway, the registry, the dispatcher or the SDK adapter.
-
-### Verification
-
-- `pnpm exec vitest run apps/web/tests/intelligence-runtime.test.ts apps/web/tests/intelligence-scope.test.ts apps/web/tests/ai-scope.test.ts apps/web/tests/ai-runtime.test.ts` — exit 0, 4 files, 97 tests passed
-- `pnpm --filter web typecheck` — exit 0, clean
-- Failing-before check: with only the `execution.ts` change stashed, both new tests failed and the
-  rest of the suite passed.
+All three providers are preserved in `buildModel`; the background adapter refuses a hosted provider
+without a key before the model is built, keeps hosted OpenAI `store:false`, never falls back to
+another provider, and uses zero automatic retries with a 30 s deadline. The daily reservation is
+journal-wide, atomic, committed before any network use, and a crashed attempt keeps it. The
+fingerprint is compared against the run's pinned value and a mismatch refuses with
+`configuration_changed` and issues no request. Run metadata holds provider, model, attempt count,
+duration, finish reason, token counts and error kind only — no prompt, response or credential. No
+new dependency, no schema change outside `0005`, migrations `0001`–`0004` untouched, the checksum
+artifact regenerated and verified, and the import-boundary rules hold.

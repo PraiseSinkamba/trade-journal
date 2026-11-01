@@ -12,6 +12,14 @@ import {
   getCurrentAccountId,
   normalizeAiBaseUrl,
 } from "@/server/settings";
+import {
+  getBackgroundPolicy,
+  saveBackgroundPolicy,
+} from "@/server/intelligence/composition";
+import {
+  backgroundPolicyPatchSchema,
+  type BackgroundPolicyPatch,
+} from "@/server/intelligence/contracts/policy";
 import { AI_PROVIDERS, AI_PROVIDER_NAMES, isAiProvider, type AiProvider } from "@/lib/ai-settings";
 import { isTimeZone } from "@/lib/timezone";
 import { parseCurrencyConversion, type CurrencyConversion } from "@/lib/currencies";
@@ -24,6 +32,7 @@ export const GET = handler(() =>
     currencyConversion: getCurrencyConversion(),
     ...getAiSettings(),
     currentAccountId: getCurrentAccountId(),
+    backgroundAi: getBackgroundPolicy(),
   }),
 );
 
@@ -42,6 +51,8 @@ interface SettingsBody {
   currencyConversion?: CurrencyConversion;
   /** Persisted single-account default. Absent = unchanged. `null` clears it. */
   currentAccountId?: string | null;
+  /** The background AI policy. Absent = unchanged. */
+  backgroundAi?: unknown;
 }
 
 export const PATCH = handler(async (request: Request) => {
@@ -145,6 +156,15 @@ export const PATCH = handler(async (request: Request) => {
   }
   if (Object.keys(aiKeys).length > 0) patch.aiKeys = aiKeys;
   if (compatibleBaseUrl) patch.compatibleBaseUrl = compatibleBaseUrl;
+  // The background policy is validated before anything is written, so a bad
+  // request changes no setting at all.
+  let backgroundPolicy: BackgroundPolicyPatch | undefined;
+  if (body.backgroundAi !== undefined) {
+    const policy = backgroundPolicyPatchSchema.safeParse(body.backgroundAi);
+    requireValue(policy.success, "Enter valid background AI settings.");
+    backgroundPolicy = policy.data;
+  }
   updateSettings(patch);
+  if (backgroundPolicy) saveBackgroundPolicy(backgroundPolicy);
   return ok({ saved: true });
 });

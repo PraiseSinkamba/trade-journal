@@ -20,6 +20,11 @@
       "file": "0004-observations.ts",
       "name": "observations",
       "checksum": "51020c338f0846841ed34e4acb3d7922437a3a6e1e951122b5a78d95568612b5"
+    },
+    "5": {
+      "file": "0005-intelligence-runtime.ts",
+      "name": "intelligence-runtime",
+      "checksum": "49e3ceafd7cf97e639fa6088f3dc4738a9f44cacf6f405cc16e11a8285a21a72"
     }
   }
 }

@@ -705,3 +705,86 @@ export const intelligenceSeedCheckpoints = sqliteTable("intelligence_seed_checkp
   baselineOperationId: text("baseline_operation_id").notNull(),
   updatedAt: integer("updated_at").notNull(),
 });
+
+/**
+ * The background run ledger (Phase 13).
+ *
+ * One row per queued background run. The unique effect key makes the enqueue
+ * idempotent, and the pinned provider, model and endpoint fingerprint record
+ * what the run was approved against: a later configuration change cannot
+ * silently reroute it.
+ */
+export const intelligenceRuns = sqliteTable(
+  "intelligence_runs",
+  {
+    id: text("id").primaryKey(),
+    /** The idempotency key of the run: the same effect is queued once. */
+    effectKey: text("effect_key").notNull(),
+    status: text("status", {
+      enum: ["queued", "running", "completed", "failed", "cancelled", "unavailable"],
+    }).notNull(),
+    /** The provider the run was approved against. */
+    provider: text("provider").notNull(),
+    /** The model the run was approved against. */
+    model: text("model").notNull(),
+    /** The fingerprint of the approved provider, model and endpoint. */
+    endpointFingerprint: text("endpoint_fingerprint").notNull(),
+    /** The policy revision the run was approved under. */
+    policyRevision: integer("policy_revision").notNull(),
+    /** The authorised scope: concrete account ids, filters, timezone, sources. */
+    scopeJson: text("scope_json").notNull(),
+    /** Sanitized diagnostics. Never a prompt, a response or a credential. */
+    metaJson: text("meta_json").notNull(),
+    createdAt: integer("created_at").notNull(),
+    updatedAt: integer("updated_at").notNull(),
+  },
+  (table) => [
+    uniqueIndex("intelligence_runs_effect_key_unique").on(table.effectKey),
+    index("intelligence_runs_status_idx").on(table.status, table.createdAt),
+  ],
+);
+
+/**
+ * The revisioned background policy (Phase 13).
+ *
+ * One immutable row per revision of a policy. A run pins the revision it was
+ * approved under, so a later policy change never applies retroactively.
+ */
+export const intelligencePolicy = sqliteTable(
+  "intelligence_policy",
+  {
+    /** The policy key; the background policy uses the constant key. */
+    id: text("id").notNull(),
+    /** The revision of the policy. */
+    revision: integer("revision").notNull(),
+    /** The policy document, verbatim. */
+    settingsJson: text("settings_json").notNull(),
+    recordedAt: integer("recorded_at").notNull(),
+  },
+  (table) => [primaryKey({ columns: [table.id, table.revision] })],
+);
+
+/**
+ * The daily background attempt reservations (Phase 13).
+ *
+ * One row per reserved attempt. The primary key over (run, attempt) makes a
+ * reservation idempotent, and the day index makes the daily allowance a cheap
+ * lookup. A reservation is never deleted: a crashed attempt keeps it.
+ */
+export const intelligenceBudgetReservations = sqliteTable(
+  "intelligence_budget_reservations",
+  {
+    runId: text("run_id")
+      .notNull()
+      .references(() => intelligenceRuns.id, { onDelete: "cascade" }),
+    /** The attempt number of the run. */
+    attempt: integer("attempt").notNull(),
+    /** The UTC day the attempt was reserved for. */
+    day: integer("day").notNull(),
+    reservedAt: integer("reserved_at").notNull(),
+  },
+  (table) => [
+    primaryKey({ columns: [table.runId, table.attempt] }),
+    index("intelligence_budget_reservations_day_idx").on(table.day),
+  ],
+);

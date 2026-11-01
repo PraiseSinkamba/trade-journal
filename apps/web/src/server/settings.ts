@@ -240,6 +240,26 @@ export const resolveAiConfiguration = (): {
 };
 
 /**
+ * The provider configuration a background run is pinned to, without the key.
+ *
+ * A background run is approved against the provider, the model and the
+ * endpoint that are configured right now; the fingerprint of exactly these
+ * three values is what the run pins, so a later change is visible.
+ */
+export const getCurrentProviderConfiguration = (): {
+  provider: AiProvider;
+  modelId: string;
+  baseUrl: string | null;
+} => {
+  const provider = getAiProvider();
+  return {
+    provider,
+    modelId: getAiModel(provider),
+    baseUrl: provider === "compatible" ? getCompatibleBaseUrl() : null,
+  };
+};
+
+/**
  * Statement parsing stays on the hosted providers: they accept PDFs and strict
  * structured output. A compatible server is never used for imports; when it is
  * the selected provider, a hosted provider with a key is used instead.
