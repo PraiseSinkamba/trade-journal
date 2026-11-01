@@ -3,6 +3,14 @@ import { TOOL_FAILURE } from "./intelligence/contracts/tools";
 
 export type AiFeature = "reflection" | "askJournalAgent" | "reportsAgent" | "statementImport";
 
+/**
+ * The feature an execution was made for.
+ *
+ * The interactive features are prompts; `background` is a scoped background
+ * run, which has no prompt of its own yet.
+ */
+export type AiExecutionFeature = AiFeature | "background";
+
 export type AiExecutionPolicy = Readonly<{
   maxOutputTokens: number;
   maxRetries: number;
@@ -12,7 +20,7 @@ export type AiExecutionPolicy = Readonly<{
 }>;
 
 export type AiExecutionMeta = Readonly<{
-  feature: AiFeature;
+  feature: AiExecutionFeature;
   provider: AiProvider;
   modelId: string;
   promptVersion: string;

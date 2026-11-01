@@ -3,6 +3,7 @@ import { legacyBaseline } from "./migrations/0001-legacy-baseline.ts";
 import { tradeProjections } from "./migrations/0002-trade-projections.ts";
 import { durableJobs } from "./migrations/0003-durable-jobs.ts";
 import { observations } from "./migrations/0004-observations.ts";
+import { intelligenceRuntime } from "./migrations/0005-intelligence-runtime.ts";
 import checksumManifest from "./migration-checksums.json" with { type: "json" };
 
 /**
@@ -96,6 +97,7 @@ const SOURCES: readonly JournalMigrationSource[] = [
   tradeProjections,
   durableJobs,
   observations,
+  intelligenceRuntime,
 ];
 
 let cachedRegistry: readonly JournalMigration[] | undefined;
