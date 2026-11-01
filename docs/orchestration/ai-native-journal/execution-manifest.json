@@ -1567,6 +1567,8 @@
           "apps/web/src/app/api/settings/route.ts",
           "apps/web/src/components/ai-settings.tsx",
           "apps/web/src/server/intelligence/composition.ts",
+          "apps/web/src/server/intelligence/contracts/policy.ts",
+          "apps/web/src/server/intelligence/infrastructure/policy-store.ts",
           "apps/web/src/server/intelligence/runtime/"
         ],
         "exclusive": true,
