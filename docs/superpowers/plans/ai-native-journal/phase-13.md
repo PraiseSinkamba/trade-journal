@@ -187,7 +187,10 @@ Checklist:
       the SQL constraints.
 - [x] Upgrade from the previous phase and from baseline 0001, fresh database, repeated startup,
       injected failure and concurrent startup — the existing migration suite is registry-driven, so
-      the new migration is covered by it; the phase test adds the 0005-specific assertions.
+      the new migration is covered by it; the phase test adds the 0005-specific assertions: the
+      three tables `intelligence_runs`, `intelligence_policy` and
+      `intelligence_budget_reservations` exist in the journal, and the registered checksum of
+      migration `0005` matches both the migration source and the ledger row the runner applied.
 - [x] Snapshot parity: `BOOTSTRAP_SQL` splices the same DDL constant the migration applies.
 - [x] Checksum artifact regenerated with `pnpm --filter web migrations:build`.
 - [x] Rollback: additive tables only. Rollback means deploying the previous binary with the new
@@ -199,8 +202,9 @@ Checklist:
 
 1. Commit this plan (`docs: plan the background AI policies and provider adapters`).
 2. Write the failing test `apps/web/tests/intelligence-provider-policy.test.ts` first: migration
-   `0005` exists, policy round-trip, authorisation outcomes, the changed-endpoint refusal, the
-   daily reservation, cancellation and provider parity.
+   `0005` applied with its three tables and a checksum that matches the registry, policy
+   round-trip, authorisation outcomes, the changed-endpoint refusal, the daily reservation,
+   cancellation and provider parity.
 3. Add `intelligence/contracts/policy.ts` (shared contracts) and
    `intelligence/runtime/model-policy.ts` (pure evaluation).
 4. Add `apps/web/src/db/migrations/0005-intelligence-runtime.ts`, register it, mirror it in
@@ -246,9 +250,12 @@ suites (`ai-import`, `ai-capability`, `ai-ask-agent`, `ai-reports-route`, `ai-pr
   provider is contacted.
 - **No fallback:** the background adapter contacts exactly the pinned endpoint; a failing pinned
   provider never reroutes to another provider.
-- **Cancellation:** an aborted run stops the provider request and ends as `cancelled`.
-- **Daily reservation:** the allowance is taken atomically before the network use, the reservation
-  survives a crashed attempt, and the eleventh attempt of the day is refused.
+- **Cancellation:** an aborted run stops the provider request — the in-flight provider request is
+  aborted by the caller's own signal — and ends as `cancelled`.
+- **Daily reservation:** the allowance is taken atomically before the network use — the reservation
+  row is already committed when the provider is called — the reservation survives a crashed
+  attempt, two racing reservations spend the day's last slot exactly once, and the eleventh
+  attempt of the day is refused.
 - **Provider parity:** a hosted provider without a key fails before any request, a keyless
   OpenAI-compatible server works, and a run that requires tools is refused when the policy does not
   allow them.

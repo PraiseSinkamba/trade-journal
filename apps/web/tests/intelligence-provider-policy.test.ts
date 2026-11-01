@@ -1,8 +1,12 @@
 import { afterAll, afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { eq } from "drizzle-orm";
-import { mkdtempSync, rmSync } from "node:fs";
+import { createHash } from "node:crypto";
+import { mkdtempSync, readFileSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import { fileURLToPath } from "node:url";
+import checksumManifest from "../src/db/migration-checksums.json" with { type: "json" };
+import { canonical } from "../scripts/build-migration-manifest.mjs";
 
 /*
  * The background AI policy, the daily reservation and the provider adapter
@@ -22,12 +26,11 @@ process.env.JOURNAL_DATA_DIR = scratch;
 
 vi.mock("next/headers", () => ({ cookies: async () => ({ get: () => undefined }) }));
 
-const { db, accounts, settings, intelligencePolicy, intelligenceRuns } = await import(
-  "../src/db"
-);
+const { db, accounts, settings, intelligencePolicy, intelligenceRuns, openConnection } =
+  await import("../src/db");
 const { intelligenceBudgetReservations } = await import("../src/db/schema");
 const { setSetting } = await import("../src/server/settings");
-const { withJournalTransaction } = await import("../src/db/transaction");
+const { withConnectionTransaction, withJournalTransaction } = await import("../src/db/transaction");
 const {
   authorizeBackgroundRun,
   enqueueBackgroundRun,
@@ -36,9 +39,8 @@ const {
   reserveBackgroundAttempt,
   saveBackgroundPolicy,
 } = await import("../src/server/intelligence/composition");
-const { BACKGROUND_DAILY_ATTEMPT_LIMIT } = await import(
-  "../src/server/intelligence/contracts/policy"
-);
+const { BACKGROUND_DAILY_ATTEMPT_LIMIT } =
+  await import("../src/server/intelligence/contracts/policy");
 const { runBackgroundAi } = await import("../src/server/ai-runtime");
 // The route loads the journal, so it is imported after the scratch directory
 // is in place.
@@ -46,6 +48,15 @@ const { GET, PATCH } = await import("../src/app/api/settings/route");
 
 const NOW = Date.UTC(2026, 2, 14, 9, 0, 0);
 const SERVER = "http://localhost:11434/v1";
+
+/** The registered checksum manifest of the versioned migrations. */
+const MANIFEST = checksumManifest as {
+  migrations: Record<string, { file: string; name: string; checksum: string }>;
+};
+/** The source of migration `0005`, the background runtime schema. */
+const MIGRATION_0005 = fileURLToPath(
+  new URL("../src/db/migrations/0005-intelligence-runtime.ts", import.meta.url),
+);
 
 const completion = (content: string) =>
   Response.json({
@@ -86,8 +97,7 @@ const scope = {
 
 const seedAccounts = () => {
   for (const id of ["acct-1", "acct-2"])
-    db
-      .insert(accounts)
+    db.insert(accounts)
       .values({ id, name: `Account ${id}`, kind: "import", createdAt: "2026-01-01" })
       .run();
 };
@@ -344,6 +354,40 @@ describe("the daily attempt reservation", () => {
       expect(reserveBackgroundAttempt(tx, runId, NOW + 86_400_000)).toBe(true);
     });
   });
+
+  it("lets only one of two racing reservations take the day's last allowance", async () => {
+    seedAccounts();
+    enableBackground();
+    const runId = enqueueBackgroundRun({ effectKey: "effect-race", scope });
+    const other = enqueueBackgroundRun({ effectKey: "effect-race-other", scope });
+    // The day's allowance has a single slot left.
+    for (let index = 0; index < BACKGROUND_DAILY_ATTEMPT_LIMIT - 1; index += 1)
+      withJournalTransaction((tx) => {
+        expect(reserveBackgroundAttempt(tx, other, NOW)).toBe(true);
+      });
+    // A second connection races the reservation of the same run and day. It
+    // sees the winner's committed reservation, so the day's allowance is
+    // spent exactly once.
+    const second = openConnection(scratch);
+    try {
+      const reserved = await Promise.all([
+        Promise.resolve().then(() =>
+          withJournalTransaction((tx) => reserveBackgroundAttempt(tx, runId, NOW)),
+        ),
+        Promise.resolve().then(() =>
+          withConnectionTransaction(second, (tx) => reserveBackgroundAttempt(tx, runId, NOW)),
+        ),
+      ]);
+      expect(reserved.filter(Boolean)).toHaveLength(1);
+      expect(reserved.filter((attempt) => !attempt)).toHaveLength(1);
+    } finally {
+      second.$client.close();
+    }
+    // The allowance is never overspent, and the loser left no row behind.
+    const rows = db.select().from(intelligenceBudgetReservations).all();
+    expect(rows).toHaveLength(BACKGROUND_DAILY_ATTEMPT_LIMIT);
+    expect(rows.filter((row) => row.runId === runId)).toHaveLength(1);
+  });
 });
 
 describe("the composed execution path", () => {
@@ -354,7 +398,12 @@ describe("the composed execution path", () => {
     setSetting("compatibleBaseUrl", SERVER);
     enableBackground();
     const runId = enqueueBackgroundRun({ effectKey: "effect-execute", scope });
-    const fetcher = vi.fn(async () => completion("Background answer"));
+    // The reservations the journal held at the moment the provider was called.
+    let reservationsAtCallTime: { runId: string; attempt: number }[] = [];
+    const fetcher = vi.fn(async () => {
+      reservationsAtCallTime = db.select().from(intelligenceBudgetReservations).all();
+      return completion("Background answer");
+    });
     vi.stubGlobal("fetch", fetcher);
     const result = await executeBackgroundRun({
       runId,
@@ -365,8 +414,10 @@ describe("the composed execution path", () => {
     });
     expect(result.status).toBe("completed");
     expect(fetcher).toHaveBeenCalledTimes(1);
-    // The reservation is committed before the request: the row exists by the
-    // time the provider is called.
+    // The reservation is committed before the request: the row exists at call
+    // time, not only once the call returned.
+    expect(reservationsAtCallTime).toHaveLength(1);
+    expect(reservationsAtCallTime[0]).toMatchObject({ runId, attempt: 1 });
     expect(db.select().from(intelligenceBudgetReservations).all()).toHaveLength(1);
     expect(db.select().from(intelligenceRuns).all()[0]?.status).toBe("completed");
   });
@@ -412,9 +463,9 @@ describe("the composed execution path", () => {
     });
     const rescheduled = enqueueBackgroundRun({ effectKey: "effect-stale", scope });
     expect(rescheduled).toBe(runId);
-    expect(
-      authorizeBackgroundRun(rescheduled, NOW, new AbortController().signal).status,
-    ).toBe("completed");
+    expect(authorizeBackgroundRun(rescheduled, NOW, new AbortController().signal).status).toBe(
+      "completed",
+    );
   });
 
   it("issues no request when the provider has no key", async () => {
@@ -442,10 +493,17 @@ describe("the composed execution path", () => {
     enableBackground();
     const runId = enqueueBackgroundRun({ effectKey: "effect-cancelled-run", scope });
     const controller = new AbortController();
+    // The signal the provider call actually received.
+    let providerSignal: AbortSignal | undefined;
+    // Whether the in-flight request saw the cancellation.
+    let abortedInFlight = false;
     vi.stubGlobal(
       "fetch",
-      vi.fn(async () => {
+      vi.fn(async (_url: string, init: RequestInit) => {
+        providerSignal = init.signal as AbortSignal | undefined;
+        // The caller cancels while the request is in flight.
         controller.abort();
+        abortedInFlight = providerSignal?.aborted === true;
         throw Object.assign(new Error("aborted"), { name: "AbortError" });
       }),
     );
@@ -460,6 +518,12 @@ describe("the composed execution path", () => {
     const stored = db.select().from(intelligenceRuns).all()[0];
     expect(stored?.status).toBe("cancelled");
     expect(JSON.stringify(stored?.metaJson)).toContain("cancelled");
+    // The composed path aborted the in-flight provider request through the
+    // caller's own signal: the request the provider got was aborted, and it
+    // carries the caller's abort reason.
+    expect(abortedInFlight).toBe(true);
+    expect(providerSignal?.aborted).toBe(true);
+    expect(providerSignal?.reason).toBe(controller.signal.reason);
   });
 
   it("refuses a run that already ended", async () => {
@@ -568,10 +632,17 @@ describe("the provider adapter", () => {
 
   it("stops the request when the caller cancels", async () => {
     const controller = new AbortController();
+    // The signal the provider call actually received.
+    let providerSignal: AbortSignal | undefined;
+    // Whether the in-flight request saw the cancellation.
+    let abortedInFlight = false;
     vi.stubGlobal(
       "fetch",
-      vi.fn(async () => {
+      vi.fn(async (_url: string, init: RequestInit) => {
+        providerSignal = init.signal as AbortSignal | undefined;
+        // The caller cancels while the request is in flight.
         controller.abort();
+        abortedInFlight = providerSignal?.aborted === true;
         throw Object.assign(new Error("aborted"), { name: "AbortError" });
       }),
     );
@@ -584,6 +655,11 @@ describe("the provider adapter", () => {
         abortSignal: controller.signal,
       }),
     ).rejects.toMatchObject({ kind: "timeout" });
+    // The caller's signal reached the provider: the request the provider got
+    // was aborted, and it carries the caller's own abort reason.
+    expect(abortedInFlight).toBe(true);
+    expect(providerSignal?.aborted).toBe(true);
+    expect(providerSignal?.reason).toBe(controller.signal.reason);
   });
 });
 
@@ -613,6 +689,44 @@ describe("the settings surface", () => {
       capabilities: { tools: true },
       maxInputCharacters: 4000,
       revision: 1,
+    });
+  });
+});
+
+describe("the 0005 background runtime migration", () => {
+  it("creates the three background tables in the journal", () => {
+    const tables = (
+      db.$client
+        .prepare(
+          "SELECT name FROM sqlite_master WHERE type = 'table' AND name IN ('intelligence_runs', 'intelligence_policy', 'intelligence_budget_reservations') ORDER BY name",
+        )
+        .all() as { name: string }[]
+    ).map((row) => row.name);
+    expect(tables).toEqual([
+      "intelligence_budget_reservations",
+      "intelligence_policy",
+      "intelligence_runs",
+    ]);
+  });
+
+  it("registers a checksum that matches the migration source", () => {
+    const entry = MANIFEST.migrations["5"];
+    if (!entry) throw new Error("Migration 0005 is not registered.");
+    expect(entry.file).toBe("0005-intelligence-runtime.ts");
+    expect(entry.name).toBe("intelligence-runtime");
+    // The registered checksum is the checksum of the migration source.
+    const source = readFileSync(MIGRATION_0005, "utf8");
+    expect(createHash("sha256").update(canonical(source), "utf8").digest("hex")).toBe(
+      entry.checksum,
+    );
+    // And the journal's ledger applied exactly that checksum.
+    const applied = db.$client
+      .prepare("SELECT version, name, checksum FROM journal_migrations WHERE version = 5")
+      .get() as { version: number; name: string; checksum: string } | undefined;
+    expect(applied).toEqual({
+      version: 5,
+      name: "intelligence-runtime",
+      checksum: entry.checksum,
     });
   });
 });
