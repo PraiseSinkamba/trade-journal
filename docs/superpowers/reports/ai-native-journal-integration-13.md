@@ -102,19 +102,31 @@ No `package.json` and no `pnpm-lock.yaml` changed. Phase 13 adds no dependency.
 
 ## Destination gate
 
-| Command                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                       | Exit | Result |
-| ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ---- | ------ |
-| `pnpm install --frozen-lockfile`                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                              | 0    | passed |
-| `pnpm --filter web typecheck`                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                 | 0    | passed |
-| `pnpm --filter @luxalgo/journal-core --filter @luxalgo/journal-importers typecheck`                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                           | 0    | passed |
-| `pnpm --filter web migrations:check`                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                          | 0    | passed |
-| `node scripts/check-licenses.mjs`                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                             | 0    | passed |
-| `pnpm exec prettier --check .omp/reviewer-report.md apps/web/src/app/api/settings/route.ts apps/web/src/components/ai-settings.tsx apps/web/src/db/bootstrap.ts apps/web/src/db/migration-checksums.json apps/web/src/db/migrations.ts apps/web/src/db/migrations/0005-intelligence-runtime.ts apps/web/src/db/schema.ts apps/web/src/server/ai-contracts.ts apps/web/src/server/ai-runtime.ts apps/web/src/server/intelligence/composition.ts apps/web/src/server/intelligence/contracts/policy.ts apps/web/src/server/intelligence/infrastructure/policy-store.ts apps/web/src/server/intelligence/runtime/model-policy.ts apps/web/src/server/settings.ts apps/web/tests/intelligence-provider-policy.test.ts docs/superpowers/plans/ai-native-journal/phase-13.md docs/superpowers/reports/ai-native-journal-phase-13.md` | 1    | FAILED |
+One full gate run on the destination branch, alone on the host, sequentially. Every exit code is
+the exit status of the command itself, never the status of a pipe.
 
-The gate stopped at the first non-zero exit. The failing command was `pnpm exec prettier --check .omp/reviewer-report.md apps/web/src/app/api/settings/route.ts apps/web/src/components/ai-settings.tsx apps/web/src/db/bootstrap.ts apps/web/src/db/migration-checksums.json apps/web/src/db/migrations.ts apps/web/src/db/migrations/0005-intelligence-runtime.ts apps/web/src/db/schema.ts apps/web/src/server/ai-contracts.ts apps/web/src/server/ai-runtime.ts apps/web/src/server/intelligence/composition.ts apps/web/src/server/intelligence/contracts/policy.ts apps/web/src/server/intelligence/infrastructure/policy-store.ts apps/web/src/server/intelligence/runtime/model-policy.ts apps/web/src/server/settings.ts apps/web/tests/intelligence-provider-policy.test.ts docs/superpowers/plans/ai-native-journal/phase-13.md docs/superpowers/reports/ai-native-journal-phase-13.md`, which exited 1.
+| Command                                                                             | Exit | Result |
+| ----------------------------------------------------------------------------------- | ---- | ------ |
+| `pnpm install --frozen-lockfile`                                                    | 0    | passed |
+| `pnpm --filter web typecheck`                                                       | 0    | passed |
+| `pnpm --filter @luxalgo/journal-core --filter @luxalgo/journal-importers typecheck` | 0    | passed |
+| `pnpm --filter web migrations:check`                                                | 0    | passed |
+| `node scripts/check-licenses.mjs`                                                   | 0    | passed |
+| `pnpm exec prettier --check <the 18 merged files>`                                  | 0    | passed |
+| `pnpm build`                                                                        | 0    | passed |
+| `pnpm test`                                                                         | 0    | passed |
 
-The gate ran alone on the host, sequentially, after the merge. Every exit code above is the
-exit status of the command itself, never the status of a pipe.
+`pnpm test` reported 106 test files and 1144 tests passed in 178.22s.
+
+### Gate history
+
+The first gate run after the merge stopped at `pnpm exec prettier --check`: seven candidate files
+had never been formatted. Every command before it exited 0, and `pnpm build` and `pnpm test` did
+not run at all. The formatting was applied with `prettier --write` in commit `1df91a2`. That change
+was verified to be formatting only: with all whitespace stripped, the content of every affected
+TypeScript file is identical to the merged version, and the only differences are prettier's own
+line wrapping and import collapsing. The whole gate was then re-run alone on the host, and the table
+above is that run.
 
 The `desktop` workspace was deliberately not typechecked here. Root `pnpm typecheck` also runs
 the `desktop` workspace, whose `cargo check` fails on a pre-existing repository defect: the
@@ -131,4 +143,29 @@ passed; it stays recorded as blocked host evidence for Phase 21.
 
 ## Review verdict
 
-The candidate commits were reviewed and the ownership boundary held, but the destination gate failed at `pnpm exec prettier --check .omp/reviewer-report.md apps/web/src/app/api/settings/route.ts apps/web/src/components/ai-settings.tsx apps/web/src/db/bootstrap.ts apps/web/src/db/migration-checksums.json apps/web/src/db/migrations.ts apps/web/src/db/migrations/0005-intelligence-runtime.ts apps/web/src/db/schema.ts apps/web/src/server/ai-contracts.ts apps/web/src/server/ai-runtime.ts apps/web/src/server/intelligence/composition.ts apps/web/src/server/intelligence/contracts/policy.ts apps/web/src/server/intelligence/infrastructure/policy-store.ts apps/web/src/server/intelligence/runtime/model-policy.ts apps/web/src/server/settings.ts apps/web/tests/intelligence-provider-policy.test.ts docs/superpowers/plans/ai-native-journal/phase-13.md docs/superpowers/reports/ai-native-journal-phase-13.md`. Phase 13 is NOT verified: the failing command is `pnpm exec prettier --check .omp/reviewer-report.md apps/web/src/app/api/settings/route.ts apps/web/src/components/ai-settings.tsx apps/web/src/db/bootstrap.ts apps/web/src/db/migration-checksums.json apps/web/src/db/migrations.ts apps/web/src/db/migrations/0005-intelligence-runtime.ts apps/web/src/db/schema.ts apps/web/src/server/ai-contracts.ts apps/web/src/server/ai-runtime.ts apps/web/src/server/intelligence/composition.ts apps/web/src/server/intelligence/contracts/policy.ts apps/web/src/server/intelligence/infrastructure/policy-store.ts apps/web/src/server/intelligence/runtime/model-policy.ts apps/web/src/server/settings.ts apps/web/tests/intelligence-provider-policy.test.ts docs/superpowers/plans/ai-native-journal/phase-13.md docs/superpowers/reports/ai-native-journal-phase-13.md` and it exited 1. Re-run that command on the destination worktree and fix the cause before treating Phase 13 as integrated.
+PASS. The candidate commits were reviewed, the ownership boundary held, the schema verdict is 0005-only
+with 0001 through 0004 byte-unchanged, and the destination gate passes on the destination branch.
+
+The independent implementation-diff review raised 4 findings against the first candidate: the two
+cancellation cases could not fail for the reason they claimed, because their fetch stub aborted its
+own controller; the reservation case checked the row only after the call returned and had no
+concurrent-writer case; and the plan and the report claimed 0005-specific test coverage that did not
+exist. The reviewer and the coordinator both confirmed the production code was correct:
+`runBackgroundAi` forwards `AbortSignal.any([caller, timeout])` to `generateText`, and
+`executeBackgroundRun` reserves inside its own transaction before the provider request.
+
+The phase was reopened and repaired in `640226b`. The coordinator then proved the repaired tests have
+teeth, independently of the worker's own claim, with three mutations of the production plumbing:
+
+- dropping `abortSignal` from the background adapter's `generateText` call failed exactly the two
+  cancellation cases and nothing else;
+- never taking the daily reservation failed "calls the pinned endpoint once, after the reservation is
+  committed";
+- moving the daily reservation to after the provider call failed that same case, which is what proves
+  the at-call-time assertion;
+
+each mutation was followed by a restore that made the file pass again, and the candidate ended clean
+with no production file differing from the tip. The repair itself changed no production file:
+`git diff 6012ab4 -- apps/web/src/` is empty.
+
+No push, no pull request and no merge into `main`.
