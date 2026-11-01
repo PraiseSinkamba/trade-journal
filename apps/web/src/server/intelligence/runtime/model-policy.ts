@@ -66,15 +66,8 @@ const TERMINAL_STATUSES = ["completed", "failed", "cancelled", "unavailable"] as
 export const evaluateBackgroundAuthorization = (
   input: BackgroundAuthorizationInput,
 ): Outcome<ExecutionContext> => {
-  const {
-    run,
-    policy,
-    policyInvalid,
-    currentRevision,
-    current,
-    existingAccountIds,
-    signal,
-  } = input;
+  const { run, policy, policyInvalid, currentRevision, current, existingAccountIds, signal } =
+    input;
   if (!run) return { status: "failed", reason: BACKGROUND_FAILURE.runNotFound };
   if (signal.aborted) return { status: "cancelled", reason: BACKGROUND_FAILURE.cancelled };
   // A run that already ended is never authorised again: it needs an explicit
@@ -86,8 +79,7 @@ export const evaluateBackgroundAuthorization = (
   if (policyInvalid) return { status: "unavailable", reason: BACKGROUND_FAILURE.policyInvalid };
   if (!policy) return { status: "unavailable", reason: BACKGROUND_FAILURE.policyMissing };
   const parsed = backgroundPolicySchema.safeParse(policy);
-  if (!parsed.success)
-    return { status: "unavailable", reason: BACKGROUND_FAILURE.policyInvalid };
+  if (!parsed.success) return { status: "unavailable", reason: BACKGROUND_FAILURE.policyInvalid };
   const document = parsed.data;
   if (!document.enabled)
     return { status: "unavailable", reason: BACKGROUND_FAILURE.policyDisabled };
@@ -107,7 +99,8 @@ export const evaluateBackgroundAuthorization = (
   if (
     run.provider !== current.provider ||
     run.model !== current.model ||
-    run.endpointFingerprint !== endpointFingerprint(current.provider, current.model, current.baseUrl)
+    run.endpointFingerprint !==
+      endpointFingerprint(current.provider, current.model, current.baseUrl)
   )
     return { status: "unavailable", reason: BACKGROUND_FAILURE.configurationChanged };
   if (run.scope.requiredFeatures.includes("tools") && !document.capabilities.tools)

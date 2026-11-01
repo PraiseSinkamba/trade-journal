@@ -1,11 +1,7 @@
 import { count, desc, eq, sql } from "drizzle-orm";
 import type { JournalDb } from "@/db/connection";
 import { withConnectionTransaction, type JournalTx } from "@/db/transaction";
-import {
-  intelligenceBudgetReservations,
-  intelligencePolicy,
-  intelligenceRuns,
-} from "@/db/schema";
+import { intelligenceBudgetReservations, intelligencePolicy, intelligenceRuns } from "@/db/schema";
 import { newUuid } from "@/server/ids";
 import {
   BACKGROUND_DAILY_ATTEMPT_LIMIT,
@@ -87,19 +83,9 @@ export interface PolicyStore {
   /** One run, read inside the caller's transaction. */
   readRunInTx(tx: JournalTx, runId: string): BackgroundRunRecord | null;
   /** Replace the sanitized metadata of a run. */
-  updateRunMetaInTx(
-    tx: JournalTx,
-    runId: string,
-    meta: Record<string, unknown>,
-    now: number,
-  ): void;
+  updateRunMetaInTx(tx: JournalTx, runId: string, meta: Record<string, unknown>, now: number): void;
   /** Move a run to a new status. */
-  updateRunStatusInTx(
-    tx: JournalTx,
-    runId: string,
-    status: BackgroundRunStatus,
-    now: number,
-  ): void;
+  updateRunStatusInTx(tx: JournalTx, runId: string, status: BackgroundRunStatus, now: number): void;
   /** The attempts already reserved on the day of `now`. */
   attemptsReservedOnDay(now: number): number;
   /** The reservations of one run. */
@@ -137,11 +123,7 @@ const decodeMeta = (raw: string): Record<string, unknown> => {
  *
  * Returns false when the day's allowance is already spent.
  */
-export const reserveBackgroundAttempt = (
-  tx: JournalTx,
-  runId: string,
-  now: number,
-): boolean => {
+export const reserveBackgroundAttempt = (tx: JournalTx, runId: string, now: number): boolean => {
   const day = dayIndex(now);
   const used = tx
     .select({ value: count() })
@@ -191,11 +173,7 @@ export const createPolicyStore = (deps: { db: JournalDb }): PolicyStore => {
   };
 
   const readRunInTx = (tx: JournalTx, runId: string): BackgroundRunRecord | null => {
-    const row = tx
-      .select()
-      .from(intelligenceRuns)
-      .where(eq(intelligenceRuns.id, runId))
-      .get();
+    const row = tx.select().from(intelligenceRuns).where(eq(intelligenceRuns.id, runId)).get();
     if (!row) return null;
     const scope = decodeScope(row.scopeJson);
     if (!scope) return null;
@@ -257,11 +235,7 @@ export const createPolicyStore = (deps: { db: JournalDb }): PolicyStore => {
      * ended is pinned again and queued afresh: that is the explicit
      * reschedule an operator asks for after a configuration change.
      */
-    enqueueRunInTx(
-      tx: JournalTx,
-      input: EnqueueRunInput,
-      now: number,
-    ): BackgroundRunRecord {
+    enqueueRunInTx(tx: JournalTx, input: EnqueueRunInput, now: number): BackgroundRunRecord {
       const existing = tx
         .select()
         .from(intelligenceRuns)

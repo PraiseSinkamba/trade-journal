@@ -17,7 +17,7 @@ Deliver:
   `intelligence_budget_reservations`;
 - a strict, revisioned background policy (opt-in accounts, model capability declarations, context
   bound);
-- `authorizeBackgroundRun(runId, now, signal)` — re-authorise a queued run against the *current*
+- `authorizeBackgroundRun(runId, now, signal)` — re-authorise a queued run against the _current_
   configuration and return its `ExecutionContext`;
 - `reserveBackgroundAttempt(tx, runId, now)` — take one daily allowance atomically, before any
   network use, and keep the reservation when the attempt dies;
@@ -64,9 +64,15 @@ the infrastructure may share):
 ```ts
 export const BACKGROUND_POLICY_ID = "background";
 export const BACKGROUND_DAILY_ATTEMPT_LIMIT = 10;
-export const BACKGROUND_EXECUTION_LIMITS = { maxOutputTokens: 1200, maxSteps: 4, maxToolCalls: 4, timeoutMs: 30_000, maxRetries: 0 };
-export const backgroundPolicySchema: ZodType<BackgroundPolicy>;   // strict
-export const backgroundScopeSchema: ZodType<BackgroundScope>;       // strict
+export const BACKGROUND_EXECUTION_LIMITS = {
+  maxOutputTokens: 1200,
+  maxSteps: 4,
+  maxToolCalls: 4,
+  timeoutMs: 30_000,
+  maxRetries: 0,
+};
+export const backgroundPolicySchema: ZodType<BackgroundPolicy>; // strict
+export const backgroundScopeSchema: ZodType<BackgroundScope>; // strict
 export const backgroundRunStatusSchema: ZodType<BackgroundRunStatus>;
 ```
 
@@ -76,16 +82,32 @@ Application contracts:
 // composition.ts
 export const getBackgroundPolicy: () => BackgroundPolicyView;
 export const saveBackgroundPolicy: (patch: BackgroundPolicyPatch) => BackgroundPolicyView;
-export const enqueueBackgroundRun: (input: { effectKey: string; scope: BackgroundScope; meta?: Record<string, unknown> }) => string;
-export const authorizeBackgroundRun: (runId: string, now: number, signal: AbortSignal) => Outcome<ExecutionContext>;
+export const enqueueBackgroundRun: (input: {
+  effectKey: string;
+  scope: BackgroundScope;
+  meta?: Record<string, unknown>;
+}) => string;
+export const authorizeBackgroundRun: (
+  runId: string,
+  now: number,
+  signal: AbortSignal,
+) => Outcome<ExecutionContext>;
 export const reserveBackgroundAttempt: (tx: JournalTx, runId: string, now: number) => boolean;
-export const executeBackgroundRun: (input: { runId: string; system: string; prompt: string; signal: AbortSignal; now?: number }) => Promise<Outcome<BackgroundRunOutput>>;
+export const executeBackgroundRun: (input: {
+  runId: string;
+  system: string;
+  prompt: string;
+  signal: AbortSignal;
+  now?: number;
+}) => Promise<Outcome<BackgroundRunOutput>>;
 
 // infrastructure/policy-store.ts
 export const reserveBackgroundAttempt: (tx: JournalTx, runId: string, now: number) => boolean;
 
 // runtime/model-policy.ts (pure)
-export const evaluateBackgroundAuthorization: (input: BackgroundAuthorizationInput) => Outcome<ExecutionContext>;
+export const evaluateBackgroundAuthorization: (
+  input: BackgroundAuthorizationInput,
+) => Outcome<ExecutionContext>;
 
 // server/ai-runtime.ts
 export const runBackgroundAi: (request: BackgroundAiRequest) => Promise<AiRunResult<string>>;
@@ -120,21 +142,21 @@ and a sanitized `meta_json` (never a prompt, a response or a credential).
 
 `evaluateBackgroundAuthorization` returns `Outcome<ExecutionContext>` and refuses, in order:
 
-| Reason                            | When                                                             |
-| --------------------------------- | ---------------------------------------------------------------- |
-| `run_not_found`                   | no run row for the id                                            |
-| `cancelled`                       | the run was cancelled, or the abort signal already fired         |
-| `run_finished`                    | the run already ended; it needs an explicit reschedule           |
-| `policy_missing` / `policy_invalid` | no policy row, or the stored document does not parse          |
-| `policy_disabled`                 | background AI is not opted in                                     |
-| `policy_changed`                  | the policy was revised after the run was queued                   |
-| `account_not_opted_in`            | a scope account is not in the policy's opted-in accounts          |
-| `account_missing`                 | a scope account no longer exists (cancels the work)               |
-| `configuration_changed`           | provider, model or endpoint fingerprint no longer match the run's |
-| `tools_unsupported`               | the run requires tools and the policy does not allow them         |
-| `structured_output_unsupported`   | the run requires structured output and the policy forbids it      |
-| `capacity_unknown`                | the policy has no usable context bound                            |
-| `context_too_large`               | the run wants more context than the policy allows                 |
+| Reason                              | When                                                              |
+| ----------------------------------- | ----------------------------------------------------------------- |
+| `run_not_found`                     | no run row for the id                                             |
+| `cancelled`                         | the run was cancelled, or the abort signal already fired          |
+| `run_finished`                      | the run already ended; it needs an explicit reschedule            |
+| `policy_missing` / `policy_invalid` | no policy row, or the stored document does not parse              |
+| `policy_disabled`                   | background AI is not opted in                                     |
+| `policy_changed`                    | the policy was revised after the run was queued                   |
+| `account_not_opted_in`              | a scope account is not in the policy's opted-in accounts          |
+| `account_missing`                   | a scope account no longer exists (cancels the work)               |
+| `configuration_changed`             | provider, model or endpoint fingerprint no longer match the run's |
+| `tools_unsupported`                 | the run requires tools and the policy does not allow them         |
+| `structured_output_unsupported`     | the run requires structured output and the policy forbids it      |
+| `capacity_unknown`                  | the policy has no usable context bound                            |
+| `context_too_large`                 | the run wants more context than the policy allows                 |
 
 The run service refuses two more reasons outside the policy decision:
 `daily_budget_exhausted` (the day's allowance is spent) and
@@ -172,11 +194,11 @@ takes another one). No network call happens inside the transaction.
 
 `apps/web/src/db/migrations/0005-intelligence-runtime.ts` creates, forward-only and additive:
 
-| Table                            | Columns                                                                                                                                  | Keys / indexes                                                                                       |
-| -------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------- |
-| `intelligence_policy`            | `id`, `revision`, `settings_json`, `recorded_at`                                                                                       | PK `(id, revision)`                                                                                   |
-| `intelligence_runs`              | `id`, `effect_key`, `status`, `provider`, `model`, `endpoint_fingerprint`, `policy_revision`, `scope_json`, `meta_json`, `created_at`, `updated_at` | PK `id`, unique `effect_key`, index `(status, created_at)`                                          |
-| `intelligence_budget_reservations` | `run_id`, `attempt`, `day`, `reserved_at`                                                                                                | PK `(run_id, attempt)`, FK `run_id` → `intelligence_runs(id)` on delete cascade, index `(day)`            |
+| Table                              | Columns                                                                                                                                             | Keys / indexes                                                                                 |
+| ---------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------- |
+| `intelligence_policy`              | `id`, `revision`, `settings_json`, `recorded_at`                                                                                                    | PK `(id, revision)`                                                                            |
+| `intelligence_runs`                | `id`, `effect_key`, `status`, `provider`, `model`, `endpoint_fingerprint`, `policy_revision`, `scope_json`, `meta_json`, `created_at`, `updated_at` | PK `id`, unique `effect_key`, index `(status, created_at)`                                     |
+| `intelligence_budget_reservations` | `run_id`, `attempt`, `day`, `reserved_at`                                                                                                           | PK `(run_id, attempt)`, FK `run_id` → `intelligence_runs(id)` on delete cascade, index `(day)` |
 
 Checklist:
 

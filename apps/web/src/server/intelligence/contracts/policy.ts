@@ -80,9 +80,7 @@ export const backgroundPolicySchema = z
      * They are declared, never probed: a background run never contacts a
      * provider to find out what it can do.
      */
-    capabilities: z
-      .object({ tools: z.boolean(), structuredOutput: z.boolean() })
-      .strict(),
+    capabilities: z.object({ tools: z.boolean(), structuredOutput: z.boolean() }).strict(),
     /** How many characters of context a background run may read. */
     maxInputCharacters: z.number().int().positive(),
   })

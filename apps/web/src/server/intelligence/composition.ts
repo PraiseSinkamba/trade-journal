@@ -270,7 +270,11 @@ const backgroundStore = createPolicyStore({ db });
 
 /** The account ids that still exist in the journal. */
 const existingAccountIds = (): string[] =>
-  db.select({ id: accounts.id }).from(accounts).all().map((row) => row.id);
+  db
+    .select({ id: accounts.id })
+    .from(accounts)
+    .all()
+    .map((row) => row.id);
 
 /** The policy as the settings surface sees it. */
 export const getBackgroundPolicy = (): BackgroundPolicyView => {
@@ -440,9 +444,7 @@ export const executeBackgroundRun = async (input: {
   // never reaches the provider: the run is unavailable before any request.
   if (!aiProviderConfigured(run.provider))
     return { status: "unavailable", reason: BACKGROUND_RUN_FAILURE.providerNotConfigured };
-  const reserved = withJournalTransaction((tx) =>
-    reserveBackgroundAttempt(tx, input.runId, now),
-  );
+  const reserved = withJournalTransaction((tx) => reserveBackgroundAttempt(tx, input.runId, now));
   if (!reserved)
     return { status: "unavailable", reason: BACKGROUND_RUN_FAILURE.dailyBudgetExhausted };
   withJournalTransaction((tx) =>

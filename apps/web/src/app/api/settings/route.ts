@@ -12,10 +12,7 @@ import {
   getCurrentAccountId,
   normalizeAiBaseUrl,
 } from "@/server/settings";
-import {
-  getBackgroundPolicy,
-  saveBackgroundPolicy,
-} from "@/server/intelligence/composition";
+import { getBackgroundPolicy, saveBackgroundPolicy } from "@/server/intelligence/composition";
 import {
   backgroundPolicyPatchSchema,
   type BackgroundPolicyPatch,
