@@ -2,7 +2,7 @@ import { eq } from "drizzle-orm";
 import { db, type JournalDb } from "@/db/connection";
 import { accounts, domainOutbox, intelligenceJobs, tradeProjectionRevisions } from "@/db/schema";
 import { withJournalTransaction, type JournalTx } from "@/db/transaction";
-import { parseTradeChanged, type TradeChanged } from "@/server/domain-events";
+import { parseTradeChanged, type SourceChange, type TradeChanged } from "@/server/domain-events";
 import {
   aiProviderConfigured,
   getCurrentProviderConfiguration,
@@ -36,6 +36,7 @@ import type { ExecutionContext, Outcome } from "./contracts/execution";
 import { createBackfillService } from "./infrastructure/backfill";
 import { createEffectStore, createJobStore, createReplayService } from "./infrastructure/jobs";
 import { persistObservationInTx } from "./infrastructure/knowledge-store";
+import { applySourceChange, nextSourceRevision } from "./infrastructure/knowledge-revisions";
 import { createOutboxDispatcher, type OutboxHandler } from "./infrastructure/outbox";
 import {
   createPolicyStore,
@@ -503,3 +504,62 @@ export const executeBackgroundRun = async (input: {
     return { status: cancelled ? "cancelled" : "failed", reason: kind };
   }
 };
+
+/**
+ * The source-revision service (Phase 14).
+ *
+ * A user-authored source changes in one transaction: the write itself and the
+ * source revision that describes it. `recordSourceChanges` allocates the
+ * knowledge revision of the source inside that transaction, so two concurrent
+ * writers cannot allocate the same one, and it applies the revision through
+ * the same adapter the rest of the intelligence runtime uses.
+ */
+/** A source change without its revision: the caller does not choose it. */
+export type SourceChangeRequest = SourceChange extends infer T
+  ? T extends SourceChange
+    ? Omit<T, "revision">
+    : never
+  : never;
+
+/** The source change with the revision the transaction allocated. */
+const withRevision = (change: SourceChangeRequest, revision: number): SourceChange =>
+  change.accountId === null
+    ? {
+        kind: change.kind,
+        action: change.action,
+        sourceId: change.sourceId,
+        accountId: null,
+        revision,
+        correlationId: change.correlationId,
+      }
+    : {
+        kind: change.kind,
+        action: change.action,
+        sourceId: change.sourceId,
+        accountId: change.accountId,
+        revision,
+        correlationId: change.correlationId,
+      };
+
+/**
+ * Runs a source write and records its source revisions, atomically.
+ *
+ * The write callback reads what it needs inside the transaction and returns
+ * the revisions it caused, so a write that changes nothing returns no
+ * revision. The write and its revisions commit together or not at all: a
+ * rolled-back write leaves no revision and invalidates no knowledge.
+ */
+export const recordSourceChanges = (
+  write: (tx: JournalTx) => readonly SourceChangeRequest[],
+): void =>
+  withJournalTransaction((tx) => {
+    for (const change of write(tx)) {
+      applySourceChange(
+        tx,
+        withRevision(change, nextSourceRevision(tx, change.kind, change.sourceId)),
+      );
+    }
+  });
+
+export { applySourceChange };
+export type { SourceChange };

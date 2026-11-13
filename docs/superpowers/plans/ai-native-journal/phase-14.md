@@ -34,7 +34,8 @@ Deliver:
 Owned files (only these may be edited):
 
 - `apps/web/src/server/domain-events.ts` (the `SourceChange` contract and its strict schema)
-- `apps/web/src/server/intelligence/knowledge/` (new, **pure**: `patterns.ts`, `revisions.ts`)
+- `apps/web/src/server/intelligence/contracts/knowledge.ts` (new, **pure**: the pattern-evaluation
+  contract, the evaluator and the invalidation decisions)
 - `apps/web/src/server/intelligence/infrastructure/knowledge-revisions.ts` (new, the SQLite adapter)
 - `apps/web/src/server/intelligence/composition.ts` (wiring only)
 - `apps/web/src/app/api/journal/`, `apps/web/src/app/api/playbooks/`, `apps/web/src/app/api/notes/`,
@@ -49,10 +50,13 @@ Owned files (only these may be edited):
 
 Two notes on the layout, both required by the binding contract review §2 ("infrastructure owns
 SQLite adapters for every domain's storage port", ADR 0008 "typed ports at an explicit composition
-root"):
+root") and by the enforced import-boundary rule 5 (a module in one intelligence domain may import
+only `contracts/` from its siblings):
 
-- `server/intelligence/knowledge/` holds **pure** code only: the pattern-evaluation contract, the
-  pure evaluator and the pure invalidation decisions. It imports no database, no Next and no AI SDK.
+- The pure knowledge contracts — the pattern-evaluation contract, the pure evaluator and the
+  invalidation decisions — live in `server/intelligence/contracts/knowledge.ts`, beside
+  `contracts/observations.ts`, which already holds the pure trade-projection evaluator. They import
+  no database, no Next and no AI SDK.
 - The SQLite adapter lives in `server/intelligence/infrastructure/knowledge-revisions.ts`, beside
   the Phase 08 store that already lives there, and is exposed through `composition.ts`. The file is
   new and uniquely named, so it collides with no other phase's file.
@@ -71,13 +75,13 @@ applies — the account id. The TypeScript type discriminates on `kind`; the Zod
 strict discriminated union whose `action` is a literal per member, so an unpaired kind/action
 combination cannot be constructed or parsed.
 
-| Kind          | Scope          | Written by                                                               |
-| ------------- | -------------- | ------------------------------------------------------------------------ |
-| `annotation`  | account-scoped | trade annotation write (`/api/trades/[key]`, `/api/trades/bulk`)           |
-| `rule_check`  | account-scoped | trade rule-check write (`/api/trades/[key]/rules`)                         |
-| `playbook`    | shared         | playbook create, edit, delete (`/api/playbooks`)                            |
-| `journal`     | shared         | journal day note write (`/api/journal/[date]`)                             |
-| `note`        | shared         | note create, edit, delete (`/api/notes`), folder delete (visibility change) |
+| Kind         | Scope          | Written by                                                                  |
+| ------------ | -------------- | --------------------------------------------------------------------------- |
+| `annotation` | account-scoped | trade annotation write (`/api/trades/[key]`, `/api/trades/bulk`)            |
+| `rule_check` | account-scoped | trade rule-check write (`/api/trades/[key]/rules`)                          |
+| `playbook`   | shared         | playbook create, edit, delete (`/api/playbooks`)                            |
+| `journal`    | shared         | journal day note write (`/api/journal/[date]`)                              |
+| `note`       | shared         | note create, edit, delete (`/api/notes`), folder delete (visibility change) |
 
 `revision` is the **knowledge revision** of that source: a per-`(kind, source id)` counter that
 advances independently of any financial or projection revision. The account scope is `null` for the
@@ -90,13 +94,30 @@ export type SourceKind = "annotation" | "rule_check" | "playbook" | "journal" | 
 export type SourceAction = "revised" | "deleted";
 
 export type SourceChange =
-  | { readonly kind: "annotation"; readonly action: SourceAction; readonly sourceId: string;
-      readonly revision: number; readonly correlationId: string; readonly accountId: string }
-  | { readonly kind: "rule_check"; readonly action: SourceAction; readonly sourceId: string;
-      readonly revision: number; readonly correlationId: string; readonly accountId: string }
-  | { readonly kind: "playbook" | "journal" | "note"; readonly action: SourceAction;
-      readonly sourceId: string; readonly revision: number; readonly correlationId: string;
-      readonly accountId: null };
+  | {
+      readonly kind: "annotation";
+      readonly action: SourceAction;
+      readonly sourceId: string;
+      readonly revision: number;
+      readonly correlationId: string;
+      readonly accountId: string;
+    }
+  | {
+      readonly kind: "rule_check";
+      readonly action: SourceAction;
+      readonly sourceId: string;
+      readonly revision: number;
+      readonly correlationId: string;
+      readonly accountId: string;
+    }
+  | {
+      readonly kind: "playbook" | "journal" | "note";
+      readonly action: SourceAction;
+      readonly sourceId: string;
+      readonly revision: number;
+      readonly correlationId: string;
+      readonly accountId: null;
+    };
 ```
 
 The wire form is parsed by `parseSourceChange` from a strict Zod discriminated union. Unknown keys
@@ -111,7 +132,7 @@ row already has, so the write and the delete name the same source. `playbook` us
 that request emits. A request that writes several sources is therefore one operation in the source
 log.
 
-### `applySourceChange(tx, change)` (pure decisions in `knowledge/revisions.ts`, adapter in `infrastructure/knowledge-revisions.ts`)
+### `applySourceChange(tx, change)` (pure decisions in `contracts/knowledge.ts`, adapter in `infrastructure/knowledge-revisions.ts`)
 
 One call, inside the caller's transaction, in this order:
 
@@ -138,11 +159,15 @@ The knowledge lifecycle is therefore: `active` (current) → `stale` (the source
 re-evaluation is pending) → the pending successor becomes the current `active` version when it is
 evaluated, or `invalidated` when the source was deleted.
 
-### `PatternEvaluation` (`apps/web/src/server/intelligence/knowledge/patterns.ts`)
+### `PatternEvaluation` (`apps/web/src/server/intelligence/contracts/knowledge.ts`)
 
 ```ts
 export type PatternEvaluation =
-  | { readonly kind: "insufficient_evidence"; readonly required: number; readonly available: number }
+  | {
+      readonly kind: "insufficient_evidence";
+      readonly required: number;
+      readonly available: number;
+    }
   | {
       readonly kind: "evaluated";
       readonly evaluatorId: string;
@@ -174,21 +199,25 @@ Every row below wraps the write and its source revision in **one** immediate tra
 rolled-back write leaves no source revision and invalidates no knowledge. The source revision is
 allocated **inside** that transaction, so two concurrent writers cannot allocate the same revision.
 
-| Write path                    | Write                                              | Source kind    | Action    |
-| ----------------------------- | -------------------------------------------------- | -------------- | --------- |
-| `POST /api/notes`             | create a note                                      | `note`         | `revised` |
-| `PATCH /api/notes/[id]`       | edit a note                                        | `note`         | `revised` |
-| `DELETE /api/notes/[id]`      | delete a note                                      | `note`         | `deleted` |
-| `DELETE /api/folders/[id]`     | folder deleted; **each** note it held moves to `my-notes` (visibility change) | `note` | `revised`, one change per note id |
-| `PUT /api/journal/[date]`      | write the journal day note                         | `journal`      | `revised` |
-| `POST /api/playbooks`          | create a playbook                                  | `playbook`     | `revised` |
-| `PATCH /api/playbooks/[id]`    | edit a playbook                                    | `playbook`     | `revised` |
-| `DELETE /api/playbooks/[id]`   | delete a playbook                                  | `playbook`     | `deleted` |
-| `PATCH /api/trades/[key]`      | write the trade annotations                        | `annotation`   | `revised` |
-| `POST /api/trades/[key]/rules` | write a trade rule check (`followed: null` deletes it) | `rule_check` | `revised` / `deleted` |
-| `POST /api/trades/bulk`        | review, unreview, tag, untag, playbook             | `annotation`   | `revised` |
-| `DELETE /api/trades/[key]`     | delete the trade — **its annotations go with it**  | `annotation`   | `deleted` |
-| `POST /api/trades/bulk` (`action: "delete"`) | delete the trades — **their annotations go with them** | `annotation` | `deleted` |
+The write callback reads what it needs **inside** the transaction and returns the revisions it
+caused, so a write that changes nothing returns no revision: an unchanged journal day note does not
+invalidate the knowledge that was derived from it.
+
+| Write path                                   | Write                                                                         | Source kind  | Action                            |
+| -------------------------------------------- | ----------------------------------------------------------------------------- | ------------ | --------------------------------- |
+| `POST /api/notes`                            | create a note                                                                 | `note`       | `revised`                         |
+| `PATCH /api/notes/[id]`                      | edit a note                                                                   | `note`       | `revised`                         |
+| `DELETE /api/notes/[id]`                     | delete a note                                                                 | `note`       | `deleted`                         |
+| `DELETE /api/folders/[id]`                   | folder deleted; **each** note it held moves to `my-notes` (visibility change) | `note`       | `revised`, one change per note id |
+| `PUT /api/journal/[date]`                    | write the journal day note                                                    | `journal`    | `revised`                         |
+| `POST /api/playbooks`                        | create a playbook                                                             | `playbook`   | `revised`                         |
+| `PATCH /api/playbooks/[id]`                  | edit a playbook                                                               | `playbook`   | `revised`                         |
+| `DELETE /api/playbooks/[id]`                 | delete a playbook                                                             | `playbook`   | `deleted`                         |
+| `PATCH /api/trades/[key]`                    | write the trade annotations                                                   | `annotation` | `revised`                         |
+| `POST /api/trades/[key]/rules`               | write a trade rule check (`followed: null` deletes it)                        | `rule_check` | `revised` / `deleted`             |
+| `POST /api/trades/bulk`                      | review, unreview, tag, untag, playbook                                        | `annotation` | `revised`                         |
+| `DELETE /api/trades/[key]`                   | delete the trade — **its annotations go with it**                             | `annotation` | `deleted`                         |
+| `POST /api/trades/bulk` (`action: "delete"`) | delete the trades — **their annotations go with them**                        | `annotation` | `deleted`                         |
 
 Two writes destroy annotations that a user authored, and both are covered above: deleting a trade
 removes its annotation row, and a bulk delete removes several. Without a `deleted` change the
@@ -218,16 +247,16 @@ One row per source revision the user authored. It records **that** the user wrot
 a source, in which account scope, and at which revision — never the user's words: those stay in the
 journal's own tables (notes, journal days, playbooks, trade annotations).
 
-| Column          | Null | Default | Constraint                                                          |
-| --------------- | ---- | ------- | ------------------------------------------------------------------- |
-| `id`            | no   | —       | PRIMARY KEY                                                          |
-| `kind`          | no   | —       | `CHECK (kind IN ('annotation','rule_check','playbook','journal','note'))` |
-| `source_id`     | no   | —       | —                                                                   |
-| `revision`      | no   | —       | `CHECK (revision > 0)`                                               |
-| `account_id`    | yes  | `NULL`  | FK → `accounts(id)` `ON DELETE CASCADE` (null = shared source)      |
-| `status`        | no   | —       | `CHECK (status IN ('active','superseded','invalidated'))`           |
-| `correlation_id`| no   | —       | —                                                                   |
-| `recorded_at`   | no   | —       | —                                                                   |
+| Column           | Null | Default | Constraint                                                                |
+| ---------------- | ---- | ------- | ------------------------------------------------------------------------- |
+| `id`             | no   | —       | PRIMARY KEY                                                               |
+| `kind`           | no   | —       | `CHECK (kind IN ('annotation','rule_check','playbook','journal','note'))` |
+| `source_id`      | no   | —       | —                                                                         |
+| `revision`       | no   | —       | `CHECK (revision > 0)`                                                    |
+| `account_id`     | yes  | `NULL`  | FK → `accounts(id)` `ON DELETE CASCADE` (null = shared source)            |
+| `status`         | no   | —       | `CHECK (status IN ('active','superseded','invalidated'))`                 |
+| `correlation_id` | no   | —       | —                                                                         |
+| `recorded_at`    | no   | —       | —                                                                         |
 
 Keys: PK `id`; unique `(kind, source_id, revision)`; index `(kind, source_id, status)`; index
 `(account_id)`.
@@ -239,27 +268,27 @@ invalidation can find them. The two tables differ only in the evaluation columns
 tentative interpretation (its evaluator may be absent — a hypothesis can be self-reported), a
 pattern is the result of a pattern evaluation and therefore always names its evaluator.
 
-| Column                 | Null | Default | Constraint                                                       |
-| ---------------------- | ---- | ------- | ---------------------------------------------------------------- |
-| `id`                   | no   | —       | PRIMARY KEY                                                       |
-| `subject_type`         | no   | —       | —                                                                |
-| `subject_id`           | no   | —       | —                                                                |
-| `version`              | no   | —       | `CHECK (version > 0)`                                            |
-| `status`               | no   | —       | `CHECK (status IN ('active','stale','pending','superseded','invalidated'))` |
-| `payload_schema_version` | no | `1`     | —                                                                |
-| `payload_json`         | no   | —       | strict payload, at most 16 KiB                                   |
-| `evidence_ids_json`    | no   | —       | JSON array of evidence ids, at most 16 KiB                       |
-| `evaluator_id`         | yes  | `NULL`  | hypotheses: nullable; patterns: `NOT NULL`                      |
-| `evaluator_version`    | yes  | `NULL`  | hypotheses: nullable; patterns: `NOT NULL`                      |
-| `evaluation_state`     | patterns only | — | `CHECK (evaluation_state IN ('evaluated','insufficient_evidence'))` |
-| `required_evidence`    | patterns only | — | `CHECK (required_evidence >= 0)`                                 |
-| `available_evidence`   | patterns only | — | `CHECK (available_evidence >= 0)`                                |
-| `source_kind`          | no   | —       | —                                                                |
-| `source_id`            | no   | —       | —                                                                |
-| `source_revision`      | no   | —       | `CHECK (source_revision > 0)`                                     |
-| `account_id`           | yes  | `NULL`  | FK → `accounts(id)` `ON DELETE CASCADE`                          |
-| `created_at`           | no   | —       | —                                                                |
-| `updated_at`           | no   | —       | —                                                                |
+| Column                   | Null          | Default | Constraint                                                                  |
+| ------------------------ | ------------- | ------- | --------------------------------------------------------------------------- |
+| `id`                     | no            | —       | PRIMARY KEY                                                                 |
+| `subject_type`           | no            | —       | —                                                                           |
+| `subject_id`             | no            | —       | —                                                                           |
+| `version`                | no            | —       | `CHECK (version > 0)`                                                       |
+| `status`                 | no            | —       | `CHECK (status IN ('active','stale','pending','superseded','invalidated'))` |
+| `payload_schema_version` | no            | `1`     | —                                                                           |
+| `payload_json`           | no            | —       | strict payload, at most 16 KiB                                              |
+| `evidence_ids_json`      | no            | —       | JSON array of evidence ids, at most 16 KiB                                  |
+| `evaluator_id`           | yes           | `NULL`  | hypotheses: nullable; patterns: `NOT NULL`                                  |
+| `evaluator_version`      | yes           | `NULL`  | hypotheses: nullable; patterns: `NOT NULL`                                  |
+| `evaluation_state`       | patterns only | —       | `CHECK (evaluation_state IN ('evaluated','insufficient_evidence'))`         |
+| `required_evidence`      | patterns only | —       | `CHECK (required_evidence >= 0)`                                            |
+| `available_evidence`     | patterns only | —       | `CHECK (available_evidence >= 0)`                                           |
+| `source_kind`            | no            | —       | —                                                                           |
+| `source_id`              | no            | —       | —                                                                           |
+| `source_revision`        | no            | —       | `CHECK (source_revision > 0)`                                               |
+| `account_id`             | yes           | `NULL`  | FK → `accounts(id)` `ON DELETE CASCADE`                                     |
+| `created_at`             | no            | —       | —                                                                           |
+| `updated_at`             | no            | —       | —                                                                           |
 
 Keys: PK `id`; unique `(subject_type, subject_id, version)`; index
 `(source_kind, source_id, account_id, status)`; index `(account_id, status)`.
@@ -275,14 +304,14 @@ findings) are separate tables and never share a row.
 
 Phase 15 owns the scheduler behaviour; this phase creates the table and writes nothing into it.
 
-| Column              | Null | Default | Constraint              |
-| ------------------- | ---- | ------- | ----------------------- |
-| `id`                | no   | —       | PRIMARY KEY             |
-| `definition_version`| no   | —       | `CHECK (definition_version > 0)` |
-| `next_due_at`       | no   | —       | —                       |
-| `checkpoint_json`   | yes  | `NULL`  | JSON object, at most 16 KiB |
-| `created_at`        | no   | —       | —                       |
-| `updated_at`        | no   | —       | —                       |
+| Column               | Null | Default | Constraint                       |
+| -------------------- | ---- | ------- | -------------------------------- |
+| `id`                 | no   | —       | PRIMARY KEY                      |
+| `definition_version` | no   | —       | `CHECK (definition_version > 0)` |
+| `next_due_at`        | no   | —       | —                                |
+| `checkpoint_json`    | yes  | `NULL`  | JSON object, at most 16 KiB      |
+| `created_at`         | no   | —       | —                                |
+| `updated_at`         | no   | —       | —                                |
 
 Keys: PK `id`; index `(next_due_at)`. `definition_version` is the version Phase 15 keys its
 `(scheduleId, dueAt, version)` job from; `checkpoint_json` is the durable condition cursor Phase 15
@@ -314,9 +343,8 @@ Checklist:
 2. Write the failing test `apps/web/tests/intelligence-knowledge-revisions.test.ts` first. The test
    seeds dependent knowledge rows explicitly, so the invalidation assertions cannot pass vacuously.
 3. Add the `SourceChange` contract and its strict schema to `apps/web/src/server/domain-events.ts`.
-4. Add `apps/web/src/server/intelligence/knowledge/patterns.ts` (the `PatternEvaluation` contract and
-   the pure evaluator) and `apps/web/src/server/intelligence/knowledge/revisions.ts` (the pure
-   invalidation decisions).
+4. Add `apps/web/src/server/intelligence/contracts/knowledge.ts`: the `PatternEvaluation` contract,
+   the pure evaluator and the pure invalidation decisions.
 5. Add `apps/web/src/db/migrations/0006-knowledge-scheduling.ts`, register it, mirror it in
    `schema.ts` and `bootstrap.ts`, regenerate the checksum artifact.
 6. Add `apps/web/src/server/intelligence/infrastructure/knowledge-revisions.ts`: the SQLite adapter

@@ -112,3 +112,104 @@ export const tradeChangedSchema: z.ZodType<TradeChanged> = tradeChangedObjectSch
 export function parseTradeChanged(raw: unknown): TradeChanged {
   return tradeChangedObjectSchema.parse(raw) as TradeChanged;
 }
+
+/**
+ * The source-change contract (Phase 14).
+ *
+ * A user-authored source — a trade annotation, a trade rule check, a
+ * playbook, a journal day note or a note — changes in two ways: it is
+ * revised, or it is deleted. The change names the source, the revision it
+ * carries and the account scope it belongs to.
+ *
+ * The revision is the **knowledge revision** of that source: a per-source
+ * counter that advances independently of any financial or projection
+ * revision. The journal day note, the notes and the playbooks are shared
+ * across accounts and carry no account scope; the trade annotation and the
+ * trade rule check belong to the account of the trade.
+ */
+
+/** The kinds of user-authored source the journal keeps. */
+export type SourceKind = "annotation" | "rule_check" | "playbook" | "journal" | "note";
+
+/** What happened to the source. */
+export type SourceAction = "revised" | "deleted";
+
+/** The fields every source change carries. */
+interface SourceChangeBase {
+  /** The identity of the source inside its kind. */
+  readonly sourceId: string;
+  /** The knowledge revision of that source. */
+  readonly revision: number;
+  /** The id of the request that produced the change. */
+  readonly correlationId: string;
+}
+
+/**
+ * A committed change to one user-authored source.
+ *
+ * The union discriminates on the kind, so the account scope is part of the
+ * member: an account-scoped source always names its account, and a shared
+ * source always carries `null`.
+ */
+export type SourceChange =
+  | (SourceChangeBase & {
+      readonly kind: "annotation" | "rule_check";
+      readonly action: SourceAction;
+      readonly accountId: string;
+    })
+  | (SourceChangeBase & {
+      readonly kind: "playbook" | "journal" | "note";
+      readonly action: SourceAction;
+      readonly accountId: null;
+    });
+
+/** The source kinds that belong to one account. */
+export const ACCOUNT_SCOPED_SOURCE_KINDS: readonly SourceKind[] = ["annotation", "rule_check"];
+
+/** The source kinds the journal shares across accounts. */
+export const SHARED_SOURCE_KINDS: readonly SourceKind[] = ["playbook", "journal", "note"];
+
+const sourceChangeBaseShape = {
+  sourceId: z.string().min(1),
+  revision: z.number().int().positive(),
+  correlationId: z.string().min(1),
+};
+
+const accountScopedSourceChangeSchema = z
+  .object({
+    kind: z.enum(["annotation", "rule_check"]),
+    action: z.enum(["revised", "deleted"]),
+    ...sourceChangeBaseShape,
+    accountId: z.string().min(1),
+  })
+  .strict();
+
+const sharedSourceChangeSchema = z
+  .object({
+    kind: z.enum(["playbook", "journal", "note"]),
+    action: z.enum(["revised", "deleted"]),
+    ...sourceChangeBaseShape,
+    accountId: z.null(),
+  })
+  .strict();
+
+/**
+ * The strict schema of a source change.
+ *
+ * Unknown keys are rejected, and the account scope is part of the member, so
+ * a shared source can never claim an account and an account-scoped source can
+ * never omit one.
+ */
+export const sourceChangeSchema: z.ZodType<SourceChange> = z.union([
+  accountScopedSourceChangeSchema,
+  sharedSourceChangeSchema,
+]) as z.ZodType<SourceChange>;
+
+/**
+ * Parses an untrusted value into a source change.
+ *
+ * @throws {z.ZodError} when the value does not satisfy the strict schema.
+ */
+export function parseSourceChange(raw: unknown): SourceChange {
+  return sourceChangeSchema.parse(raw) as SourceChange;
+}

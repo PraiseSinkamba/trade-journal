@@ -1,87 +1,90 @@
 ## Verdict: PASS
 
-## Reviewer Report — Phase 14 plan (knowledge-source revisions and invalidation)
+## Reviewer Report — Phase 14 implementation (knowledge-source revisions and invalidation)
 
 ### PASS / FAIL
 
-PASS. The plan-review round raised four MAJOR findings and eighteen MINOR/NIT findings; all four
-MAJOR findings and every MINOR finding that touches a contract, a schema rule or an acceptance
-criterion are resolved in the committed plan text. The findings that touch wording only are
-recorded below with the resolution.
+PASS. The implementation review of the Phase 14 diff raised two MAJOR findings and eight
+MINOR/NIT findings. Both MAJOR findings are resolved with teeth — the record kind now survives
+the invalidation, and the rollback case now exercises the real write path — and every MINOR
+finding that touches behaviour, a contract or the test's value is resolved too. The remaining
+notes are recorded without changing a check result.
 
 ### Findings
 
-- [PASS] `docs/superpowers/plans/ai-native-journal/phase-14.md` — MAJOR 1 (successor enqueue
-  contradicted the acceptance bullets) resolved. The `applySourceChange` section now states that
-  only rows moved to `stale` receive a pending successor, that a `deleted` action moves rows to
-  `invalidated` and enqueues nothing, and the acceptance section repeats the split.
-- [PASS] `docs/superpowers/plans/ai-native-journal/phase-14.md` — MAJOR 2 (a second correction left
-  the pending successor bound to an older source revision) resolved. Step 4 of the contract now
-  supersedes an older pending request and binds the new successor to the newest source revision,
-  and the acceptance section asserts it.
-- [PASS] `docs/superpowers/plans/ai-native-journal/phase-14.md` — MAJOR 3 (the annotation-destroying
-  trade deletes emitted no source change) resolved. The write-path matrix now carries two extra rows,
-  `DELETE /api/trades/[key]` and the bulk `delete` action, as `annotation` `deleted` changes, and the
-  matrix note explains that the trade delete runs inside the same immediate transaction as the
-  source change.
-- [PASS] `docs/superpowers/plans/ai-native-journal/phase-14.md` — MAJOR 4 (the SQLite adapter placed
-  inside the knowledge domain) resolved. The knowledge directory is now pure
-  (`patterns.ts`, `revisions.ts`); the adapter is `infrastructure/knowledge-revisions.ts`, exposed
-  through `composition.ts`, and the scope section states the contract-review §2 and ADR 0008 reason.
-- [PASS] schema allocation and migration checklist — the MAJOR (unversioned, uncapped JSON
-  payloads) and the MINOR (missing nullability, defaults and `CHECK` constraints) are resolved: the
-  plan now lists every column with nullability, default and `CHECK` constraint, adds
-  `payload_schema_version`, and caps `payload_json` and `evidence_ids_json` at 16 KiB.
-- [PASS] upgrade coverage — the MINOR (no explicit `0005` → `0006` upgrade case) is resolved: the
-  checklist now requires the phase test to upgrade a journal that is at `0005` and assert the same
-  four tables.
-- [PASS] `intelligence_schedules` — the MINOR (untyped checkpoint, no schedule version) is resolved:
-  the table now defines `checkpoint_json` as a capped JSON object and states that
-  `definition_version` is the version Phase 15 keys its `(scheduleId, dueAt, version)` job from.
-- [PASS] `knowledge_hypotheses` — the MINOR (no evaluator identity on a derived finding) is resolved:
-  both tables carry `evaluator_id` and `evaluator_version`; the hypotheses' are nullable because a
-  hypothesis may be self-reported, the patterns' are not because a pattern is always the result of a
-  pattern evaluation.
-- [PASS] `knowledge_patterns` representation — the MINOR (the evaluation union stored twice) is
-  resolved: the row keeps the evaluation state as columns (`evaluation_state`,
-  `required_evidence`, `available_evidence`, `evaluator_id`, `evaluator_version`) and the pure
-  `PatternEvaluation` union stays a contract of the evaluator.
-- [PASS] account scope — the MINOR (invalidation did not constrain the account) is resolved: the
-  contract states that the account-scoped kinds match on the same `account_id` and the shared kinds
-  on `account_id IS NULL`; the MINOR on the inverted scope wording is resolved by stating that a
-  narrowed account scope never exposes shared-source knowledge and only the unscoped view does.
-- [PASS] write-path details — the MINORs are resolved: the folder delete emits one `note` change per
-  affected note id under one correlation id; the `rule_check` source id is the rule-check row id
-  `JSON.stringify([tradeKey, playbookId, rule])`, account-scoped through the trade; the correlation
-  id is one `newUuid()` per request.
-- [PASS] `evaluatePattern` — the MINOR (no signature, no source for `required`) is resolved: the
-  signature and the meaning of `required` and `available` are stated.
-- [PASS] transaction semantics — the MINOR (no `behavior: "immediate"`) is resolved: the matrix
-  states `withJournalTransaction` with `behavior: "immediate"`, and the source revision is allocated
-  inside that transaction.
-- [PASS] revision allocation — the MINOR (allocation outside the transaction) is resolved: the
-  matrix states the revision is allocated inside the same immediate transaction.
-- [PASS] `SourceChange` discrimination — the MINOR (prose said ten members, the type was flat) is
-  resolved: the type now discriminates on `kind`, the account scope is part of the member, and the
-  prose says "ten permitted combinations".
-- [PASS] meaningful test fixtures — the MINOR (nothing produced knowledge rows, so the assertions
-  could pass vacuously) is resolved: step 2 of the plan requires the test to seed dependent knowledge
-  rows explicitly.
-- [PASS] composition wiring — the MINOR (a step named a deliverable that does not exist) is resolved:
-  step 7 now names the concrete wiring (one adapter instance reached through `composition.ts`).
-- [NOTE] `composition.ts` ownership — the plan keeps `composition.ts` in scope. The coordinator's
-  dispatch message allocates it explicitly ("`apps/web/src/server/intelligence/composition.ts` (wire
-  the source change and the knowledge invalidation)"), which is the newer allocation; the packet's
-  ownership paragraph lists it as shared, and the phase rule reserves it to one owner per phase.
-  This phase has one writer.
-- [NOTE] `apps/web/src/server/trading/commands.ts` — not edited. The trade-delete source change is
-  emitted by the route that owns the write path, inside the same transaction as the `deleteTrades`
-  command, so the command file needs no change.
-- [NOTE] No behavioural rule, no evaluator registration, no scheduler behaviour and no UI are
-  planned. The full `pnpm test` gate stays with the coordinator's destination run.
+- [PASS] `apps/web/src/server/intelligence/infrastructure/knowledge-revisions.ts` — MAJOR 1 (a stale
+  pattern's re-evaluation request became a hypothesis row, so the record kind was lost and the
+  pattern stayed stale forever) resolved. `KnowledgeSuccessor` now carries `recordKind`
+  (`apps/web/src/server/intelligence/contracts/knowledge.ts`), `subjectKey` names the subject inside
+  its table, and the adapter inserts the successor into `knowledge_patterns` or
+  `knowledge_hypotheses` according to the record it came from. The pattern table's evaluation
+  columns (`evaluator_id`, `evaluator_version`, `evaluation_state`, `required_evidence`,
+  `available_evidence`) became nullable so a pending pattern can exist without an evaluator, and
+  migration `0006` carries the same constraint. Teeth: the new test case "keeps a stale pattern in
+  the pattern table and asks for a re-evaluation there" asserts the pending row is in
+  `knowledge_patterns` with `evaluatorId === null` and that `knowledge_hypotheses` holds no row for
+  that subject. Insert the successor into the hypothesis table instead and that case fails.
+- [PASS] `apps/web/tests/intelligence-knowledge-revisions.test.ts` — MAJOR 2 (the rollback case
+  never called the new write path, so it proved nothing about atomicity) resolved. The case now
+  calls `recordSourceChanges` with a write callback that throws, and asserts three things: no
+  `knowledge_sources` row, the dependent hypothesis still `active`, and the note content unchanged.
+  Teeth: write the source revision outside the transaction and the `knowledge_sources` assertion
+  fails; invalidate the knowledge before the rollback and the `active` assertion fails.
+- [PASS] `apps/web/src/server/intelligence/contracts/knowledge.ts` — MINOR (successors keyed by
+  subject only, so a hypothesis and a pattern sharing a subject collapsed) resolved by the same
+  `recordKind` keying as MAJOR 1.
+- [PASS] `apps/web/tests/intelligence-knowledge-revisions.test.ts` — MINOR (only hypotheses were
+  seeded, so the pattern branch was untested) resolved by the new pattern case above.
+- [PASS] `apps/web/src/server/intelligence/infrastructure/knowledge-revisions.ts` — MINOR (the
+  successor payload was copied with a bare `JSON.parse` and the evidence list was uncapped)
+  resolved: the payload is parsed with `knowledgePayloadSchema`, and both the payload and the
+  evidence list are checked against `MAX_KNOWLEDGE_PAYLOAD_BYTES`.
+- [PASS] `apps/web/src/server/intelligence/infrastructure/knowledge-revisions.ts` — MINOR
+  (`subjectVersions` full-scanned both tables on every source write) resolved: only the affected
+  subjects are looked up, and only in the table they belong to.
+- [PASS] `apps/web/src/app/api/folders/[id]/route.ts` and `apps/web/src/app/api/playbooks/[id]/route.ts`
+  — MINOR (the moved notes and the referenced trades were read outside the write transaction)
+  resolved: both read their rows inside the transaction that moves or clears them, so a row that
+  arrived in the meantime is covered by its own revision.
+- [PASS] `apps/web/src/app/api/journal/[date]/route.ts` — MINOR (a write that changed nothing still
+  emitted a revision) resolved: the write callback returns no revision when the stored note text is
+  already what was written. The plan and the test now state this rule, and the new case "records no
+  revision for a write that changed nothing" covers it.
+- [PASS] `apps/web/tests/intelligence-knowledge-revisions.test.ts` — MINOR (five matrix rows had no
+  route-level case) resolved: `PATCH /api/notes/[id]`, `DELETE /api/notes/[id]`,
+  `PATCH /api/playbooks/[id]`, `DELETE /api/playbooks/[id]` and `POST /api/trades/bulk` now have
+  route-level cases that assert the recorded revisions and their statuses.
+- [PASS] `apps/web/src/server/intelligence/composition.ts` — NIT (unused `SourceAction` and
+  `SourceKind` imports) resolved.
+- [PASS] `docs/superpowers/plans/ai-native-journal/phase-14.md` — the plan now matches the
+  implemented layout: the pure knowledge contracts live in `intelligence/contracts/knowledge.ts`
+  (the enforced import-boundary rule 5 forbids `infrastructure/` importing a sibling domain's
+  private file, and `contracts/observations.ts` already holds the pure trade-projection evaluator),
+  the pattern evaluation columns are nullable while a pattern is pending, the pending successor
+  keeps its record kind, and a write that changes nothing records no revision.
+- [PASS] `apps/web/src/db/migrations/0006-knowledge-scheduling.ts` and
+  `apps/web/src/db/migration-checksums.json` — the migration is additive and immutable, the
+  registry entry and the checksum artifact are regenerated (`pnpm --filter web migrations:build`,
+  `migrations:check` reports the artifact is up to date), the typed schema mirrors the DDL and
+  `BOOTSTRAP_SQL` splices the same constant.
+- [PASS] scope — no scheduler behaviour, no workflow, engagement or UI work, no new dependency, no
+  schema change outside migration `0006`, no model-driven financial write, no network call inside a
+  write transaction, and no change to any provider, credential, cTrader, import or AI response
+  contract.
+- [PASS] compatibility — the existing route response bodies are unchanged; the wrapped write paths
+  answer exactly what they answered before (`{ id }`, `{ updated }`, `{ deleted }`, `{ saved }`),
+  and the trade, its fills and its annotations survive a source write and a rebuild.
+- [PASS] scoped verification — `pnpm exec vitest run apps/web/tests/intelligence-knowledge-revisions.test.ts`
+  → 1 file, 26 tests passed (≈0.31 s); `pnpm --filter web typecheck` → clean;
+  `pnpm --filter web migrations:check` → the artifact is up to date; the supporting regressions
+  `intelligence-migrations` (17), `intelligence-boundaries` (8), `intelligence-observations`,
+  `journal-features`, `folder-delete`, `note-formatting` and `account-mutation-routes` → 7 files,
+  72 tests passed.
+- [NOTE] the full `pnpm test` gate is the coordinator's destination run, not this phase's; it was
+  not run here, by the coordinator's instruction.
 
 ### Summary
 
-17 PASS, 0 FAIL, 0 BLOCK. The four MAJOR findings and every MINOR finding that touches a contract,
-a schema rule or an acceptance criterion are resolved in the plan text. Three notes are recorded
-above without changing a check result.
+15 PASS, 0 FAIL, 0 BLOCK. Both MAJOR findings are resolved with teeth, every MINOR finding that
+touches behaviour, a contract or the test's value is resolved, the scoped verification commands are
+green, and the plan text matches the implementation.

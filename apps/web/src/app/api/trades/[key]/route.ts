@@ -3,11 +3,12 @@ import { eq } from "drizzle-orm";
 import { db, trades, playbooks, accounts } from "@/db";
 import { bad, handler, ok, requireValue } from "@/server/api";
 import { listExecutions } from "@/server/executions";
-import { nowIso } from "@/server/ids";
+import { newUuid, nowIso } from "@/server/ids";
 import { getTradeByKey, rowToTrade } from "@/server/trades-query";
 import { getTimeZone } from "@/server/settings";
 import { deleteTrades } from "@/server/trading/commands";
 import { changeContext } from "@/server/trading/reconcile";
+import { recordSourceChanges } from "@/server/intelligence/composition";
 
 type Params = { params: Promise<{ key: string }> };
 
@@ -91,7 +92,20 @@ export const PATCH = handler(async (request: Request, { params }: Params) => {
   if (body.reviewed !== undefined) patch.reviewedAt = body.reviewed ? nowIso() : null;
 
   if (!Object.keys(patch).length) return ok({ updated: true });
-  db.update(trades).set(patch).where(eq(trades.key, decoded)).run();
+  // The annotation and its source revision commit together. The annotation
+  // belongs to the account of the trade.
+  recordSourceChanges((tx) => {
+    tx.update(trades).set(patch).where(eq(trades.key, decoded)).run();
+    return [
+      {
+        kind: "annotation",
+        action: "revised",
+        sourceId: decoded,
+        accountId: row.accountId,
+        correlationId: newUuid(),
+      },
+    ];
+  });
   return ok({ updated: true });
 });
 
@@ -100,7 +114,19 @@ export const DELETE = handler(async (_request: Request, { params }: Params) => {
   const row = getTradeByKey(key);
   if (!row) return bad("Trade not found", 404);
   // The command owns the transaction: the fills go, the account is rebuilt and
-  // the projection disappears.
-  deleteTrades([key], changeContext("user", "live"));
+  // the projection disappears. The annotation goes with the trade, so the
+  // deletion and its source revision commit together.
+  recordSourceChanges(() => {
+    deleteTrades([key], changeContext("user", "live"));
+    return [
+      {
+        kind: "annotation",
+        action: "deleted",
+        sourceId: key,
+        accountId: row.accountId,
+        correlationId: newUuid(),
+      },
+    ];
+  });
   return ok({ deleted: true });
 });

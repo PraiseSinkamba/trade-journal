@@ -2,6 +2,8 @@ import { and, eq } from "drizzle-orm";
 import { db, playbooks, tradeRuleChecks } from "@/db";
 import { getTradeByKey } from "@/server/trades-query";
 import { handler, ok, requireValue } from "@/server/api";
+import { newUuid } from "@/server/ids";
+import { recordSourceChanges } from "@/server/intelligence/composition";
 type Context = { params: Promise<{ key: string }> };
 function source(key: string) {
   const trade = getTradeByKey(key);
@@ -9,7 +11,7 @@ function source(key: string) {
   const book = trade.playbookId
     ? db.select().from(playbooks).where(eq(playbooks.id, trade.playbookId)).get()
     : null;
-  return { book, rules: book ? [...new Set(JSON.parse(book.rulesJson) as string[])] : [] };
+  return { trade, book, rules: book ? [...new Set(JSON.parse(book.rulesJson) as string[])] : [] };
 }
 export const GET = handler(async (_request: Request, { params }: Context) => {
   const key = (await params).key;
@@ -32,17 +34,30 @@ export const GET = handler(async (_request: Request, { params }: Context) => {
 export const POST = handler(async (request: Request, { params }: Context) => {
   const key = (await params).key,
     b = await request.json();
-  const { book, rules } = source(key);
+  const { trade, book, rules } = source(key);
   requireValue(
     book && rules.includes(b.rule) && (b.followed === null || typeof b.followed === "boolean"),
     "Choose an existing strategy rule.",
   );
   const id = JSON.stringify([key, book.id, b.rule]);
-  if (b.followed === null) db.delete(tradeRuleChecks).where(eq(tradeRuleChecks.id, id)).run();
-  else
-    db.insert(tradeRuleChecks)
-      .values({ id, tradeKey: key, playbookId: book.id, rule: b.rule, followed: b.followed })
-      .onConflictDoUpdate({ target: tradeRuleChecks.id, set: { followed: b.followed } })
-      .run();
+  // The rule check and its source revision commit together. The check belongs
+  // to the account of the trade.
+  recordSourceChanges((tx) => {
+    if (b.followed === null) tx.delete(tradeRuleChecks).where(eq(tradeRuleChecks.id, id)).run();
+    else
+      tx.insert(tradeRuleChecks)
+        .values({ id, tradeKey: key, playbookId: book.id, rule: b.rule, followed: b.followed })
+        .onConflictDoUpdate({ target: tradeRuleChecks.id, set: { followed: b.followed } })
+        .run();
+    return [
+      {
+        kind: "rule_check",
+        action: b.followed === null ? ("deleted" as const) : ("revised" as const),
+        sourceId: id,
+        accountId: trade.accountId,
+        correlationId: newUuid(),
+      },
+    ];
+  });
   return ok({ saved: true });
 });
