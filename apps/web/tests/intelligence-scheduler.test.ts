@@ -2,6 +2,7 @@ import { afterAll, beforeEach, describe, expect, it } from "vitest";
 import { mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import { eq } from "drizzle-orm";
 import { localInstant, nextDailyOccurrence } from "@luxalgo/journal-core";
 import type { ScheduleDefinition } from "../src/server/intelligence/infrastructure/scheduler";
 
@@ -471,5 +472,135 @@ describe("a condition trigger", () => {
     // The replayed condition fires nothing: the checkpoint consumed it.
     expect(active.scheduleDue(now + 2 * MINUTE)).toBe(0);
     expect(jobRows()).toHaveLength(1);
+  });
+});
+
+describe("a stalled schedule", () => {
+  it("recovers a damaged checkpoint without replaying the change it consumed", () => {
+    const now = Date.UTC(2026, 0, 5, 8, 0, 0);
+    db.insert(knowledgeSources)
+      .values({
+        id: "source-a",
+        kind: "note",
+        sourceId: "note-1",
+        revision: 1,
+        accountId: null,
+        status: "active",
+        correlationId: "corr-1",
+        recordedAt: now,
+      })
+      .run();
+
+    const definitions = [conditionSchedule];
+    const active = scheduler(definitions);
+    active.scheduleDue(now);
+    expect(active.scheduleDue(now + MINUTE)).toBe(1);
+    runScheduleHandler(definitions, () => now + MINUTE);
+    expect(JSON.parse(rows()[0]!.checkpointJson ?? "{}").lastSourceId).toBe("source-a");
+
+    // The durable checkpoint is damaged: it cannot be read any more.
+    db.update(intelligenceSchedules)
+      .set({ checkpointJson: "not-json" })
+      .where(eq(intelligenceSchedules.id, conditionSchedule.id))
+      .run();
+
+    // A source change recorded after the damage still has to fire.
+    db.insert(knowledgeSources)
+      .values({
+        id: "source-b",
+        kind: "note",
+        sourceId: "note-2",
+        revision: 1,
+        accountId: null,
+        status: "active",
+        correlationId: "corr-1",
+        recordedAt: now + 3 * MINUTE,
+      })
+      .run();
+
+    // The poll does not stall on the change it already consumed: it fires the
+    // new change instead.
+    expect(active.scheduleDue(now + 3 * MINUTE)).toBe(1);
+    expect(jobRows().map((row) => row.idempotencyKey)).toEqual([
+      "schedule-condition:source-a",
+      "schedule-condition:source-b",
+    ]);
+    // The tick never writes the checkpoint: the handler owns it.
+    expect(rows()[0]!.checkpointJson).toBe("not-json");
+  });
+
+  it("fires a later change when the occurrence of an earlier one failed for good", () => {
+    const now = Date.UTC(2026, 0, 5, 8, 0, 0);
+    db.insert(knowledgeSources)
+      .values({
+        id: "source-a",
+        kind: "note",
+        sourceId: "note-1",
+        revision: 1,
+        accountId: null,
+        status: "active",
+        correlationId: "corr-1",
+        recordedAt: now,
+      })
+      .run();
+
+    const definitions = [conditionSchedule];
+    const active = scheduler(definitions);
+    active.scheduleDue(now);
+    expect(active.scheduleDue(now + MINUTE)).toBe(1);
+
+    // The occurrence failed for good: no handler will ever acknowledge it.
+    db.update(intelligenceJobs)
+      .set({ status: "failed" })
+      .where(eq(intelligenceJobs.idempotencyKey, "schedule-condition:source-a"))
+      .run();
+
+    db.insert(knowledgeSources)
+      .values({
+        id: "source-b",
+        kind: "note",
+        sourceId: "note-2",
+        revision: 1,
+        accountId: null,
+        status: "active",
+        correlationId: "corr-1",
+        recordedAt: now + 2 * MINUTE,
+      })
+      .run();
+
+    // The burnt occurrence does not hide the change behind it: the poll fires
+    // the later change and moves the row on.
+    expect(active.scheduleDue(now + 2 * MINUTE)).toBe(1);
+    expect(jobRows().map((row) => row.idempotencyKey)).toEqual([
+      "schedule-condition:source-a",
+      "schedule-condition:source-b",
+    ]);
+    // The dead occurrence will never be acknowledged by a handler, so the tick
+    // moves the evaluation point on.
+    expect(rows()[0]!.nextDueAt).toBe(now + 3 * MINUTE);
+  });
+
+  it("catches up to the next occurrence when the occurrence failed for good", () => {
+    const due = Date.UTC(2026, 0, 5, 8, 0, 0);
+    const definitions = [intervalSchedule];
+    const active = scheduler(definitions);
+
+    active.scheduleDue(due);
+    expect(active.scheduleDue(due + HOUR)).toBe(1);
+    expect(jobRows()[0]!.idempotencyKey).toBe(`schedule-interval:${due + HOUR}:1`);
+
+    // The occurrence failed for good: no handler will ever acknowledge it, so
+    // the schedule would stall on that key for ever.
+    db.update(intelligenceJobs)
+      .set({ status: "failed" })
+      .where(eq(intelligenceJobs.idempotencyKey, `schedule-interval:${due + HOUR}:1`))
+      .run();
+
+    expect(active.scheduleDue(due + HOUR)).toBe(0);
+    expect(rows()[0]!.nextDueAt).toBe(due + 2 * HOUR);
+
+    // The schedule continues at the next occurrence, under its own key.
+    expect(active.scheduleDue(due + 2 * HOUR)).toBe(1);
+    expect(jobRows()[1]!.idempotencyKey).toBe(`schedule-interval:${due + 2 * HOUR}:1`);
   });
 });
