@@ -1,7 +1,7 @@
 {
   "schemaVersion": 1,
   "feature": "ai-native-journal",
-  "updatedAt": "2026-11-13T16:43:19Z",
+  "updatedAt": "2026-11-14T02:03:59Z",
   "owner": "parent OMP coordinator (exclusive owner of this record)",
   "repository": {
     "name": "trade-journal",
@@ -35,8 +35,8 @@
     },
     "featureBranch": "codex/ai-native-journal",
     "featureBootstrapSha": "0a278503fd67c0f9e82138dfecb744f4bfd307ad",
-    "featureHeadSha": "934953ca9801b025a34cd1386fd536120922fb6e",
-    "featureHeadShaNote": "feature branch HEAD at the Phase 14 dispatch and the exact base of the Phase 14 worktree; the coordinator record commit advances the branch by one commit",
+    "featureHeadSha": "0c8ea63ccb7aed84bd5cabd576bdc24108f49b00",
+    "featureHeadShaNote": "feature branch HEAD at the Phase 14 integration and the exact base of the Phase 14 worktree; the coordinator record commit advances the branch by one commit",
     "featureCheckpointCommits": [
       "0a278503fd67c0f9e82138dfecb744f4bfd307ad",
       "80d53ccb62fda801897852a6f4e5d2aab8b0d58b",
@@ -62,7 +62,8 @@
       "a9478dc4a729b43080fe7186f765b10f41513be3",
       "135fd0ecd7d6252e17d0e406e907e6e76dbbed5f",
       "c6fbcd411efa049b95e58f041b7a0ed5f8c2c4e4",
-      "934953ca9801b025a34cd1386fd536120922fb6e"
+      "934953ca9801b025a34cd1386fd536120922fb6e",
+      "0c8ea63ccb7aed84bd5cabd576bdc24108f49b00"
     ],
     "featureBranchNote": "Orca slugified the requested name to codex-ai-native-journal at creation; the coordinator renamed the newly created, exclusively owned branch to the contract-required codex/ai-native-journal. Orca reads the renamed ref live (refs/heads/codex/ai-native-journal). No pre-existing branch was overwritten."
   },
@@ -268,8 +269,8 @@
         "startSha": "934953ca9801b025a34cd1386fd536120922fb6e",
         "orcaParentWorktreeId": "aa54a522-a9af-4cb4-9de7-f1d9a349c0fd::E:/4004/orca/workspaces/trade-journal/codex-ai-native-journal",
         "setup": "pnpm install --frozen-lockfile completed in the worker checkout; working tree clean; Node v24.20.0, pnpm 11.0.8; own node_modules and own pnpm virtual store",
-        "state": "dispatched: ctx_fe6c79274252, worker handle term_f940ecff-1256-43f7-ab80-9ed24e005d26",
-        "note": "Phase 14 is the source-revision and invalidation half of detailed plan Task 10, with schema allocation 0006. It creates the intelligence_schedules table but not the scheduler behaviour, which is Phase 15. The manifest T-014 ownership set was corrected before the dispatch to name the database files the migration owns and to mark domain-events.ts as existing rather than planned."
+        "state": "the implementation-diff review failed with 4 findings; the phase was reopened and the repair dispatched as ctx_352779a3c70e",
+        "note": "Phase 14 is the source-revision and invalidation half of detailed plan Task 10, with schema allocation 0006. It creates the intelligence_schedules table but not the scheduler behaviour, which is Phase 15. The manifest T-014 ownership set was corrected before the dispatch to name the database files the migration owns and to mark domain-events.ts as existing rather than planned. The independent implementation-diff review returned 4 findings. One is a production regression: the journal route returned early when the note text was unchanged, so the upsert was skipped and journal_days.updated_at was no longer refreshed, where the base route always upserted with nowIso(). The plan asked to skip the revision, not the write. The other three are about proof and documentation: the only atomicity case threw inside the write callback so the source change was never attempted, the no-op case re-implemented the route guard inside the test instead of driving the route, and the plan column table still specified NOT NULL columns that the shipped 0006 migration makes nullable. The reviewer confirmed the rest of the phase, including that no scheduler behaviour leaked into this phase, the migration registry and checksum entries match, 0001 through 0005 are byte-unchanged, the invalidation really marks dependent active knowledge stale, a narrowed account scope never exposes shared-sourced knowledge, and insufficient evidence is represented explicitly. The worker also documented one accepted deviation: the pure knowledge contracts live in intelligence/contracts/knowledge.ts rather than intelligence/knowledge/, because boundary rule 5 forbids infrastructure/ importing a sibling domain private file."
       }
     ]
   },
@@ -490,8 +491,9 @@
       "status": "dispatched",
       "state": "dispatched",
       "outcome": null,
-      "nativeDispatch": "ctx_fe6c79274252",
-      "note": "the source-revision and invalidation half of detailed plan Task 10; the brief pins the schedule-table-without-scheduler-behaviour boundary, the 0006 migration checklist, the atomic source-write and event wrapping, and the review budget of two reviewer runs"
+      "nativeDispatch": "ctx_352779a3c70e",
+      "note": "the source-revision and invalidation half of detailed plan Task 10; the brief pins the schedule-table-without-scheduler-behaviour boundary, the 0006 migration checklist, the atomic source-write and event wrapping, and the review budget of two reviewer runs The implementation-diff review failed with 4 findings: a production regression in the journal note write, two cases that could not fail for the reason they claimed, and one false column table in the plan. The coordinator verified the production regression against the base route before acting on it.",
+      "priorDispatch": "ctx_fe6c79274252"
     },
     {
       "stable": "T-015",
@@ -878,6 +880,23 @@
       "worktree": "aa54a522-a9af-4cb4-9de7-f1d9a349c0fd::E:/4004/orca/workspaces/trade-journal/codex-ai-native-journal-p14",
       "base": "934953ca9801b025a34cd1386fd536120922fb6e",
       "purpose": "Phase 14 - knowledge-source revisions and invalidation; the source events and knowledge half of Task 10, with schema allocation 0006",
+      "state": "completed; the implementation-diff review failed with 4 findings and the phase was reopened for repair",
+      "candidate": ["4ab6776", "1281bdb", "5346abc"],
+      "reviewed": true,
+      "integrated": false,
+      "verified": false,
+      "outcome": "candidate superseded by the repair dispatch after the implementation-diff review failed",
+      "tip": "5346abc"
+    },
+    {
+      "task": "T-014",
+      "native": "task_53e2b3da13f7",
+      "dispatch": "ctx_352779a3c70e",
+      "agent": "omp",
+      "provider": "omp",
+      "worktree": "aa54a522-a9af-4cb4-9de7-f1d9a349c0fd::E:/4004/orca/workspaces/trade-journal/codex-ai-native-journal-p14",
+      "base": "934953ca9801b025a34cd1386fd536120922fb6e",
+      "purpose": "Phase 14 repair - restore the journal note upsert so an unchanged note still refreshes updated_at, prove the source write and its event roll back together, drive the no-op case through the route, and correct the plan column table",
       "state": "dispatched",
       "candidate": [],
       "reviewed": false,
