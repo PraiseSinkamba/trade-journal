@@ -1,7 +1,7 @@
 {
   "schemaVersion": 1,
   "feature": "ai-native-journal",
-  "updatedAt": "2026-11-14T02:03:59Z",
+  "updatedAt": "2026-11-14T08:43:27Z",
   "owner": "parent OMP coordinator (exclusive owner of this record)",
   "repository": {
     "name": "trade-journal",
@@ -35,8 +35,8 @@
     },
     "featureBranch": "codex/ai-native-journal",
     "featureBootstrapSha": "0a278503fd67c0f9e82138dfecb744f4bfd307ad",
-    "featureHeadSha": "0c8ea63ccb7aed84bd5cabd576bdc24108f49b00",
-    "featureHeadShaNote": "feature branch HEAD at the Phase 14 integration and the exact base of the Phase 14 worktree; the coordinator record commit advances the branch by one commit",
+    "featureHeadSha": "ed0b7a68f1bc5769ec3648aecc30fca5469a1228",
+    "featureHeadShaNote": "feature branch HEAD at the Phase 14 integration and the exact base of the Phase 15 worktree; the coordinator record commit advances the branch by one commit",
     "featureCheckpointCommits": [
       "0a278503fd67c0f9e82138dfecb744f4bfd307ad",
       "80d53ccb62fda801897852a6f4e5d2aab8b0d58b",
@@ -63,7 +63,8 @@
       "135fd0ecd7d6252e17d0e406e907e6e76dbbed5f",
       "c6fbcd411efa049b95e58f041b7a0ed5f8c2c4e4",
       "934953ca9801b025a34cd1386fd536120922fb6e",
-      "0c8ea63ccb7aed84bd5cabd576bdc24108f49b00"
+      "0c8ea63ccb7aed84bd5cabd576bdc24108f49b00",
+      "ed0b7a68f1bc5769ec3648aecc30fca5469a1228"
     ],
     "featureBranchNote": "Orca slugified the requested name to codex-ai-native-journal at creation; the coordinator renamed the newly created, exclusively owned branch to the contract-required codex/ai-native-journal. Orca reads the renamed ref live (refs/heads/codex/ai-native-journal). No pre-existing branch was overwritten."
   },
@@ -269,7 +270,7 @@
         "startSha": "934953ca9801b025a34cd1386fd536120922fb6e",
         "orcaParentWorktreeId": "aa54a522-a9af-4cb4-9de7-f1d9a349c0fd::E:/4004/orca/workspaces/trade-journal/codex-ai-native-journal",
         "setup": "pnpm install --frozen-lockfile completed in the worker checkout; working tree clean; Node v24.20.0, pnpm 11.0.8; own node_modules and own pnpm virtual store",
-        "state": "the implementation-diff review failed with 4 findings; the phase was reopened and the repair dispatched as ctx_352779a3c70e",
+        "state": "integrated into codex/ai-native-journal at 4fa0cb0 and verified on the destination branch (destination gate green on the destination branch after the merge: pnpm install --frozen-lockfile, pnpm --filter web typecheck, the core and importers typecheck, pnpm --filter web migrations:check, node scripts/check-licenses.mjs, prettier --check on every merged file and pnpm build all exit 0; pnpm test 107 test files, 1171 tests passed, 155.02s). The worktree, the git worktree registration, the branch and the leftover directory remain until the user requests cleanup.",
         "note": "Phase 14 is the source-revision and invalidation half of detailed plan Task 10, with schema allocation 0006. It creates the intelligence_schedules table but not the scheduler behaviour, which is Phase 15. The manifest T-014 ownership set was corrected before the dispatch to name the database files the migration owns and to mark domain-events.ts as existing rather than planned. The independent implementation-diff review returned 4 findings. One is a production regression: the journal route returned early when the note text was unchanged, so the upsert was skipped and journal_days.updated_at was no longer refreshed, where the base route always upserted with nowIso(). The plan asked to skip the revision, not the write. The other three are about proof and documentation: the only atomicity case threw inside the write callback so the source change was never attempted, the no-op case re-implemented the route guard inside the test instead of driving the route, and the plan column table still specified NOT NULL columns that the shipped 0006 migration makes nullable. The reviewer confirmed the rest of the phase, including that no scheduler behaviour leaked into this phase, the migration registry and checksum entries match, 0001 through 0005 are byte-unchanged, the invalidation really marks dependent active knowledge stale, a narrowed account scope never exposes shared-sourced knowledge, and insufficient evidence is represented explicitly. The worker also documented one accepted deviation: the pure knowledge contracts live in intelligence/contracts/knowledge.ts rather than intelligence/knowledge/, because boundary rule 5 forbids infrastructure/ importing a sibling domain private file."
       }
     ]
@@ -488,12 +489,24 @@
       "wave": 14,
       "branch": "codex/ai-native-journal-p14",
       "deps": ["task_96e133343b74"],
-      "status": "dispatched",
-      "state": "dispatched",
-      "outcome": null,
+      "status": "completed",
+      "state": "integrated",
+      "outcome": "succeeded",
       "nativeDispatch": "ctx_352779a3c70e",
-      "note": "the source-revision and invalidation half of detailed plan Task 10; the brief pins the schedule-table-without-scheduler-behaviour boundary, the 0006 migration checklist, the atomic source-write and event wrapping, and the review budget of two reviewer runs The implementation-diff review failed with 4 findings: a production regression in the journal note write, two cases that could not fail for the reason they claimed, and one false column table in the plan. The coordinator verified the production regression against the base route before acting on it.",
-      "priorDispatch": "ctx_fe6c79274252"
+      "note": "the source-revision and invalidation half of detailed plan Task 10; the brief pins the schedule-table-without-scheduler-behaviour boundary, the 0006 migration checklist, the atomic source-write and event wrapping, and the review budget of two reviewer runs The implementation-diff review failed with 4 findings: a production regression in the journal note write, two cases that could not fail for the reason they claimed, and one false column table in the plan. The coordinator verified the production regression against the base route before acting on it. The pure knowledge contracts live in intelligence/contracts/knowledge.ts rather than under intelligence/knowledge/, because boundary rule 5 forbids infrastructure/ importing a sibling domain private file. The coordinator recorded both that file and the persistence adapter as exact owned paths, never directory prefixes, because those two directories also hold files owned by other phases.",
+      "priorDispatch": "ctx_fe6c79274252",
+      "commits": [
+        "4ab6776",
+        "1281bdb",
+        "5346abc",
+        "5ec0f8e",
+        "178ef0a",
+        "4fa0cb0b1903fd41aeaa9efa7a1bfd82c47f460c",
+        "f493992",
+        "ed0b7a6"
+      ],
+      "verified": "destination gate green on the destination branch after the merge: pnpm install --frozen-lockfile, pnpm --filter web typecheck, the core and importers typecheck, pnpm --filter web migrations:check, node scripts/check-licenses.mjs, prettier --check on every merged file and pnpm build all exit 0; pnpm test 107 test files, 1171 tests passed, 155.02s",
+      "evidence": "the independent implementation-diff review raised 4 findings: the journal route returned early before the upsert so an unchanged note no longer refreshed updated_at, the only atomicity case threw inside the write callback so the source change was never attempted, the no-op case re-implemented the route guard inside the test instead of driving the route, and the plan column table still specified NOT NULL columns the shipped migration makes nullable. The reviewer confirmed the rest of the phase, including that no scheduler behaviour leaked into this phase. The coordinator then proved the repaired tests have teeth with three mutations of the production plumbing, each of which broke exactly the expected test. Evidence: docs/superpowers/plans/ai-native-journal/phase-14.md, docs/superpowers/reports/ai-native-journal-phase-14.md, docs/superpowers/reports/ai-native-journal-integration-14.md"
     },
     {
       "stable": "T-015",
@@ -883,10 +896,10 @@
       "state": "completed; the implementation-diff review failed with 4 findings and the phase was reopened for repair",
       "candidate": ["4ab6776", "1281bdb", "5346abc"],
       "reviewed": true,
-      "integrated": false,
-      "verified": false,
-      "outcome": "candidate superseded by the repair dispatch after the implementation-diff review failed",
-      "tip": "5346abc"
+      "integrated": true,
+      "verified": true,
+      "outcome": "the candidate was superseded by the repair dispatch after the implementation-diff review failed, and was merged as part of the repaired candidate",
+      "tip": "178ef0accfb6c05bbaf5dfdd3a55e2fc206ce3fe"
     },
     {
       "task": "T-014",
@@ -897,12 +910,13 @@
       "worktree": "aa54a522-a9af-4cb4-9de7-f1d9a349c0fd::E:/4004/orca/workspaces/trade-journal/codex-ai-native-journal-p14",
       "base": "934953ca9801b025a34cd1386fd536120922fb6e",
       "purpose": "Phase 14 repair - restore the journal note upsert so an unchanged note still refreshes updated_at, prove the source write and its event roll back together, drive the no-op case through the route, and correct the plan column table",
-      "state": "dispatched",
-      "candidate": [],
+      "state": "completed; the repair restored the journal note upsert, proved the source write and its event roll back together, drove the no-op case through the route and corrected the plan column table",
+      "candidate": ["5ec0f8e", "178ef0a"],
       "reviewed": false,
-      "integrated": false,
-      "verified": false,
-      "outcome": null
+      "integrated": true,
+      "verified": true,
+      "outcome": "verified by the coordinator with an independent teeth proof, merged and verified on the destination branch",
+      "tip": "178ef0accfb6c05bbaf5dfdd3a55e2fc206ce3fe"
     }
   ],
   "integration": {
@@ -1219,6 +1233,22 @@
       "review": "one implementation-diff review, then one repair round and one coordinator re-verification; the review found three tests that could not fail for the reason they claimed and one false coverage claim in the plan and the report. The coordinator ran an independent teeth proof with three mutations of the production plumbing.",
       "note": "schema allocation 0005: intelligence_runs, intelligence_policy and intelligence_budget_reservations, with the registry entry and the regenerated checksum artifact; migrations 0001 through 0004 byte-unchanged. No dependency and no lockfile change. The contracts layer stayed pure and the runtime reached persistence through the infrastructure layer. The destination gate failed once at prettier --check and passed after a formatting-only fix. No push, no pull request and no merge into main.",
       "report": "docs/superpowers/reports/ai-native-journal-integration-13.md"
+    },
+    {
+      "phase": "14",
+      "stable": "T-014",
+      "native": "task_53e2b3da13f7",
+      "branch": "codex/ai-native-journal-p14",
+      "merge": "4fa0cb0b1903fd41aeaa9efa7a1bfd82c47f460c",
+      "destinationBefore": "ffcc1383a8753f7ba7cb1125d7a4c248c63ed24d",
+      "head": "ed0b7a6",
+      "commits": ["4ab6776", "1281bdb", "5346abc", "5ec0f8e", "178ef0a", "f493992", "ed0b7a6"],
+      "files": 22,
+      "schema": "0006",
+      "verification": "destination gate green on the destination branch after the merge: pnpm install --frozen-lockfile, pnpm --filter web typecheck, the core and importers typecheck, pnpm --filter web migrations:check, node scripts/check-licenses.mjs, prettier --check on every merged file and pnpm build all exit 0; pnpm test 107 test files, 1171 tests passed, 155.02s",
+      "review": "one implementation-diff review, then one repair round and one coordinator re-verification; the review found a production regression in the journal note write, two cases that could not fail for the reason they claimed, and one false column table in the plan. The coordinator ran an independent teeth proof with three mutations of the production plumbing.",
+      "note": "schema allocation 0006: knowledge_sources, knowledge_hypotheses, knowledge_patterns and the intelligence_schedules table with no scheduler behaviour, which is Phase 15. Migrations 0001 through 0005 byte-unchanged. Ten source write paths wrapped atomically. No dependency and no lockfile change. The contracts layer stayed pure and the persistence adapter lives in infrastructure/knowledge-revisions.ts. No push, no pull request and no merge into main.",
+      "report": "docs/superpowers/reports/ai-native-journal-integration-14.md"
     }
   ],
   "recordShape": "This file is the index and the authoritative stable-to-native task mapping: stable/native task mapping, worktree and dispatch identifiers, and one compact entry per integrated phase. Narrative, findings, deviations and command output live in the per-phase reports under docs/superpowers/reports/. Keep this file compact - one entry per phase, no duplicated prose. Resolve a native task id from taskMap here or from the native task list, never from a chat summary: a transcription slip once named T-019 as T-005, and the near miss was caught because the native task list disagreed with the prose.",
