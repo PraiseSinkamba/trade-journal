@@ -183,16 +183,16 @@ Type-only database references (reported, no runtime dependency, not counted as v
 
 One full gate run on the destination branch, alone on the host, sequentially. Every exit code is the exit status of the command itself, never the status of a pipe.
 
-| Command | Exit | Result |
-| --- | --- | --- |
-| `pnpm install --frozen-lockfile` | 0 | passed |
-| `pnpm --filter web typecheck` | 0 | passed |
-| `pnpm --filter @luxalgo/journal-core --filter @luxalgo/journal-importers typecheck` | 0 | passed |
-| `pnpm --filter web migrations:check` | 0 | passed |
-| `node scripts/check-licenses.mjs` | 0 | passed |
-| `pnpm exec prettier --check <22 merged files>` | 0 | passed |
-| `pnpm build` | 0 | passed |
-| `pnpm test` | 0 | passed |
+| Command                                                                             | Exit | Result |
+| ----------------------------------------------------------------------------------- | ---- | ------ |
+| `pnpm install --frozen-lockfile`                                                    | 0    | passed |
+| `pnpm --filter web typecheck`                                                       | 0    | passed |
+| `pnpm --filter @luxalgo/journal-core --filter @luxalgo/journal-importers typecheck` | 0    | passed |
+| `pnpm --filter web migrations:check`                                                | 0    | passed |
+| `node scripts/check-licenses.mjs`                                                   | 0    | passed |
+| `pnpm exec prettier --check <22 merged files>`                                      | 0    | passed |
+| `pnpm build`                                                                        | 0    | passed |
+| `pnpm test`                                                                         | 0    | passed |
 
 The prettier file list was computed after the merge, from the merge commit itself: `git diff --name-only ffcc1383a8753f7ba7cb1125d7a4c248c63ed24d..4fa0cb0b1903fd41aeaa9efa7a1bfd82c47f460c` in the feature worktree (22 files).
 
@@ -220,6 +220,34 @@ The prettier file list was computed after the merge, from the merge commit itsel
 - `docs/superpowers/reports/ai-native-journal-phase-14.md`
 
 The `desktop` workspace was deliberately not typechecked: its `cargo check` fails on a pre-existing repository defect (the Tauri sidecar resource `binaries/node-x86_64-pc-windows-msvc.exe` is missing because `desktop/scripts/run-sidecar-setup.js` uses CommonJS `require()` inside an ESM package). That defect belongs to Phase 21 and is recorded as blocked host evidence. It was not mocked and it is not reported as passed.
+
+### Two corrections applied after the merge
+
+**The plan's `source_kind` CHECK constraint.** The phase plan listed the `source_kind` CHECK
+constraint as `—` (none), while the shipped migration 0006 declares:
+
+    source_kind TEXT NOT NULL CHECK (source_kind IN ('annotation','rule_check','playbook','journal','note'))
+
+The worker recorded this discrepancy rather than fixing it, because it was not one of the four
+review findings. The plan is the binding artifact for this phase and Phase 15 reads it, so the
+coordinator corrected the row to name exactly the kinds the shipped DDL constrains, and verified
+the two lists match. No production code, no migration and no schema changed.
+
+**Two defects in the coordinator's own integration script**, found before the merge rather than
+after it:
+
+- the schema verdict matched `/^0006-.+\.ts$/` against the repository-relative path from
+  `git diff --name-status`, so the pattern could never match. The correct 0006 migration was
+  rejected as "added outside 0006", and the companion check for a renumbered migration below 0006
+  would never have fired. The check now matches the file's basename, and a negative control
+  confirms a renumbered migration is still caught.
+- the migration path was then built by concatenating the directory prefix with the full path
+  instead of the basename, producing a doubled path. The corrected construction was verified with
+  `git show` against the candidate tip before the merge.
+
+Both were defects in the coordinator's tooling, not in the phase. They are recorded here because
+the schema verdict is part of the evidence for this integration and the reader should know it was
+corrected and how.
 
 ## Review verdict
 

@@ -284,7 +284,7 @@ evaluated yet — a pending re-evaluation request is a question, not a conclusio
 | `evaluation_state`       | yes (patterns only) | `NULL`  | `CHECK (evaluation_state IS NULL OR evaluation_state IN ('evaluated','insufficient_evidence'))` |
 | `required_evidence`      | yes (patterns only) | `NULL`  | `CHECK (required_evidence IS NULL OR required_evidence >= 0)`                                   |
 | `available_evidence`     | yes (patterns only) | `NULL`  | `CHECK (available_evidence IS NULL OR available_evidence >= 0)`                                 |
-| `source_kind`            | no                  | —       | —                                                                                               |
+| `source_kind`            | no                  | —       | `CHECK (source_kind IN ('annotation','rule_check','playbook','journal','note'))`                |
 | `source_id`              | no                  | —       | —                                                                                               |
 | `source_revision`        | no                  | —       | `CHECK (source_revision > 0)`                                                                   |
 | `account_id`             | yes                 | `NULL`  | FK → `accounts(id)` `ON DELETE CASCADE`                                                         |
