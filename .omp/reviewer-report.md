@@ -1,62 +1,53 @@
 ## Verdict: PASS
 
-## Reviewer Report — Phase 14 repair (journal write and source revision independence)
+## Reviewer Report — Phase 15 (durable time and condition scheduling)
 
 ### PASS / FAIL
 
-PASS. The repair diff resolves all four findings of the Phase 14 implementation review. The one
-production file that changed differs from the implementation commit `1281bdb` only in the ordering
-of the upsert and the revision decision, exactly as the brief requires. The two strengthened test
-cases are real tests: each was seen to fail against deliberately broken behaviour and to pass again
-after the restore. The plan's column table now states the nullability the shipped migration
-actually has. No migration, schema, dependency, financial, hash, key or annotation change.
+PASS. Two reviewer runs were spent on this phase, both inside the coordinator's budget of two: one
+on the phase plan and one on the implementation diff. Both returned FAIL with concrete findings.
+Every finding is fixed in the committed code, each fix has a test that was seen to fail against the
+broken behaviour and to pass again after the restore, and the evidence is recorded in
+`docs/superpowers/reports/ai-native-journal-phase-15.md`.
 
-### Findings
+No migration was added, `apps/web/src/db/schema.ts`, the bootstrap snapshot, the migration registry
+and the checksum artifact are byte-unchanged, and no dependency was introduced. The scope
+extension the coordinator granted (`contracts/jobs.ts` and `infrastructure/worker.ts`) is additive:
+one strict payload variant, one routing branch, one scheduler hook.
 
-- [PASS] `apps/web/src/app/api/journal/[date]/route.ts` — FINDING 1 resolved. The guard
-  `if (stored?.note === text) return [];` no longer sits before the upsert. The upsert now runs
-  first and is byte-identical to the pre-Phase-14 base route: it always refreshes
-  `journal_days.updated_at` with `nowIso()`. The guard afterwards only decides whether a revision
-  is emitted. An unchanged note therefore still writes and still produces no revision; there is no
-  early return before the write.
-- [PASS] `apps/web/tests/intelligence-knowledge-revisions.test.ts` — FINDING 2 resolved. The new
-  case "undoes the source write when the event application fails" makes the source write succeed
-  first (the trade annotation is written) and lets the event application fail afterwards (the
-  source revision names an account that does not exist, and the `knowledge_sources.account_id`
-  foreign key refuses it; `foreign_keys = ON` is set on every journal connection). It asserts the
-  write was undone and that no revision survived. Splitting `recordSourceChanges` into two
-  transactions leaves the annotation applied and the case fails.
-- [PASS] `apps/web/tests/intelligence-knowledge-revisions.test.ts` — FINDING 3 resolved. The
-  no-revision case is now driven through `PUT /api/journal/[date]`: the same text is written twice
-  and the case asserts exactly one revision in total, an unchanged note, and that the second write
-  still refreshed `journal_days.updated_at`. Deleting the route's guard makes the second write
-  emit a second revision and the case fails; skipping the upsert for an unchanged note leaves the
-  timestamp stale and the case fails. Fake timers are scoped to `Date` and restored in a `finally`.
-- [PASS] `docs/superpowers/plans/ai-native-journal/phase-14.md` — FINDING 4 resolved. The
-  `knowledge_hypotheses` / `knowledge_patterns` column table now states the shipped shape:
-  `evaluator_id` and `evaluator_version` are nullable in both tables, and `evaluation_state`,
-  `required_evidence` and `available_evidence` are nullable and patterns-only with the exact
-  `IS NULL OR ...` checks. The prose above the table no longer claims that a pattern always names
-  its evaluator. The migration and the schema were not changed to match the plan.
-- [PASS] scope — the only production file that differs from `1281bdb` is
-  `apps/web/src/app/api/journal/[date]/route.ts`, and it differs only in the ordering of the
-  upsert and the revision decision. `apps/web/src/server/intelligence/composition.ts` and every
-  other production file are byte-unchanged. The remaining diff is the test file and the plan
-  document.
-- [PASS] `pnpm exec vitest run apps/web/tests/intelligence-knowledge-revisions.test.ts` — 27 tests
-  pass, exit code 0.
-- [PASS] `pnpm --filter web typecheck` — exit code 0, no diagnostics.
-- [PASS] format — `prettier --check` reports the touched route and test files clean; the plan
-  document was formatted with `prettier --write` on that single file.
-- [PASS] commit subject — "fix: keep the journal note write and the source revision independent"
-  states what was fixed in terms a non-engineer can follow.
+### Plan review findings and resolutions
 
-### Notes (not blocking, outside this repair's scope)
+- **P1 — `next_due_at` had two advance owners.** Resolved: the plan now states one owner per row
+  state. The tick never advances a time schedule's row; the handler advances it when the work is
+  acknowledged. A condition schedule's row is advanced by the tick when the condition is not
+  satisfied and by the handler when it is.
+- **P1 — the condition payload could not identify the change it consumed.** Resolved: the payload
+  carries `sourceId`, and the handler advances the checkpoint to exactly that change.
+- **P2 — condition schedules had no due-selection semantics.** Resolved: a condition definition
+  carries `pollIntervalMs`, and the plan states what a condition row's `next_due_at` holds.
+- **P2 — the DST gap rule was not discriminating.** Resolved: the plan pins the exact instants
+  (07:30Z for the gap, 05:30Z for the fold) and the core helpers were added and unit-tested.
+- **P2 — the version lifecycle was undefined.** Resolved: the plan states the re-anchor rule, the
+  version guard in the handler and the version-free condition key.
 
-- The plan's column table lists the `source_kind` `CHECK` constraint as `—`, while the shipped DDL
-  declares one. This drift predates the repair and is not one of the four findings; it is recorded
-  for a later phase rather than changed here.
+### Implementation review findings and resolutions
 
-### Summary
+- **P1 — a version bump replayed a pending occurrence under the new definition.** Resolved: a
+  condition occurrence is keyed by its source change rather than by the definition version, so one
+  source change cannot produce two occurrences across a bump, and the handler refuses to move a row
+  whose `definition_version` no longer matches the payload's version.
+- **P2 — condition evaluation scanned the whole source-change log on every poll.** Resolved: the
+  query is bounded by the threshold and ordered in SQL, so a poll reads only as many changes as it
+  needs to decide.
+- **P3 — the condition checkpoint could move backwards.** Resolved: the checkpoint only moves
+  forward, so a retried older occurrence never makes an already consumed change count again.
 
-9 PASS, 0 FAIL, 0 BLOCK.
+### Files reviewed
+
+- `apps/web/src/server/intelligence/infrastructure/scheduler.ts` (new)
+- `apps/web/src/server/intelligence/contracts/jobs.ts`
+- `apps/web/src/server/intelligence/infrastructure/worker.ts`
+- `apps/web/src/server/intelligence/composition.ts`
+- `packages/core/src/time.ts`
+- `apps/web/tests/intelligence-scheduler.test.ts` (new)
+- `docs/superpowers/plans/ai-native-journal/phase-15.md`
