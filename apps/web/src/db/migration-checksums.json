@@ -25,6 +25,11 @@
       "file": "0005-intelligence-runtime.ts",
       "name": "intelligence-runtime",
       "checksum": "49e3ceafd7cf97e639fa6088f3dc4738a9f44cacf6f405cc16e11a8285a21a72"
+    },
+    "6": {
+      "file": "0006-knowledge-scheduling.ts",
+      "name": "knowledge-scheduling",
+      "checksum": "3ed72f4081e20110c55bbec878914e04cc9515f7b6b2a6466caff94b5529ef28"
     }
   }
 }

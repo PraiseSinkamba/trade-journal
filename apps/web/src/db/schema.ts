@@ -788,3 +788,181 @@ export const intelligenceBudgetReservations = sqliteTable(
     index("intelligence_budget_reservations_day_idx").on(table.day),
   ],
 );
+
+/**
+ * The versioned source register (Phase 14).
+ *
+ * One row per revision of a user-authored source: an annotation, a rule
+ * check, a playbook, a journal day note or a note. The row records that the
+ * user wrote the source at that revision — never the words themselves, which
+ * stay in the journal's own tables.
+ *
+ * The unique key over (kind, source id, revision) makes a repeated change a
+ * no-op, and the account cascades: deleting an account removes the sources
+ * that belong to it and keeps the shared ones.
+ */
+export const knowledgeSources = sqliteTable(
+  "knowledge_sources",
+  {
+    id: text("id").primaryKey(),
+    /** The kind of the source. */
+    kind: text("kind", {
+      enum: ["annotation", "rule_check", "playbook", "journal", "note"],
+    }).notNull(),
+    /** The identity of the source inside its kind. */
+    sourceId: text("source_id").notNull(),
+    /** The knowledge revision of that source. */
+    revision: integer("revision").notNull(),
+    /** The account the source belongs to; null for the shared sources. */
+    accountId: text("account_id").references(() => accounts.id, { onDelete: "cascade" }),
+    status: text("status", { enum: ["active", "superseded", "invalidated"] }).notNull(),
+    /** The request that produced the change. */
+    correlationId: text("correlation_id").notNull(),
+    recordedAt: integer("recorded_at").notNull(),
+  },
+  (table) => [
+    uniqueIndex("knowledge_sources_kind_revision_unique").on(
+      table.kind,
+      table.sourceId,
+      table.revision,
+    ),
+    index("knowledge_sources_kind_source_status_idx").on(table.kind, table.sourceId, table.status),
+    index("knowledge_sources_account_idx").on(table.accountId),
+  ],
+);
+
+/**
+ * The derived hypotheses (Phase 14).
+ *
+ * A hypothesis is a tentative interpretation. Each row names the source
+ * revision it was derived from, so a source correction can find it, and the
+ * unique key over the subject and the version keeps the versions apart.
+ */
+export const knowledgeHypotheses = sqliteTable(
+  "knowledge_hypotheses",
+  {
+    id: text("id").primaryKey(),
+    subjectType: text("subject_type").notNull(),
+    subjectId: text("subject_id").notNull(),
+    /** The version of this finding for its subject. */
+    version: integer("version").notNull(),
+    status: text("status", {
+      enum: ["active", "stale", "pending", "superseded", "invalidated"],
+    }).notNull(),
+    /** The schema version of the stored payload. */
+    payloadSchemaVersion: integer("payload_schema_version").notNull().default(1),
+    /** What was concluded, verbatim. */
+    payloadJson: text("payload_json").notNull(),
+    /** The evidence the conclusion rests on. */
+    evidenceIdsJson: text("evidence_ids_json").notNull(),
+    /** The evaluator that produced it; null for a self-reported hypothesis. */
+    evaluatorId: text("evaluator_id"),
+    evaluatorVersion: text("evaluator_version"),
+    sourceKind: text("source_kind", {
+      enum: ["annotation", "rule_check", "playbook", "journal", "note"],
+    }).notNull(),
+    sourceId: text("source_id").notNull(),
+    /** The source revision this finding was derived from. */
+    sourceRevision: integer("source_revision").notNull(),
+    accountId: text("account_id").references(() => accounts.id, { onDelete: "cascade" }),
+    createdAt: integer("created_at").notNull(),
+    updatedAt: integer("updated_at").notNull(),
+  },
+  (table) => [
+    uniqueIndex("knowledge_hypotheses_subject_version_unique").on(
+      table.subjectType,
+      table.subjectId,
+      table.version,
+    ),
+    index("knowledge_hypotheses_source_status_idx").on(
+      table.sourceKind,
+      table.sourceId,
+      table.accountId,
+      table.status,
+    ),
+    index("knowledge_hypotheses_account_status_idx").on(table.accountId, table.status),
+  ],
+);
+
+/**
+ * The derived patterns (Phase 14).
+ *
+ * A pattern is the result of a pattern evaluation, so it always names its
+ * evaluator and records whether the evidence was sufficient: an
+ * insufficient-evidence pattern is written down, never guessed into a
+ * finding.
+ */
+export const knowledgePatterns = sqliteTable(
+  "knowledge_patterns",
+  {
+    id: text("id").primaryKey(),
+    subjectType: text("subject_type").notNull(),
+    subjectId: text("subject_id").notNull(),
+    /** The version of this pattern for its subject. */
+    version: integer("version").notNull(),
+    status: text("status", {
+      enum: ["active", "stale", "pending", "superseded", "invalidated"],
+    }).notNull(),
+    /** The schema version of the stored payload. */
+    payloadSchemaVersion: integer("payload_schema_version").notNull().default(1),
+    /** What was concluded, verbatim. */
+    payloadJson: text("payload_json").notNull(),
+    /** The evidence the conclusion rests on. */
+    evidenceIdsJson: text("evidence_ids_json").notNull(),
+    /** The evaluator that produced the pattern; null while it is pending. */
+    evaluatorId: text("evaluator_id"),
+    evaluatorVersion: text("evaluator_version"),
+    /** Whether the evaluation had enough evidence; null while it is pending. */
+    evaluationState: text("evaluation_state", {
+      enum: ["evaluated", "insufficient_evidence"],
+    }),
+    requiredEvidence: integer("required_evidence"),
+    availableEvidence: integer("available_evidence"),
+    sourceKind: text("source_kind", {
+      enum: ["annotation", "rule_check", "playbook", "journal", "note"],
+    }).notNull(),
+    sourceId: text("source_id").notNull(),
+    /** The source revision this pattern was derived from. */
+    sourceRevision: integer("source_revision").notNull(),
+    accountId: text("account_id").references(() => accounts.id, { onDelete: "cascade" }),
+    createdAt: integer("created_at").notNull(),
+    updatedAt: integer("updated_at").notNull(),
+  },
+  (table) => [
+    uniqueIndex("knowledge_patterns_subject_version_unique").on(
+      table.subjectType,
+      table.subjectId,
+      table.version,
+    ),
+    index("knowledge_patterns_source_status_idx").on(
+      table.sourceKind,
+      table.sourceId,
+      table.accountId,
+      table.status,
+    ),
+    index("knowledge_patterns_account_status_idx").on(table.accountId, table.status),
+  ],
+);
+
+/**
+ * The durable schedules (Phase 14, schema only).
+ *
+ * The table is created here; the scheduler that drives it belongs to
+ * Phase 15. `definition_version` is the version its jobs are keyed by, and
+ * `checkpoint_json` is the durable cursor a condition schedule consumes.
+ */
+export const intelligenceSchedules = sqliteTable(
+  "intelligence_schedules",
+  {
+    id: text("id").primaryKey(),
+    /** The version of the schedule definition. */
+    definitionVersion: integer("definition_version").notNull(),
+    /** The next instant the schedule is due, in epoch milliseconds. */
+    nextDueAt: integer("next_due_at").notNull(),
+    /** The durable checkpoint of a condition schedule. */
+    checkpointJson: text("checkpoint_json"),
+    createdAt: integer("created_at").notNull(),
+    updatedAt: integer("updated_at").notNull(),
+  },
+  (table) => [index("intelligence_schedules_next_due_idx").on(table.nextDueAt)],
+);
