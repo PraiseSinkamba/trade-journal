@@ -1714,7 +1714,9 @@
           "apps/web/src/db/migrations.ts",
           "apps/web/src/db/bootstrap.ts",
           "apps/web/src/db/migration-checksums.json",
-          "apps/web/src/db/migrations/"
+          "apps/web/src/db/migrations/",
+          "apps/web/src/server/intelligence/contracts/knowledge.ts",
+          "apps/web/src/server/intelligence/infrastructure/knowledge-revisions.ts"
         ],
         "exclusive": true,
         "sharedFilesPolicy": "Single phase owner; see integration-plan.md. No edits outside task subset without coordinator allocation."
