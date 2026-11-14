@@ -39,6 +39,11 @@ import { persistObservationInTx } from "./infrastructure/knowledge-store";
 import { applySourceChange, nextSourceRevision } from "./infrastructure/knowledge-revisions";
 import { createOutboxDispatcher, type OutboxHandler } from "./infrastructure/outbox";
 import {
+  createScheduleHandler,
+  createScheduler,
+  type ScheduleDefinition,
+} from "./infrastructure/scheduler";
+import {
   createPolicyStore,
   reserveBackgroundAttempt,
   type EnqueueRunInput,
@@ -189,6 +194,8 @@ export const createIntelligenceServices = (deps: {
   readonly db: JournalDb;
   readonly clock?: () => number;
   readonly seedBatchSize?: number;
+  /** The schedules the durable scheduler drives. */
+  readonly schedules?: readonly ScheduleDefinition[];
 }) => {
   const clock = deps.clock ?? Date.now;
   const jobs = createJobStore(deps.db);
@@ -211,11 +218,15 @@ export const createIntelligenceServices = (deps: {
     { id: OBSERVATION_HANDLER_ID, version: OBSERVATION_HANDLER_VERSION },
   ];
   const replay = createReplayService({ db: deps.db, jobs, handlers: outboxHandlers, clock });
+  const schedules = deps.schedules ?? [];
+  const scheduler = createScheduler({ db: deps.db, jobs, definitions: schedules });
+  const scheduleHandler = createScheduleHandler({ definitions: schedules, clock });
   return {
     seedAccount: backfill.seedAccount,
     requestReplay: replay.requestReplay,
-    handlers,
+    handlers: [...handlers, scheduleHandler],
     outboxHandlers,
+    scheduler,
   };
 };
 
@@ -225,9 +236,10 @@ export const createIntelligenceWorker = (deps: {
   readonly clock?: () => number;
   readonly enabled?: boolean;
   readonly owner?: string;
+  readonly schedules?: readonly ScheduleDefinition[];
 }): IntelligenceWorker => {
   const clock = deps.clock ?? Date.now;
-  const services = createIntelligenceServices({ db: deps.db, clock });
+  const services = createIntelligenceServices({ db: deps.db, clock, schedules: deps.schedules });
   const jobs = createJobStore(deps.db);
   return createWorkerService({
     db: deps.db,
@@ -242,6 +254,7 @@ export const createIntelligenceWorker = (deps: {
       handlers: services.outboxHandlers,
     }),
     handlers: services.handlers,
+    scheduler: services.scheduler,
   });
 };
 

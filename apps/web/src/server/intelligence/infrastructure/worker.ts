@@ -93,6 +93,8 @@ export const createWorkerService = (deps: {
   enabled?: boolean;
   pollIntervalMs?: number;
   dispatchLimit?: number;
+  /** The durable scheduler, ticked on the worker's own connection and clock. */
+  scheduler?: { scheduleDue(now: number): number };
 }): WorkerService & {
   tick(now: number): Promise<boolean>;
   status(): WorkerStatus;
@@ -216,7 +218,7 @@ export const createWorkerService = (deps: {
         (handler) => handler.id === "seed-account" && handler.version === "1",
       );
     }
-    if (payload.type !== "evaluate_trade") return undefined;
+    if (payload.type !== "evaluate_trade" && payload.type !== "schedule_trigger") return undefined;
     return deps.handlers.find(
       (handler) => handler.id === payload.handlerId && handler.version === payload.handlerVersion,
     );
@@ -234,6 +236,9 @@ export const createWorkerService = (deps: {
       return false;
     }
     state = "working";
+    // The scheduler runs on the worker's own connection and clock, so a due
+    // schedule becomes a durable job on the same tick that claims one.
+    deps.scheduler?.scheduleDue(now);
     deps.dispatcher.dispatchOutbox(dispatchLimit, now);
     const claim = deps.jobs.claim(owner, now);
     if (!claim) {

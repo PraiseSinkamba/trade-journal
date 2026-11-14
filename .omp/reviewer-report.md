@@ -1,62 +1,37 @@
 ## Verdict: PASS
 
-## Reviewer Report — Phase 14 repair (journal write and source revision independence)
+## Reviewer Report — Phase 15 scheduler repair (intelligence scheduler, uncommitted working tree)
 
 ### PASS / FAIL
 
-PASS. The repair diff resolves all four findings of the Phase 14 implementation review. The one
-production file that changed differs from the implementation commit `1281bdb` only in the ordering
-of the upsert and the revision decision, exactly as the brief requires. The two strengthened test
-cases are real tests: each was seen to fail against deliberately broken behaviour and to pass again
-after the restore. The plan's column table now states the nullability the shipped migration
-actually has. No migration, schema, dependency, financial, hash, key or annotation change.
+PASS — all three coordinator findings are genuinely fixed in production code, the three new tests
+have teeth, and no boundary, style, schema or dependency violation was introduced. One non-blocking
+documentation-formatting regression is reported below ([FAIL] tag; it does not change the verdict —
+the repo's `format:check` gate is already red on 74 untouched baseline files, so no green gate flips,
+and the fix is a single `prettier --write`).
 
 ### Findings
 
-- [PASS] `apps/web/src/app/api/journal/[date]/route.ts` — FINDING 1 resolved. The guard
-  `if (stored?.note === text) return [];` no longer sits before the upsert. The upsert now runs
-  first and is byte-identical to the pre-Phase-14 base route: it always refreshes
-  `journal_days.updated_at` with `nowIso()`. The guard afterwards only decides whether a revision
-  is emitted. An unchanged note therefore still writes and still produces no revision; there is no
-  early return before the write.
-- [PASS] `apps/web/tests/intelligence-knowledge-revisions.test.ts` — FINDING 2 resolved. The new
-  case "undoes the source write when the event application fails" makes the source write succeed
-  first (the trade annotation is written) and lets the event application fail afterwards (the
-  source revision names an account that does not exist, and the `knowledge_sources.account_id`
-  foreign key refuses it; `foreign_keys = ON` is set on every journal connection). It asserts the
-  write was undone and that no revision survived. Splitting `recordSourceChanges` into two
-  transactions leaves the annotation applied and the case fails.
-- [PASS] `apps/web/tests/intelligence-knowledge-revisions.test.ts` — FINDING 3 resolved. The
-  no-revision case is now driven through `PUT /api/journal/[date]`: the same text is written twice
-  and the case asserts exactly one revision in total, an unchanged note, and that the second write
-  still refreshed `journal_days.updated_at`. Deleting the route's guard makes the second write
-  emit a second revision and the case fails; skipping the upsert for an unchanged note leaves the
-  timestamp stale and the case fails. Fake timers are scoped to `Date` and restored in a `finally`.
-- [PASS] `docs/superpowers/plans/ai-native-journal/phase-14.md` — FINDING 4 resolved. The
-  `knowledge_hypotheses` / `knowledge_patterns` column table now states the shipped shape:
-  `evaluator_id` and `evaluator_version` are nullable in both tables, and `evaluation_state`,
-  `required_evidence` and `available_evidence` are nullable and patterns-only with the exact
-  `IS NULL OR ...` checks. The prose above the table no longer claims that a pattern always names
-  its evaluator. The migration and the schema were not changed to match the plan.
-- [PASS] scope — the only production file that differs from `1281bdb` is
-  `apps/web/src/app/api/journal/[date]/route.ts`, and it differs only in the ordering of the
-  upsert and the revision decision. `apps/web/src/server/intelligence/composition.ts` and every
-  other production file are byte-unchanged. The remaining diff is the test file and the plan
-  document.
-- [PASS] `pnpm exec vitest run apps/web/tests/intelligence-knowledge-revisions.test.ts` — 27 tests
-  pass, exit code 0.
-- [PASS] `pnpm --filter web typecheck` — exit code 0, no diagnostics.
-- [PASS] format — `prettier --check` reports the touched route and test files clean; the plan
-  document was formatted with `prettier --write` on that single file.
-- [PASS] commit subject — "fix: keep the journal note write and the source revision independent"
-  states what was fixed in terms a non-engineer can follow.
-
-### Notes (not blocking, outside this repair's scope)
-
-- The plan's column table lists the `source_kind` `CHECK` constraint as `—`, while the shipped DDL
-  declares one. This drift predates the repair and is not one of the four findings; it is recorded
-  for a later phase rather than changed here.
+- [PASS] Finding 1 (damaged checkpoint) — `apps/web/src/server/intelligence/infrastructure/scheduler.ts:146-172` — `readCheckpoint` now returns a tagged `StoredCheckpoint` (`:141-144`): absent (`raw === null`), unparseable, non-object/array, non-numeric `lastRecordedAt` and missing/invalid `lastSourceId` are **damaged**, while the anchored value `{"lastRecordedAt":0,"lastSourceId":null}` parses as a **valid empty cursor** (`:167-171`), so "anchored and empty" is no longer conflated with "damaged".
+- [PASS] Finding 1 (recovery) — `scheduler.ts:245-253` — `effectiveCheckpoint` re-anchors a damaged cursor to `offeredFrontier` (`:204-234`), never to epoch 0, and only falls back to the empty cursor when the occurrence ledger is empty (nothing was ever consumed — `:250-253`). The frontier is the newest **offered** condition occurrence (`:217-230`), keyed on the occurrence payload's `dueAt`/`sourceId`, which are exactly the source change's `recordedAt`/`id` the handler writes into the checkpoint — so the recovered position matches the poll's own `(recordedAt, id)` ordering (`changesAfterCheckpoint`, `:283-313`).
+- [PASS] Finding 1 (no backwards move) — `scheduler.ts:263-271, 537-541` — `isBehindCheckpoint` compares the `(recordedAt, sourceId)` tuple; the old guard compared `recordedAt` only, so a retry of an occurrence with the same instant and a smaller id regressed `lastSourceId` and could re-select a consumed change. The handler now reads the same `effectiveCheckpoint` as the tick (`:537`), so a retried older occurrence cannot move the checkpoint backwards even after damage.
+- [PASS] Finding 2 (dead condition occurrence) — `scheduler.ts:416-473` — a burnt occurrence (`failed|cancelled|completed`; the live set is `pending|running|retry_wait`, `:116-121`) is **stepped over**: the local scan moves past the burnt change (`:461-466`) so a later change can fire in the same tick, and `next_due_at` advances to `now + pollIntervalMs` (`:468-473`). A live occurrence breaks out moving nothing (`:456-459`) — duplicate tick, cursor untouched. The tick never writes `checkpoint_json`: the only row update it performs sets `nextDueAt`/`updatedAt` (`:469-470`), so the checkpoint stays handler-owned as required.
+- [PASS] Finding 3 (dead time occurrence) — `scheduler.ts:378-396` — a dead time occurrence advances `next_due_at` to `nextOccurrence(definition, dueAt, now)` (`:389`), the same value the handler writes for that occurrence (`scheduler.ts:513-527`, `nextOccurrence(definition, payload.dueAt, now)`), so the schedule catches up instead of re-deriving the same key; a live occurrence leaves `next_due_at` alone (`:393-395`). `nextOccurrence` is strictly after `now` on both cadences, so the row cannot re-enter the same tick.
+- [PASS] New tests have teeth — `apps/web/tests/intelligence-scheduler.test.ts:479, 532, 583` — (a) the damaged-checkpoint test passes only if the tick re-anchors to the **offered** frontier: with an epoch-0 fallback the poll re-selects the still-pending `source-a` occurrence, fires nothing and `toBe(1)` fails; the test also asserts the tick leaves `checkpointJson` at `"not-json"` (`:527`), pinning "the tick never owns the checkpoint". (b) the dead-condition test passes only if the burnt change is stepped over (otherwise 0 fires) and if `next_due_at` advances to `now + pollIntervalMs` (`:577-580`). (c) the time test passes only if the dead path advances `next_due_at` to the following occurrence (`due + 2 * HOUR`, `:604`) and the next tick fires the **next** key. Each fails for the reason it claims; the implementer's recorded mutations match this analysis (empty-cursor fallback → 1 failure; step-over removed → 1 failure; scan not moved → hang = the stall itself; time dead path reverted → 1 failure).
+- [PASS] Test suite green — `pnpm exec vitest run apps/web/tests/intelligence-scheduler.test.ts` → 17 passed (17); `pnpm --filter web typecheck` → clean. The whole-repo `pnpm test` was intentionally not run (coordinator's brief).
+- [PASS] Boundary — `packages/core/src` and `packages/importers/src` contain no `apps/web` import; `packages/importers/src` contains no raw `fetch`/`axios`/`http.`; the diff touches only `apps/web/src/server/intelligence/infrastructure/scheduler.ts`, `apps/web/tests/intelligence-scheduler.test.ts` and the phase report. No `packages/core` change, so the trade-key format (`accountId|symbol|direction|openedAt[|importGroup][|N]`) is untouched; no chart component changed (no P&L-colour signal).
+- [PASS] Style — `.omp/style/typescript.md` — strict + `noUncheckedIndexedAccess` respected; the one non-null assertion in production code (`scheduler.ts:431`, `changes[changes.length - 1]!`) sits behind the length guard at `:424` (`threshold ≥ 1` ⇒ `changes.length ≥ 1`) and is the pre-existing pattern moved from `HEAD:266`; no `any`, no `@ts-ignore`, no `require()`. Test-file `rows()[0]!` / `jobRows()[0]!` follow the file's existing convention (`HEAD` uses the same form).
+- [PASS] Style — `.omp/style/sql-drizzle.md` — Drizzle query builder only, no raw SQL, no `json_extract`; the job payload is parsed in JavaScript through the strict `jobPayloadSchema` (`scheduler.ts:175-188`), exactly as the brief requires, and the frontier query is an index range scan on the unique `idempotency_key` index (`:204-216`). Note (non-blocking): that scan is unbounded — one row per fired occurrence — and runs on every tick while the checkpoint stays damaged; a future pruning policy for schedule occurrences keeps it cheap.
+- [PASS] Style — `.omp/style/data-engineering.md` — trade key, edge-score versioning, importer contract and `importMetadata` handling untouched; `knowledge_sources.recordedAt` (commit time) is used as the source-log order.
+- [PASS] Schema / migration / dependency — no change under `apps/web/src/db` (no schema, no `BOOTSTRAP_SQL`, no migration); no `package.json` / lockfile change; `node scripts/check-licenses.mjs` → "Dependency licenses OK".
+- [PASS] Documented deviation — accepted. The brief's literal remedy ("re-anchor to the newest recorded `knowledge_sources` row") contradicts the brief's own second requirement: a source row says *recorded*, not *consumed*, so anchoring to it swallows a change recorded after the damage and that change never fires. The implemented deviation anchors to the newest **offered** occurrence (`scheduler.ts:204-234`), which satisfies both clauses in either insertion order — an already-consumed change is at or before the frontier and is never re-selected, while a change recorded after the damage is strictly after the frontier and fires (proven by `intelligence-scheduler.test.ts:479`). The retention caveat is documented in the phase report (`ai-native-journal-phase-15.md:208-219`); minor nuance, non-blocking: today's account purge only deletes jobs referenced by that account's event deliveries, so schedule occurrences (not account-scoped) are not touched by it — the caveat is conservative and forward-looking, not a live data-loss path.
+- [PASS] Cross-boundary dispatch — every `JobStatus` variant is classified: `pending|running|retry_wait` live, `completed|failed|cancelled` dead (`scheduler.ts:116-121`, consumed at `:383` and `:456`); no status is silently dropped or mis-routed. The `schedule_trigger` payload shape is unchanged (`contracts/jobs.ts` untouched) and is re-read through the same strict schema.
+- [PASS] Commit message — N/A: the repair is an uncommitted working tree and the coordinator's brief forbids committing; the orchestrator commits after this report.
+- [FAIL] `docs/superpowers/reports/ai-native-journal-phase-15.md:117-118, 203-207, 250-256` (non-blocking, documentation only) — `prettier --check` now fails on this file (it was clean at `HEAD`); the diff's new markdown tables are not prettier-padded. The repo's `format:check` gate is already red on **74 untouched baseline files** (75 with this one), so no green gate flips and no code behaviour is affected; the phase report's own evidence line "every file this phase touched passes `prettier --check`" is now inaccurate. Fix before commit: `pnpm exec prettier --write docs/superpowers/reports/ai-native-journal-phase-15.md`.
 
 ### Summary
 
-9 PASS, 0 FAIL, 0 BLOCK.
+15 PASS, 1 FAIL (non-blocking documentation formatting), 0 BLOCK — verdict PASS. All three coordinator
+findings are fixed in production code (not only in the tests), the three new tests fail for the
+reasons they claim, and the boundary, style, schema and dependency gates are clean. The single FAIL
+is a markdown-padding regression in the phase report; run `prettier --write` on it and commit.

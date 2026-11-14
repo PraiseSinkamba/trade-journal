@@ -58,6 +58,20 @@ const retentionPayload = z
   })
   .strict();
 
+const scheduleTriggerPayload = z
+  .object({
+    type: z.literal("schedule_trigger"),
+    scheduleId: z.string().min(1),
+    dueAt: z.number().int().nonnegative(),
+    version: z.number().int().positive(),
+    trigger: z.enum(["time", "condition"]),
+    /** The source change a condition occurrence consumed; null for a time trigger. */
+    sourceId: z.string().min(1).nullable(),
+    handlerId: z.string().min(1),
+    handlerVersion: z.string().min(1),
+  })
+  .strict();
+
 /**
  * The strict schema of a job payload.
  *
@@ -70,6 +84,7 @@ export const jobPayloadSchema = z.discriminatedUnion("type", [
   runCapabilityPayload,
   workflowEffectPayload,
   retentionPayload,
+  scheduleTriggerPayload,
 ]);
 
 /** The work a job carries. */
