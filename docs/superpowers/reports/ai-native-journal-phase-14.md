@@ -172,6 +172,99 @@ Implementation review — 2 MAJOR and 8 MINOR/NIT findings, all resolved:
   revision when nothing changed), five matrix rows without a route-level case (all five now have
   one), and two unused imports (removed).
 
+## Phase 14 repair — journal write and source revision independence
+
+A later review of the implementation diff raised four findings against this phase: one real
+production regression and three findings about the proof and the documentation. All four are
+resolved. The repair is a separate commit on top of the phase commits; the three phase commits
+were not amended or rewritten.
+
+### The four findings and their resolutions
+
+1. **Production regression — the journal day write was skipped for an unchanged note.**
+   `apps/web/src/app/api/journal/[date]/route.ts` guarded with `if (stored?.note === text) return [];`
+   **before** the upsert, so an unchanged note skipped the whole write and
+   `journal_days.updated_at` was no longer refreshed. The base route before Phase 14 always
+   upserted. **Resolution:** the upsert now runs first and is byte-identical to the base route —
+   it always refreshes `updated_at` with `nowIso()` — and the guard afterwards only decides
+   whether a revision is emitted. The write and the revision decision are independent: an
+   unchanged note still writes, and an unchanged note still produces no revision. There is no
+   early return before the write.
+
+2. **The atomicity case never applied the event.** The only atomicity case threw inside the
+   write callback, so the source change was never attempted; the case would still pass if
+   `recordSourceChanges` committed the source write in one transaction and applied the change in
+   a second. **Resolution:** a new case, "undoes the source write when the event application
+   fails", makes the source write succeed first (the trade annotation is written) and lets the
+   event application fail afterwards — the source revision names an account that does not exist
+   and the `knowledge_sources.account_id` foreign key refuses it (`foreign_keys = ON` on every
+   journal connection). It asserts that the write was **undone** and that no revision survived.
+   The existing rollback case is untouched and still proves the other direction.
+
+3. **The no-revision case was never driven through the route.** The old case re-implemented the
+   journal route's guard inside the test, so deleting the route's guard left every test green.
+   **Resolution:** the case now drives `PUT /api/journal/[date]` twice with the same text and
+   asserts exactly **one** revision in total, an unchanged note, and that the second write still
+   refreshed `journal_days.updated_at`. The clock is controlled with fake timers scoped to `Date`
+   and restored in a `finally`, so the timestamp assertion is exact rather than timing-dependent.
+
+4. **The plan's column table contradicted the shipped migration.** The plan still specified
+   `knowledge_patterns.evaluator_id` and `evaluator_version` as `NOT NULL`, and
+   `evaluation_state` / `required_evidence` / `available_evidence` as pattern-only `NOT NULL`,
+   while the shipped `0006` DDL and `schema.ts` make all five nullable. **Resolution:** the plan's
+   column table now states the shipped shape — the two evaluator columns are nullable in both
+   tables, the three evaluation columns are nullable and patterns-only with the exact
+   `IS NULL OR ...` checks — and the paragraph above the table no longer claims that a pattern
+   always names its evaluator. **The migration and the schema were not changed to match the
+   plan**: the shipped shape is correct, because a pattern can exist before it has been
+   evaluated.
+
+### Proof of teeth
+
+Every changed case was seen to fail against deliberately broken behaviour and to pass again after
+the restore. The production files were restored exactly afterwards.
+
+| Case                                                  | Deliberate break                                                                                                            | Result while broken                                                                                                             | Result after restore |
+| ----------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------- | -------------------- |
+| Finding 3 / Finding 1 — route-driven no-revision case | The journal route's guard moved back **before** the upsert, so an unchanged note skipped the write                          | **FAIL** — `expected '2026-09-01T00:00:00.000Z' to be '2026-09-02T00:00:00.000Z'` (the second PUT did not refresh `updated_at`) | **PASS**             |
+| Finding 3 — route-driven no-revision case             | The route's no-revision guard deleted, so every PUT emits a revision                                                        | **FAIL** — `expected [ …(8), …(8) ] to have a length of 1 but got 2`                                                            | **PASS**             |
+| Finding 2 — atomicity case                            | `recordSourceChanges` split into two transactions: the source write commits first, the source change is applied in a second | **FAIL** — `expected 'my review' to be null` (the source write was left applied)                                                | **PASS**             |
+
+The Finding 2 case was re-proved against the final fixture (a trade annotation rather than a
+note), because the reviewer pass changed the fixture.
+
+### Repair verification commands
+
+Run in this order, against the repair commit:
+
+| Command                                                                        | Result                                                                                  |
+| ------------------------------------------------------------------------------ | --------------------------------------------------------------------------------------- |
+| `pnpm exec vitest run apps/web/tests/intelligence-knowledge-revisions.test.ts` | **1 file, 27 tests passed** (exit code 0, ≈0.58 s of test time)                         |
+| `pnpm --filter web typecheck`                                                  | **clean** (`next typegen` + `tsc --noEmit`, no diagnostics, exit code 0, 1 m 46 s wall) |
+| `pnpm exec prettier --check` on the touched route and test files               | clean; the plan document was formatted with `prettier --write` on that single file      |
+
+The whole-project `pnpm test` gate was deliberately **not** run here: the coordinator runs the
+destination gate once, alone, after the merge.
+
+### Repair scope
+
+`git diff 1281bdb -- apps/web/src/` shows exactly one production file changed:
+`apps/web/src/app/api/journal/[date]/route.ts`, and it differs only in the ordering of the upsert
+and the revision decision. `apps/web/src/server/intelligence/composition.ts` and every other
+production file are byte-unchanged. The repair adds no dependency, no schema change and no
+migration, and touches no financial value, hash, key or annotation.
+
+### Repair review
+
+One reviewer run, on the implementation diff of the repair, as the repair brief allows. Its
+verdict was **PASS** with four P3 nits and no P0–P2 defect. Two nits were resolved in the repair:
+the production diff was reduced to the pure reorder (an explanatory comment was removed), and the
+atomicity fixture was changed so the write and the change name one coherent source. One nit was
+resolved in the plan: the three patterns-only rows now read `yes (patterns only)` in the Null
+column, so the column answers nullability the way the other rows do. The fourth nit — the plan
+lists the `source_kind` `CHECK` constraint as `—` while the shipped DDL declares one — predates
+the repair, is not one of the four findings, and is recorded here rather than changed.
+
 ## Deviations
 
 - **The pure knowledge contracts live in `intelligence/contracts/knowledge.ts`, not in a
