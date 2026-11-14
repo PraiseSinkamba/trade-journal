@@ -13,6 +13,11 @@ twice — not by a repeated tick, not by a restart. Time triggers resolve local 
 explicit daylight-saving rules; condition triggers consume the durable source-change log against a
 persisted checkpoint that only moves forward. The scheduling path selects no provider and no model.
 
+A later repair removed three silent stalls in that scheduler — a damaged checkpoint that replayed
+what it had consumed, and two occurrences that failed for good and left the schedule stuck on a key
+it could never use again. The scheduler now keeps moving when a cursor is lost or an occurrence is
+burnt. See "The Phase 15 repair" below.
+
 ## Changed files
 
 | File                                                           | Change                                                                                                                      |
@@ -22,7 +27,7 @@ persisted checkpoint that only moves forward. The scheduling path selects no pro
 | `apps/web/src/server/intelligence/infrastructure/worker.ts`    | one routing branch for the new payload, one optional `scheduler` dependency ticked on the worker's own connection and clock |
 | `apps/web/src/server/intelligence/composition.ts`              | wiring: the scheduler, the schedule handler, the scheduler dependency on the worker                                         |
 | `packages/core/src/time.ts`                                    | the pure local-time helpers: `wallClockOf`, `offsetAt`, `localInstant`, `nextDailyOccurrence`                               |
-| `apps/web/tests/intelligence-scheduler.test.ts`                | **new** — 14 cases                                                                                                          |
+| `apps/web/tests/intelligence-scheduler.test.ts`                | **new** — 17 cases (14 + 3 for the stall repair)                                                                            |
 | `docs/superpowers/plans/ai-native-journal/phase-15.md`         | the phase plan, committed before the implementation                                                                         |
 
 No other file changed. `apps/web/src/db/schema.ts`, the bootstrap snapshot, the migration registry
@@ -114,6 +119,8 @@ no server or Docker process started.
 | `pnpm typecheck` (whole repo)                                                                                  | 101  | `packages/core`, `packages/importers` and `apps/web` clean; **`desktop` fails on `resource path 'binaries/node-x86_64-pc-windows-msvc.exe' doesn't exist`** — reproduced on the clean tree at the base SHA with the phase changes stashed, so it is pre-existing and unrelated |
 | `pnpm format:check` (whole repo)                                                                               | 1    | 78 files fail on the **baseline tree** as well; every file this phase touched passes `prettier --check`                                                                                                                                                                        |
 | `pnpm exec prettier --check <the six changed files> docs/superpowers/plans/ai-native-journal/phase-15.md`      | 0    | all clean                                                                                                                                                                                                                                                                      |
+| `pnpm exec vitest run apps/web/tests/intelligence-scheduler.test.ts` (after the repair)                        | 0    | 17 passed (17)                                                                                                                                                                                                                                                                 |
+| `pnpm --filter web typecheck` (after the repair)                                                               | 0    | `tsc --noEmit` clean                                                                                                                                                                                                                                                           |
 
 The full `pnpm test` and the merged-feature gate were **not** run here: the coordinator's brief
 reserves the full destination gate for its verification owner, after the merge. The targeted
@@ -138,13 +145,19 @@ it, exactly like the sibling suites.
 Base SHA: `19975e03e76345ccf2b9e78e0641fdf20e614203` (the verified feature HEAD this phase
 started from).
 
-| Commit    | Subject                                                              |
-| --------- | -------------------------------------------------------------------- |
-| `bd6af62` | `docs: plan the durable time and condition scheduling`               |
-| `949acf8` | `feat: schedule bounded intelligence and propagate source revisions` |
+| Commit    | Subject                                                                      |
+| --------- | ---------------------------------------------------------------------------- |
+| `bd6af62` | `docs: plan the durable time and condition scheduling`                       |
+| `949acf8` | `feat: schedule bounded intelligence and propagate source revisions`         |
+| `89c1059` | `docs: record the Phase 15 scheduler evidence`                               |
+| `0257db1` | `fix: stop a stalled schedule from replaying or suppressing its occurrences` |
 
-Implementation tip SHA: `949acf8837d64a39b71e542ad3cfb98ab9a51282` — the tree the commands above were
+Implementation tip SHA: `0257db1fe332eadf810af4dca3cbecffe8e26146` — the tree the commands above were
 run against. The phase report and the reviewer report are the commit on top of it.
+
+The first implementation tip was `949acf8837d64a39b71e542ad3cfb98ab9a51282`. The repair commit
+`0257db1` sits on top of it and changes `scheduler.ts` and the scheduler test file only; the
+schema, the migrations and the dependency set are untouched by both.
 
 `feat: schedule bounded intelligence and propagate source revisions` is the detailed plan's Task 10
 subject. Phase 14 already used it for the source-revision half of the same task; **this phase
@@ -192,6 +205,67 @@ over 13 zones across the 2026 transitions with zero mismatches; the gap/fold ins
 coalescing values and the `next_due_at` values match the plan's pinned values; the occurrence keys,
 the ownership of `next_due_at` and the no-provider/no-LLM constraint all hold.
 
+## The Phase 15 repair — a schedule that stalls
+
+The coordinator reviewed the committed implementation and found three ways a schedule could stop
+making progress without ever reporting an error. All three were silent stalls: the poll kept
+running, the row kept saying "due", and no occurrence ever fired again.
+
+| Finding                                                                | Symptom                                                                                                                                                                                           | Resolution                                                                                                                                                                                                                                                                                                                         |
+| ---------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| **1 — a damaged checkpoint replayed what it had already consumed**     | `checkpoint_json` that was absent or unparseable fell back to epoch 0, so the poll re-selected the change it had already fired and the handler's strict guard could move the checkpoint backwards | `readCheckpoint` now tells **anchored-and-empty** (`{"lastRecordedAt":0,"lastSourceId":null}`) apart from **damaged**. A damaged cursor is re-anchored to the newest occurrence the schedule already _offered_, derived from the job ledger, so nothing consumed is fired twice and a change recorded after the damage still fires |
+| **2 — a dead condition occurrence reselected the same change forever** | `if (existing) continue;` advanced neither `next_due_at` nor the checkpoint, so a `failed`/`cancelled` occurrence blocked every later change                                                      | A live occurrence (`pending`, `running`, `retry_wait`) is a duplicate tick and is skipped without moving the cursor. A dead one is **burnt**: the poll steps its local scan over the burnt change and advances `next_due_at` to `now + pollIntervalMs`. The durable `checkpoint_json` stays handler-owned                          |
+| **3 — a dead time occurrence stalled the schedule on the same key**    | The same `if (existing) continue;` in the time branch left `next_due_at` on the failed occurrence's due instant, so the schedule re-derived the same key forever                                  | A live occurrence leaves `next_due_at` alone. A dead one advances `next_due_at` to `nextOccurrence(definition, dueAt, now)` — the same value the handler would have written — so the schedule catches up instead of stalling                                                                                                       |
+
+The repair touches one production file (`scheduler.ts`) and the scheduler test file. No schema
+change, no migration, no dependency, no provider or credential contract change.
+
+### How the damaged checkpoint is re-anchored
+
+The brief offered two remedies: re-anchor the cursor to the newest recorded `knowledge_sources`
+row, or skip firing until it is re-anchored. **The first remedy cannot satisfy the second
+requirement.** A `knowledge_sources` row says a change was _recorded_, not that it was _consumed_;
+re-anchoring to the newest recorded row would swallow a change that was recorded after the damage
+but before the repairing tick, and that change would never fire. The repair therefore re-anchors to
+the newest occurrence the schedule has already **offered** — the ledger of what was actually
+consumed — which satisfies both requirements in either insertion order: a consumed change is never
+re-fired, and a change recorded after the damage still fires.
+
+The ledger frontier is derived from the `intelligence_jobs` payload, parsed in JavaScript through
+the strict `jobPayloadSchema` (`json_extract` is not used — the style guide forbids SQL JSON
+parsing on this path). The scan is an index range scan on the unique `idempotency_key` index, from
+`${scheduleId}:` to `${scheduleId}:￿`.
+
+**This is a documented deviation from the brief's literal remedy.** It relies on the occurrence
+ledger surviving; `retention.ts` deletes `intelligence_jobs` rows on the account-purge path, and a
+future job-pruning phase would remove schedule occurrences too. Should that happen, a damaged
+checkpoint falls back to the empty cursor and the replay risk returns. That is a handoff item, not a
+silent condition.
+
+### Two consequences worth knowing
+
+- **A dead occurrence and a later change in the same tick.** When the poll steps over a burnt
+  change it keeps looking, so a later change can fire in that same tick. The tick advances
+  `next_due_at` (nobody else will) and the fired occurrence's handler later advances it again from
+  its own clock. The handler's write is the later one and is monotonic, so no occurrence is skipped
+  or duplicated — but two writes happen where the plan names one owner. The alternative (a later
+  change only fires on the _next_ tick) is a defensible reading of the brief; the repair takes the
+  reading under which a stalled schedule recovers in one poll rather than two.
+- **A completed occurrence is reachable as a candidate.** Only when its handler early-returned (its
+  source row was deleted, or it was already behind the cursor) — that is, when it did _not_
+  consume. Treating a completed occurrence as burnt is therefore correct: it will never consume
+  anything.
+
+### Repair acceptance evidence
+
+| Behaviour                                                | Result                                                                                                                                                                            |
+| -------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| A damaged checkpoint recovers                            | The consumed change is not fired again and the change recorded after the damage **does** fire, in the same tick                                                                   |
+| The tick never owns the checkpoint                       | After the repairing tick, `checkpoint_json` still holds the damaged value — the tick writes `next_due_at` and nothing else                                                        |
+| A dead condition occurrence does not block later changes | A later source change fires in the same tick, and the row's `next_due_at` is `now + pollIntervalMs`                                                                               |
+| A dead time occurrence catches the schedule up           | The next tick fires the **next** occurrence, not the failed one; `next_due_at` moves to the following interval boundary                                                           |
+| The checkpoint still only moves forward                  | The handler compares `(recordedAt, sourceId)` tuples, so a retried older occurrence cannot move the checkpoint backwards — and the change it names is exactly the one it consumed |
+
 ## Proof of teeth
 
 Every behaviour claimed above was proved by deliberately breaking the production code, watching the
@@ -214,6 +288,21 @@ The last break is worth spelling out: removing the `limit` makes the poll read t
 the second pending source change is consumed by the same occurrence and the checkpoint lands on the
 wrong change. The test catches it, so the bound is load-bearing rather than decorative.
 
+### The repair's own breaks
+
+The repair was proved the same way, on the repaired code, with the three new tests and the fourteen
+existing ones (17 in total).
+
+| Break                                                         | Result while broken                                                                                                                                                             | Result after restore |
+| ------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | -------------------- |
+| A damaged checkpoint falls back to the empty cursor again     | **1 failed**, 16 passed — "recovers a damaged checkpoint without replaying the change it consumed" (`expected +0 to be 1`)                                                      | 17 passed            |
+| A burnt change stops the poll instead of being stepped over   | **1 failed**, 16 passed — "fires a later change when the occurrence of an earlier one failed for good" (`expected +0 to be 1`)                                                  | 17 passed            |
+| The poll steps over a burnt change but does not move its scan | The suite **hung** and the 300 s vitest timeout fired — the poll re-selects the burnt change forever. That hang _is_ the stall the repair removes, so the bound is load-bearing | 17 passed            |
+| A dead time occurrence leaves `next_due_at` where it was      | **1 failed**, 16 passed — "catches up to the next occurrence when the occurrence failed for good" (`expected 1767603600000 to be 1767607200000`)                                | 17 passed            |
+
+Every restore was verified with `diff` against the pre-mutation copy of the file (byte-identical)
+and a full green run of the suite.
+
 ## Deviations
 
 - **Two files outside the originally listed scope** (`contracts/jobs.ts`, `infrastructure/worker.ts`)
@@ -231,6 +320,14 @@ wrong change. The test catches it, so the bound is load-bearing rather than deco
   phase; the packages this phase touches (`packages/core`, `apps/web`) typecheck clean.
 - **The full `pnpm test` was not run here.** The coordinator's brief reserves the full destination
   gate for its verification owner after the merge.
+- **The damaged-checkpoint re-anchor reads the occurrence ledger, not the newest recorded
+  `knowledge_sources` row.** The brief's literal remedy would swallow a change recorded between
+  the damage and the repairing tick, so the repair re-anchors to the newest _offered_ occurrence
+  instead. See "The Phase 15 repair" above for the reasoning and the retention caveat.
+- **A dead occurrence and a later change can be handled in one tick.** The tick advances
+  `next_due_at` and the fired occurrence's handler advances it again from its own clock; the
+  handler's write is later and monotonic. The plan names one advance owner per row state, so this
+  is a deliberate departure.
 
 ## Next-phase handoff inputs
 
@@ -248,3 +345,7 @@ wrong change. The test catches it, so the bound is load-bearing rather than deco
   own.
 - The scheduler runs on the worker's own connection and the worker's own clock, never on a request
   thread. A later phase that adds an interactive surface must not call `scheduleDue` from a route.
+- **A phase that prunes `intelligence_jobs` must keep schedule occurrences.** A damaged condition
+  checkpoint recovers from the occurrence ledger, so pruning a schedule's occurrences removes the
+  evidence that the change was consumed. If pruning is ever allowed to touch schedule occurrences,
+  the recovery has to move to a durable position of its own first.
