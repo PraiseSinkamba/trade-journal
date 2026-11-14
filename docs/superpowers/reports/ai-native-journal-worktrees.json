@@ -1,7 +1,7 @@
 {
   "schemaVersion": 1,
   "feature": "ai-native-journal",
-  "updatedAt": "2026-11-14T12:25:56Z",
+  "updatedAt": "2026-11-14T22:21:07Z",
   "owner": "parent OMP coordinator (exclusive owner of this record)",
   "repository": {
     "name": "trade-journal",
@@ -35,8 +35,8 @@
     },
     "featureBranch": "codex/ai-native-journal",
     "featureBootstrapSha": "0a278503fd67c0f9e82138dfecb744f4bfd307ad",
-    "featureHeadSha": "1f23f7bbb6d8f94d9c49030a03feeb528a0ea6cc",
-    "featureHeadShaNote": "feature branch HEAD at the Phase 15 integration and the exact base of the Phase 15 worktree; the coordinator record commit advances the branch by one commit",
+    "featureHeadSha": "e798d517faba85373d38163280ab724202a8090c",
+    "featureHeadShaNote": "feature branch HEAD at the Phase 15 integration and the exact base of the Phase 16 worktree; the coordinator record commit advances the branch by one commit",
     "featureCheckpointCommits": [
       "0a278503fd67c0f9e82138dfecb744f4bfd307ad",
       "80d53ccb62fda801897852a6f4e5d2aab8b0d58b",
@@ -66,7 +66,8 @@
       "0c8ea63ccb7aed84bd5cabd576bdc24108f49b00",
       "ed0b7a68f1bc5769ec3648aecc30fca5469a1228",
       "19975e03e76345ccf2b9e78e0641fdf20e614203",
-      "1f23f7bbb6d8f94d9c49030a03feeb528a0ea6cc"
+      "1f23f7bbb6d8f94d9c49030a03feeb528a0ea6cc",
+      "e798d517faba85373d38163280ab724202a8090c"
     ],
     "featureBranchNote": "Orca slugified the requested name to codex-ai-native-journal at creation; the coordinator renamed the newly created, exclusively owned branch to the contract-required codex/ai-native-journal. Orca reads the renamed ref live (refs/heads/codex/ai-native-journal). No pre-existing branch was overwritten."
   },
@@ -284,7 +285,7 @@
         "startSha": "19975e03e76345ccf2b9e78e0641fdf20e614203",
         "orcaParentWorktreeId": "aa54a522-a9af-4cb4-9de7-f1d9a349c0fd::E:/4004/orca/workspaces/trade-journal/codex-ai-native-journal",
         "setup": "pnpm install --frozen-lockfile completed in the worker checkout; working tree clean; Node v24.20.0, pnpm 11.0.8; own node_modules and own pnpm virtual store",
-        "state": "the implementation-diff review failed with 3 findings; the phase was reopened and the repair dispatched as ctx_ae6ddbc183cd",
+        "state": "integrated into codex/ai-native-journal at fc1f61c and verified on the destination branch (destination gate green on the destination branch after the merge: pnpm install --frozen-lockfile, pnpm --filter web typecheck, the core and importers typecheck, pnpm --filter web migrations:check, node scripts/check-licenses.mjs, prettier --check on every merged file and pnpm build all exit 0; pnpm test 108 test files, 1188 tests passed, 157.62s). The worktree, the git worktree registration, the branch and the leftover directory remain until the user requests cleanup.",
         "note": "Phase 15 is the scheduler half of detailed plan Task 10: durable time and condition scheduling. It owns NO migration; it uses the intelligence_schedules table Phase 14 created in migration 0006. The brief pins the behaviours Phase 14 deliberately left out - scheduleDue, unique (scheduleId, dueAt, version) time keys, durable condition checkpoints, duplicate-tick idempotence, restart after a due time, the DST gap and fold, and long-offline coalescing - and forbids any model selection or LLM call in the scheduling path. The manifest T-015 context paths were corrected before the dispatch: jobs.ts, outbox.ts, composition.ts and packages/core/src/time.ts already exist and were marked planned. The worker asked for, and the coordinator granted, a two-file scope extension: apps/web/src/server/intelligence/contracts/jobs.ts for a strict schedule_trigger payload variant, and apps/web/src/server/intelligence/infrastructure/worker.ts for one routing branch in findHandler. Contract review section 5 makes unique (scheduleId, dueAt, version) JOBS the restart-safety mechanism, so the durable job is the contract mechanism and the alternative of keeping the key in checkpoint_json is weaker against that wording. Neither file is owned by any other phase, the change is additive and the jobs idempotency key already carries the unique key, so no database change is involved. Both files are recorded as exact owned paths in the manifest and in the merge allow-list. The independent implementation-diff review returned 3 findings, all of the same class: a schedule can stall silently forever. A damaged or absent checkpoint fell back to epoch 0, so the condition cursor reselected already-consumed changes from the start of the log and the handler then moved the checkpoint backwards. The condition tick skipped an occurrence whose job already existed without advancing next_due_at, so a permanently failed occurrence made the poll reselect the same change forever and no later source change could ever fire. The time tick never advanced next_due_at either, so a permanently failed trigger job left the due time in the past and the unique key suppressed every later enqueue, and the schedule never caught up. The reviewer confirmed the rest of the phase: the idempotency key is checked before the enqueue, the fold resolves to the earlier instant and the gap forward through the gap, a long offline gap coalesces, the time-schedule advance happens inside the job own transaction, the payload variant is strict, the scheduling path selects no model, the package boundary holds and there is no schema change. The coordinator confirmed the same three defects in the code before acting on them, and proved the existing scheduler tests have teeth with three mutations of the production plumbing."
       }
     ]
@@ -529,12 +530,23 @@
       "wave": 15,
       "branch": "codex/ai-native-journal-p15",
       "deps": ["task_53e2b3da13f7"],
-      "status": "dispatched",
-      "state": "dispatched",
-      "outcome": null,
+      "status": "completed",
+      "state": "integrated",
+      "outcome": "succeeded",
       "nativeDispatch": "ctx_ae6ddbc183cd",
       "note": "the scheduler half of detailed plan Task 10, with no migration; the brief pins the duplicate-tick, restart, DST and catch-up coalescing behaviours, forbids a model selection or an LLM call in the scheduling path, and requires every claimed behaviour to be seen to fail against deliberately broken production code before it is committed The worker escalated a scope question rather than guessing, and the extension was granted with conditions: the payload stays strict, the worker hook must not change the existing interactive or outbox dispatch behaviour, no existing payload variant or worker branch may be weakened, and the phase report must record the extension. The implementation-diff review failed with 3 findings, all of the class where a schedule stalls silently forever: a damaged checkpoint replayed consumed changes, and a permanently failed occurrence left both the condition and the time path stuck. The coordinator verified all three in the code before dispatching the repair, and the repair brief binds the one constraint that makes them safe to fix - the duplicate-tick guarantee must keep resting on the unique (scheduleId, dueAt, version) idempotency key, so a fix that advances next_due_at for a live job as well as a dead one is not acceptable.",
-      "priorDispatch": "ctx_987aecb11042"
+      "priorDispatch": "ctx_987aecb11042",
+      "commits": [
+        "bd6af62",
+        "949acf8",
+        "89c1059",
+        "0257db1",
+        "fb16605",
+        "fc1f61cecb122095a0a7585ed466f7ef3f62eea7",
+        "e798d51"
+      ],
+      "verified": "destination gate green on the destination branch after the merge: pnpm install --frozen-lockfile, pnpm --filter web typecheck, the core and importers typecheck, pnpm --filter web migrations:check, node scripts/check-licenses.mjs, prettier --check on every merged file and pnpm build all exit 0; pnpm test 108 test files, 1188 tests passed, 157.62s",
+      "evidence": "the independent implementation-diff review raised 3 findings, all of the class where a schedule stalls silently forever: a damaged checkpoint replayed consumed changes, and a permanently failed occurrence left both the condition and the time path stuck. The reviewer confirmed the rest of the phase. The coordinator verified all three defects in the code, then proved the repaired tests have teeth with six mutations of the production plumbing, each of which broke exactly the expected test and each of which passed again after the restore. Evidence: docs/superpowers/plans/ai-native-journal/phase-15.md, docs/superpowers/reports/ai-native-journal-phase-15.md, docs/superpowers/reports/ai-native-journal-integration-15.md"
     },
     {
       "stable": "T-016",
@@ -962,12 +974,13 @@
       "worktree": "aa54a522-a9af-4cb4-9de7-f1d9a349c0fd::E:/4004/orca/workspaces/trade-journal/codex-ai-native-journal-p15",
       "base": "19975e03e76345ccf2b9e78e0641fdf20e614203",
       "purpose": "Phase 15 repair - a damaged checkpoint must not replay consumed changes, and a permanently failed occurrence must not stall the schedule forever, in both the condition and the time path",
-      "state": "dispatched",
-      "candidate": [],
+      "state": "completed; the repair fixed the damaged checkpoint replay and the two stalled-schedule paths",
+      "candidate": ["0257db1", "fb16605"],
       "reviewed": false,
-      "integrated": false,
-      "verified": false,
-      "outcome": null
+      "integrated": true,
+      "verified": true,
+      "outcome": "verified by the coordinator with an independent six-mutation teeth proof, merged and verified on the destination branch",
+      "tip": "fb16605"
     }
   ],
   "integration": {
@@ -1300,6 +1313,22 @@
       "review": "one implementation-diff review, then one repair round and one coordinator re-verification; the review found a production regression in the journal note write, two cases that could not fail for the reason they claimed, and one false column table in the plan. The coordinator ran an independent teeth proof with three mutations of the production plumbing.",
       "note": "schema allocation 0006: knowledge_sources, knowledge_hypotheses, knowledge_patterns and the intelligence_schedules table with no scheduler behaviour, which is Phase 15. Migrations 0001 through 0005 byte-unchanged. Ten source write paths wrapped atomically. No dependency and no lockfile change. The contracts layer stayed pure and the persistence adapter lives in infrastructure/knowledge-revisions.ts. No push, no pull request and no merge into main.",
       "report": "docs/superpowers/reports/ai-native-journal-integration-14.md"
+    },
+    {
+      "phase": "15",
+      "stable": "T-015",
+      "native": "task_3956a51d9794",
+      "branch": "codex/ai-native-journal-p15",
+      "merge": "fc1f61cecb122095a0a7585ed466f7ef3f62eea7",
+      "destinationBefore": "be748d72bae489ad4ea166fc85a92790b55d90da",
+      "head": "e798d51",
+      "commits": ["bd6af62", "949acf8", "89c1059", "0257db1", "fb16605", "e798d51"],
+      "files": 9,
+      "schema": "none - uses the intelligence_schedules table Phase 14 created in 0006",
+      "verification": "destination gate green on the destination branch after the merge: pnpm install --frozen-lockfile, pnpm --filter web typecheck, the core and importers typecheck, pnpm --filter web migrations:check, node scripts/check-licenses.mjs, prettier --check on every merged file and pnpm build all exit 0; pnpm test 108 test files, 1188 tests passed, 157.62s",
+      "review": "one implementation-diff review, then one repair round and one coordinator re-verification; the review found three defects where a schedule could stall silently forever. The coordinator ran an independent six-mutation teeth proof.",
+      "note": "no schema change: nothing under apps/web/src/db/ moved and migrations 0001 through 0006 are byte-unchanged. The worker was granted a two-file scope extension - contracts/jobs.ts and infrastructure/worker.ts - because contract review section 5 makes unique (scheduleId, dueAt, version) jobs the restart-safety mechanism, and neither file is owned by any other phase. No dependency and no lockfile change. No push, no pull request and no merge into main.",
+      "report": "docs/superpowers/reports/ai-native-journal-integration-15.md"
     }
   ],
   "recordShape": "This file is the index and the authoritative stable-to-native task mapping: stable/native task mapping, worktree and dispatch identifiers, and one compact entry per integrated phase. Narrative, findings, deviations and command output live in the per-phase reports under docs/superpowers/reports/. Keep this file compact - one entry per phase, no duplicated prose. Resolve a native task id from taskMap here or from the native task list, never from a chat summary: a transcription slip once named T-019 as T-005, and the near miss was caught because the native task list disagreed with the prose.",

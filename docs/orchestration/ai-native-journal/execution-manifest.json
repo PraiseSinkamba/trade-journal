@@ -1881,7 +1881,7 @@
         },
         {
           "path": "apps/web/src/server/intelligence/infrastructure/jobs.ts",
-          "status": "planned"
+          "status": "existing"
         }
       ],
       "ownership": {
@@ -1889,7 +1889,12 @@
           "apps/web/src/server/intelligence/contracts/experience.ts",
           "apps/web/src/server/intelligence/experience/workflows.ts",
           "apps/web/src/server/intelligence/infrastructure/experience-store.ts",
-          "apps/web/src/server/intelligence/infrastructure/jobs.ts"
+          "apps/web/src/server/intelligence/infrastructure/jobs.ts",
+          "apps/web/src/db/schema.ts",
+          "apps/web/src/db/migrations.ts",
+          "apps/web/src/db/bootstrap.ts",
+          "apps/web/src/db/migration-checksums.json",
+          "apps/web/src/db/migrations/"
         ],
         "exclusive": true,
         "sharedFilesPolicy": "Single phase owner; see integration-plan.md. No edits outside task subset without coordinator allocation."
