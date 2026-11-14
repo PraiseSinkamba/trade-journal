@@ -1,7 +1,7 @@
 {
   "schemaVersion": 1,
   "feature": "ai-native-journal",
-  "updatedAt": "2026-11-14T08:43:27Z",
+  "updatedAt": "2026-11-14T09:11:24Z",
   "owner": "parent OMP coordinator (exclusive owner of this record)",
   "repository": {
     "name": "trade-journal",
@@ -35,8 +35,8 @@
     },
     "featureBranch": "codex/ai-native-journal",
     "featureBootstrapSha": "0a278503fd67c0f9e82138dfecb744f4bfd307ad",
-    "featureHeadSha": "ed0b7a68f1bc5769ec3648aecc30fca5469a1228",
-    "featureHeadShaNote": "feature branch HEAD at the Phase 14 integration and the exact base of the Phase 15 worktree; the coordinator record commit advances the branch by one commit",
+    "featureHeadSha": "19975e03e76345ccf2b9e78e0641fdf20e614203",
+    "featureHeadShaNote": "feature branch HEAD at the Phase 15 dispatch and the exact base of the Phase 15 worktree; the coordinator record commit advances the branch by one commit",
     "featureCheckpointCommits": [
       "0a278503fd67c0f9e82138dfecb744f4bfd307ad",
       "80d53ccb62fda801897852a6f4e5d2aab8b0d58b",
@@ -64,7 +64,8 @@
       "c6fbcd411efa049b95e58f041b7a0ed5f8c2c4e4",
       "934953ca9801b025a34cd1386fd536120922fb6e",
       "0c8ea63ccb7aed84bd5cabd576bdc24108f49b00",
-      "ed0b7a68f1bc5769ec3648aecc30fca5469a1228"
+      "ed0b7a68f1bc5769ec3648aecc30fca5469a1228",
+      "19975e03e76345ccf2b9e78e0641fdf20e614203"
     ],
     "featureBranchNote": "Orca slugified the requested name to codex-ai-native-journal at creation; the coordinator renamed the newly created, exclusively owned branch to the contract-required codex/ai-native-journal. Orca reads the renamed ref live (refs/heads/codex/ai-native-journal). No pre-existing branch was overwritten."
   },
@@ -272,6 +273,18 @@
         "setup": "pnpm install --frozen-lockfile completed in the worker checkout; working tree clean; Node v24.20.0, pnpm 11.0.8; own node_modules and own pnpm virtual store",
         "state": "integrated into codex/ai-native-journal at 4fa0cb0 and verified on the destination branch (destination gate green on the destination branch after the merge: pnpm install --frozen-lockfile, pnpm --filter web typecheck, the core and importers typecheck, pnpm --filter web migrations:check, node scripts/check-licenses.mjs, prettier --check on every merged file and pnpm build all exit 0; pnpm test 107 test files, 1171 tests passed, 155.02s). The worktree, the git worktree registration, the branch and the leftover directory remain until the user requests cleanup.",
         "note": "Phase 14 is the source-revision and invalidation half of detailed plan Task 10, with schema allocation 0006. It creates the intelligence_schedules table but not the scheduler behaviour, which is Phase 15. The manifest T-014 ownership set was corrected before the dispatch to name the database files the migration owns and to mark domain-events.ts as existing rather than planned. The independent implementation-diff review returned 4 findings. One is a production regression: the journal route returned early when the note text was unchanged, so the upsert was skipped and journal_days.updated_at was no longer refreshed, where the base route always upserted with nowIso(). The plan asked to skip the revision, not the write. The other three are about proof and documentation: the only atomicity case threw inside the write callback so the source change was never attempted, the no-op case re-implemented the route guard inside the test instead of driving the route, and the plan column table still specified NOT NULL columns that the shipped 0006 migration makes nullable. The reviewer confirmed the rest of the phase, including that no scheduler behaviour leaked into this phase, the migration registry and checksum entries match, 0001 through 0005 are byte-unchanged, the invalidation really marks dependent active knowledge stale, a narrowed account scope never exposes shared-sourced knowledge, and insufficient evidence is represented explicitly. The worker also documented one accepted deviation: the pure knowledge contracts live in intelligence/contracts/knowledge.ts rather than intelligence/knowledge/, because boundary rule 5 forbids infrastructure/ importing a sibling domain private file."
+      },
+      {
+        "phase": "15",
+        "stableTask": "T-015",
+        "orcaWorktreeId": "aa54a522-a9af-4cb4-9de7-f1d9a349c0fd::E:/4004/orca/workspaces/trade-journal/codex-ai-native-journal-p15",
+        "path": "E:/4004/orca/workspaces/trade-journal/codex-ai-native-journal-p15",
+        "branch": "codex/ai-native-journal-p15",
+        "startSha": "19975e03e76345ccf2b9e78e0641fdf20e614203",
+        "orcaParentWorktreeId": "aa54a522-a9af-4cb4-9de7-f1d9a349c0fd::E:/4004/orca/workspaces/trade-journal/codex-ai-native-journal",
+        "setup": "pnpm install --frozen-lockfile completed in the worker checkout; working tree clean; Node v24.20.0, pnpm 11.0.8; own node_modules and own pnpm virtual store",
+        "state": "dispatched: ctx_987aecb11042, worker handle term_2eaa61e5-d437-453a-a0ce-bf0c3c5f51cf",
+        "note": "Phase 15 is the scheduler half of detailed plan Task 10: durable time and condition scheduling. It owns NO migration; it uses the intelligence_schedules table Phase 14 created in migration 0006. The brief pins the behaviours Phase 14 deliberately left out - scheduleDue, unique (scheduleId, dueAt, version) time keys, durable condition checkpoints, duplicate-tick idempotence, restart after a due time, the DST gap and fold, and long-offline coalescing - and forbids any model selection or LLM call in the scheduling path. The manifest T-015 context paths were corrected before the dispatch: jobs.ts, outbox.ts, composition.ts and packages/core/src/time.ts already exist and were marked planned."
       }
     ]
   },
@@ -515,8 +528,11 @@
       "wave": 15,
       "branch": "codex/ai-native-journal-p15",
       "deps": ["task_53e2b3da13f7"],
-      "status": "pending",
-      "state": "created"
+      "status": "dispatched",
+      "state": "dispatched",
+      "outcome": null,
+      "nativeDispatch": "ctx_987aecb11042",
+      "note": "the scheduler half of detailed plan Task 10, with no migration; the brief pins the duplicate-tick, restart, DST and catch-up coalescing behaviours, forbids a model selection or an LLM call in the scheduling path, and requires every claimed behaviour to be seen to fail against deliberately broken production code before it is committed"
     },
     {
       "stable": "T-016",
@@ -917,6 +933,22 @@
       "verified": true,
       "outcome": "verified by the coordinator with an independent teeth proof, merged and verified on the destination branch",
       "tip": "178ef0accfb6c05bbaf5dfdd3a55e2fc206ce3fe"
+    },
+    {
+      "task": "T-015",
+      "native": "task_3956a51d9794",
+      "dispatch": "ctx_987aecb11042",
+      "agent": "omp",
+      "provider": "omp",
+      "worktree": "aa54a522-a9af-4cb4-9de7-f1d9a349c0fd::E:/4004/orca/workspaces/trade-journal/codex-ai-native-journal-p15",
+      "base": "19975e03e76345ccf2b9e78e0641fdf20e614203",
+      "purpose": "Phase 15 - durable time and condition scheduling; the scheduler half of Task 10, with no schema allocation",
+      "state": "dispatched",
+      "candidate": [],
+      "reviewed": false,
+      "integrated": false,
+      "verified": false,
+      "outcome": null
     }
   ],
   "integration": {
