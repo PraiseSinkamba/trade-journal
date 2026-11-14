@@ -1783,15 +1783,15 @@
         },
         {
           "path": "apps/web/src/server/intelligence/infrastructure/jobs.ts",
-          "status": "planned"
+          "status": "existing"
         },
         {
           "path": "apps/web/src/server/intelligence/infrastructure/outbox.ts",
-          "status": "planned"
+          "status": "existing"
         },
         {
           "path": "apps/web/src/server/intelligence/composition.ts",
-          "status": "planned"
+          "status": "existing"
         },
         {
           "path": "packages/core/src/time.ts",
