@@ -1804,7 +1804,9 @@
           "apps/web/src/server/intelligence/infrastructure/jobs.ts",
           "apps/web/src/server/intelligence/infrastructure/outbox.ts",
           "apps/web/src/server/intelligence/composition.ts",
-          "packages/core/src/time.ts"
+          "packages/core/src/time.ts",
+          "apps/web/src/server/intelligence/contracts/jobs.ts",
+          "apps/web/src/server/intelligence/infrastructure/worker.ts"
         ],
         "exclusive": true,
         "sharedFilesPolicy": "Single phase owner; see integration-plan.md. No edits outside task subset without coordinator allocation."
