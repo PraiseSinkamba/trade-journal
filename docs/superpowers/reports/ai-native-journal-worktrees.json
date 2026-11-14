@@ -1,7 +1,7 @@
 {
   "schemaVersion": 1,
   "feature": "ai-native-journal",
-  "updatedAt": "2026-11-14T22:21:07Z",
+  "updatedAt": "2026-11-14T22:24:43Z",
   "owner": "parent OMP coordinator (exclusive owner of this record)",
   "repository": {
     "name": "trade-journal",
@@ -35,8 +35,8 @@
     },
     "featureBranch": "codex/ai-native-journal",
     "featureBootstrapSha": "0a278503fd67c0f9e82138dfecb744f4bfd307ad",
-    "featureHeadSha": "e798d517faba85373d38163280ab724202a8090c",
-    "featureHeadShaNote": "feature branch HEAD at the Phase 15 integration and the exact base of the Phase 16 worktree; the coordinator record commit advances the branch by one commit",
+    "featureHeadSha": "96b39b3062ec381f15b2ba00fee143ee8e8d4dce",
+    "featureHeadShaNote": "feature branch HEAD at the Phase 16 dispatch and the exact base of the Phase 16 worktree; the coordinator record commit advances the branch by one commit",
     "featureCheckpointCommits": [
       "0a278503fd67c0f9e82138dfecb744f4bfd307ad",
       "80d53ccb62fda801897852a6f4e5d2aab8b0d58b",
@@ -67,7 +67,8 @@
       "ed0b7a68f1bc5769ec3648aecc30fca5469a1228",
       "19975e03e76345ccf2b9e78e0641fdf20e614203",
       "1f23f7bbb6d8f94d9c49030a03feeb528a0ea6cc",
-      "e798d517faba85373d38163280ab724202a8090c"
+      "e798d517faba85373d38163280ab724202a8090c",
+      "96b39b3062ec381f15b2ba00fee143ee8e8d4dce"
     ],
     "featureBranchNote": "Orca slugified the requested name to codex-ai-native-journal at creation; the coordinator renamed the newly created, exclusively owned branch to the contract-required codex/ai-native-journal. Orca reads the renamed ref live (refs/heads/codex/ai-native-journal). No pre-existing branch was overwritten."
   },
@@ -287,6 +288,18 @@
         "setup": "pnpm install --frozen-lockfile completed in the worker checkout; working tree clean; Node v24.20.0, pnpm 11.0.8; own node_modules and own pnpm virtual store",
         "state": "integrated into codex/ai-native-journal at fc1f61c and verified on the destination branch (destination gate green on the destination branch after the merge: pnpm install --frozen-lockfile, pnpm --filter web typecheck, the core and importers typecheck, pnpm --filter web migrations:check, node scripts/check-licenses.mjs, prettier --check on every merged file and pnpm build all exit 0; pnpm test 108 test files, 1188 tests passed, 157.62s). The worktree, the git worktree registration, the branch and the leftover directory remain until the user requests cleanup.",
         "note": "Phase 15 is the scheduler half of detailed plan Task 10: durable time and condition scheduling. It owns NO migration; it uses the intelligence_schedules table Phase 14 created in migration 0006. The brief pins the behaviours Phase 14 deliberately left out - scheduleDue, unique (scheduleId, dueAt, version) time keys, durable condition checkpoints, duplicate-tick idempotence, restart after a due time, the DST gap and fold, and long-offline coalescing - and forbids any model selection or LLM call in the scheduling path. The manifest T-015 context paths were corrected before the dispatch: jobs.ts, outbox.ts, composition.ts and packages/core/src/time.ts already exist and were marked planned. The worker asked for, and the coordinator granted, a two-file scope extension: apps/web/src/server/intelligence/contracts/jobs.ts for a strict schedule_trigger payload variant, and apps/web/src/server/intelligence/infrastructure/worker.ts for one routing branch in findHandler. Contract review section 5 makes unique (scheduleId, dueAt, version) JOBS the restart-safety mechanism, so the durable job is the contract mechanism and the alternative of keeping the key in checkpoint_json is weaker against that wording. Neither file is owned by any other phase, the change is additive and the jobs idempotency key already carries the unique key, so no database change is involved. Both files are recorded as exact owned paths in the manifest and in the merge allow-list. The independent implementation-diff review returned 3 findings, all of the same class: a schedule can stall silently forever. A damaged or absent checkpoint fell back to epoch 0, so the condition cursor reselected already-consumed changes from the start of the log and the handler then moved the checkpoint backwards. The condition tick skipped an occurrence whose job already existed without advancing next_due_at, so a permanently failed occurrence made the poll reselect the same change forever and no later source change could ever fire. The time tick never advanced next_due_at either, so a permanently failed trigger job left the due time in the past and the unique key suppressed every later enqueue, and the schedule never caught up. The reviewer confirmed the rest of the phase: the idempotency key is checked before the enqueue, the fold resolves to the earlier instant and the gap forward through the gap, a long offline gap coalesces, the time-schedule advance happens inside the job own transaction, the payload variant is strict, the scheduling path selects no model, the package boundary holds and there is no schema change. The coordinator confirmed the same three defects in the code before acting on them, and proved the existing scheduler tests have teeth with three mutations of the production plumbing."
+      },
+      {
+        "phase": "16",
+        "stableTask": "T-016",
+        "orcaWorktreeId": "aa54a522-a9af-4cb4-9de7-f1d9a349c0fd::E:/4004/orca/workspaces/trade-journal/codex-ai-native-journal-p16",
+        "path": "E:/4004/orca/workspaces/trade-journal/codex-ai-native-journal-p16",
+        "branch": "codex/ai-native-journal-p16",
+        "startSha": "96b39b3062ec381f15b2ba00fee143ee8e8d4dce",
+        "orcaParentWorktreeId": "aa54a522-a9af-4cb4-9de7-f1d9a349c0fd::E:/4004/orca/workspaces/trade-journal/codex-ai-native-journal",
+        "setup": "pnpm install --frozen-lockfile completed in the worker checkout; working tree clean; Node v24.20.0, pnpm 11.0.8; own node_modules and own pnpm virtual store",
+        "state": "dispatched: ctx_8d5ca1444856, worker handle term_61a92909-4712-4c15-9951-85bfc3e90bc4",
+        "note": "Phase 16 is the workflow half of detailed plan Task 11: the persistent workflow command and transition engine, with schema allocation 0007. The brief pins the command semantics - CAS on the expected revision, an exact retry returning the stored prior result, the same command id with a different payload conflicting, the transition and the effect job enqueueing in the same transaction, and a waiting workflow releasing its job. It excludes the engagement policy, which is Phase 17. Because the phase guide allocates the opportunities table to Phase 17 with \"Uses opportunities in 0007\" and gives Phase 18 no schema at all, migration 0007 must carry the whole table set of Task 11 even though only the workflow behaviour is implemented here."
       }
     ]
   },
@@ -555,8 +568,11 @@
       "wave": 16,
       "branch": "codex/ai-native-journal-p16",
       "deps": ["task_3956a51d9794"],
-      "status": "pending",
-      "state": "created"
+      "status": "dispatched",
+      "state": "dispatched",
+      "outcome": null,
+      "nativeDispatch": "ctx_8d5ca1444856",
+      "note": "the workflow half of detailed plan Task 11; the brief pins the command digest and CAS semantics, the transition history, the transactional effect scheduling, the exclusion of the engagement policy that belongs to Phase 17, the requirement that migration 0007 carry the whole Task 11 table set, and the teeth bar for every claimed behaviour."
     },
     {
       "stable": "T-017",
@@ -981,6 +997,22 @@
       "verified": true,
       "outcome": "verified by the coordinator with an independent six-mutation teeth proof, merged and verified on the destination branch",
       "tip": "fb16605"
+    },
+    {
+      "task": "T-016",
+      "native": "task_53e2b3da13f7",
+      "dispatch": "ctx_8d5ca1444856",
+      "agent": "omp",
+      "provider": "omp",
+      "worktree": "aa54a522-a9af-4cb4-9de7-f1d9a349c0fd::E:/4004/orca/workspaces/trade-journal/codex-ai-native-journal-p16",
+      "base": "96b39b3062ec381f15b2ba00fee143ee8e8d4dce",
+      "purpose": "Phase 16 - persistent workflow command and transition engine; the workflow half of Task 11, with schema allocation 0007",
+      "state": "dispatched",
+      "candidate": [],
+      "reviewed": false,
+      "integrated": false,
+      "verified": false,
+      "outcome": null
     }
   ],
   "integration": {
