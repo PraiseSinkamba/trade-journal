@@ -48,7 +48,6 @@ export const PUT = handler(async (request: Request, { params }: Params) => {
   recordSourceChanges((tx) => {
     const stored = tx.select().from(journalDays).where(eq(journalDays.date, date)).get();
     const text = note ?? "";
-    if (stored?.note === text) return [];
     tx.insert(journalDays)
       .values({ date, note: text, updatedAt: nowIso() })
       .onConflictDoUpdate({
@@ -56,6 +55,7 @@ export const PUT = handler(async (request: Request, { params }: Params) => {
         set: { note: text, updatedAt: nowIso() },
       })
       .run();
+    if (stored?.note === text) return [];
     return [
       {
         kind: "journal",

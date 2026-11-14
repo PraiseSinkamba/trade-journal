@@ -266,29 +266,30 @@ Keys: PK `id`; unique `(kind, source_id, revision)`; index `(kind, source_id, st
 Versioned payload, evidence and status. Both carry the source revision they were derived from, so an
 invalidation can find them. The two tables differ only in the evaluation columns: a hypothesis is a
 tentative interpretation (its evaluator may be absent — a hypothesis can be self-reported), a
-pattern is the result of a pattern evaluation and therefore always names its evaluator.
+pattern is the result of a pattern evaluation and may also name no evaluator while it has not been
+evaluated yet — a pending re-evaluation request is a question, not a conclusion.
 
-| Column                   | Null          | Default | Constraint                                                                  |
-| ------------------------ | ------------- | ------- | --------------------------------------------------------------------------- |
-| `id`                     | no            | —       | PRIMARY KEY                                                                 |
-| `subject_type`           | no            | —       | —                                                                           |
-| `subject_id`             | no            | —       | —                                                                           |
-| `version`                | no            | —       | `CHECK (version > 0)`                                                       |
-| `status`                 | no            | —       | `CHECK (status IN ('active','stale','pending','superseded','invalidated'))` |
-| `payload_schema_version` | no            | `1`     | —                                                                           |
-| `payload_json`           | no            | —       | strict payload, at most 16 KiB                                              |
-| `evidence_ids_json`      | no            | —       | JSON array of evidence ids, at most 16 KiB                                  |
-| `evaluator_id`           | yes           | `NULL`  | hypotheses: nullable; patterns: `NOT NULL`                                  |
-| `evaluator_version`      | yes           | `NULL`  | hypotheses: nullable; patterns: `NOT NULL`                                  |
-| `evaluation_state`       | patterns only | —       | `CHECK (evaluation_state IN ('evaluated','insufficient_evidence'))`         |
-| `required_evidence`      | patterns only | —       | `CHECK (required_evidence >= 0)`                                            |
-| `available_evidence`     | patterns only | —       | `CHECK (available_evidence >= 0)`                                           |
-| `source_kind`            | no            | —       | —                                                                           |
-| `source_id`              | no            | —       | —                                                                           |
-| `source_revision`        | no            | —       | `CHECK (source_revision > 0)`                                               |
-| `account_id`             | yes           | `NULL`  | FK → `accounts(id)` `ON DELETE CASCADE`                                     |
-| `created_at`             | no            | —       | —                                                                           |
-| `updated_at`             | no            | —       | —                                                                           |
+| Column                   | Null                | Default | Constraint                                                                                      |
+| ------------------------ | ------------------- | ------- | ----------------------------------------------------------------------------------------------- |
+| `id`                     | no                  | —       | PRIMARY KEY                                                                                     |
+| `subject_type`           | no                  | —       | —                                                                                               |
+| `subject_id`             | no                  | —       | —                                                                                               |
+| `version`                | no                  | —       | `CHECK (version > 0)`                                                                           |
+| `status`                 | no                  | —       | `CHECK (status IN ('active','stale','pending','superseded','invalidated'))`                     |
+| `payload_schema_version` | no                  | `1`     | —                                                                                               |
+| `payload_json`           | no                  | —       | strict payload, at most 16 KiB                                                                  |
+| `evidence_ids_json`      | no                  | —       | JSON array of evidence ids, at most 16 KiB                                                      |
+| `evaluator_id`           | yes                 | `NULL`  | nullable in both tables                                                                         |
+| `evaluator_version`      | yes                 | `NULL`  | nullable in both tables                                                                         |
+| `evaluation_state`       | yes (patterns only) | `NULL`  | `CHECK (evaluation_state IS NULL OR evaluation_state IN ('evaluated','insufficient_evidence'))` |
+| `required_evidence`      | yes (patterns only) | `NULL`  | `CHECK (required_evidence IS NULL OR required_evidence >= 0)`                                   |
+| `available_evidence`     | yes (patterns only) | `NULL`  | `CHECK (available_evidence IS NULL OR available_evidence >= 0)`                                 |
+| `source_kind`            | no                  | —       | —                                                                                               |
+| `source_id`              | no                  | —       | —                                                                                               |
+| `source_revision`        | no                  | —       | `CHECK (source_revision > 0)`                                                                   |
+| `account_id`             | yes                 | `NULL`  | FK → `accounts(id)` `ON DELETE CASCADE`                                                         |
+| `created_at`             | no                  | —       | —                                                                                               |
+| `updated_at`             | no                  | —       | —                                                                                               |
 
 Keys: PK `id`; unique `(subject_type, subject_id, version)`; index
 `(source_kind, source_id, account_id, status)`; index `(account_id, status)`.

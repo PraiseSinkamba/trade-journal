@@ -1,4 +1,4 @@
-import { afterAll, beforeEach, describe, expect, it } from "vitest";
+import { afterAll, beforeEach, describe, expect, it, vi } from "vitest";
 import { mkdtempSync, readFileSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -434,33 +434,58 @@ describe("Phase 14 knowledge-source revisions", () => {
       expect(db.select().from(notes).get()?.content).toBe("The plan worked");
     });
 
-    it("records no revision for a write that changed nothing", () => {
-      seedNote("note-1");
-      const journal = db
-        .insert(journalDays)
-        .values({ date: "2026-09-01", note: "The day", updatedAt: "2026-09-01T00:00:00.000Z" })
-        .returning()
-        .get();
-      expect(journal?.note).toBe("The day");
+    it("undoes the source write when the event application fails", () => {
+      seedAccount();
 
-      recordSourceChanges((tx) => {
-        const stored = tx
-          .select()
-          .from(journalDays)
-          .where(eq(journalDays.date, "2026-09-01"))
-          .get();
-        if (stored?.note === "The day") return [];
-        return [
-          {
-            kind: "journal",
-            action: "revised",
-            sourceId: "2026-09-01",
-            accountId: null,
-            correlationId: "corr-1",
-          },
-        ];
-      });
-      expect(sourceOf("journal", "2026-09-01")).toHaveLength(0);
+      // The source write succeeds and the event application then fails: the
+      // change names an account that does not exist, and the foreign key of
+      // the source register refuses it. The write and its event must roll
+      // back together, so the annotation keeps its old value and no revision
+      // is left behind.
+      expect(() =>
+        recordSourceChanges((tx) => {
+          tx.update(trades).set({ notes: "my review" }).where(eq(trades.key, TRADE_KEY)).run();
+          return [
+            {
+              kind: "annotation",
+              action: "revised",
+              sourceId: TRADE_KEY,
+              accountId: "acct-missing",
+              correlationId: "corr-1",
+            },
+          ];
+        }),
+      ).toThrow(/FOREIGN KEY/i);
+      expect(db.select().from(trades).get()?.notes).toBe(null);
+      expect(sourceOf("annotation", TRADE_KEY)).toHaveLength(0);
+    });
+
+    it("records no revision for a journal write that changed nothing", async () => {
+      // The route is driven twice with the same text: the first write creates
+      // the day and its revision, the second changes nothing and records no
+      // revision — but it still writes the day, so the row's timestamp moves.
+      vi.useFakeTimers({ toFake: ["Date"] });
+      try {
+        vi.setSystemTime(new Date("2026-09-01T00:00:00.000Z"));
+        const first = await putJournal(
+          jsonRequest("PUT", "/api/journal/2026-09-01", { note: "The day" }),
+          { params: Promise.resolve({ date: "2026-09-01" }) },
+        );
+        expect(first.status).toBe(200);
+        vi.setSystemTime(new Date("2026-09-02T00:00:00.000Z"));
+        const second = await putJournal(
+          jsonRequest("PUT", "/api/journal/2026-09-01", { note: "The day" }),
+          { params: Promise.resolve({ date: "2026-09-01" }) },
+        );
+        expect(second.status).toBe(200);
+      } finally {
+        vi.useRealTimers();
+      }
+
+      const day = db.select().from(journalDays).where(eq(journalDays.date, "2026-09-01")).get();
+      expect(day?.note).toBe("The day");
+      expect(day?.updatedAt).toBe("2026-09-02T00:00:00.000Z");
+      expect(sourceOf("journal", "2026-09-01")).toHaveLength(1);
     });
   });
 
