@@ -93,6 +93,9 @@ whole-project gate belongs to the coordinator after the merge.
 - [P3] `docs/superpowers/reports/ai-native-journal-phase-18.md` does not yet carry this repair's
   evidence (the teeth table still lists 19 tests, the commands table still says 19 passed). The
   repair commits the report update separately; nothing false is said about the code in the meantime.
+  **Resolved in the follow-up report commit** (`docs: record the Phase 18 observation and scope
+  repair`): the phase report now carries the repair section, both teeth results and the repair's own
+  commands.
 
 ### Summary
 

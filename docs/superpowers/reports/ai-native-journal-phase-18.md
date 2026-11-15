@@ -8,6 +8,7 @@ Phase guide row 18 · detailed-plan Task 12 (backend half) · milestone M5 · sc
 | Base | `a616a67cf340144e294a607ef048a0c6bcc77a49` (verified feature HEAD) |
 | Plan commit | `326179835039ce27c85459db8b541cf286ed0e51` — "docs: plan the authenticated interaction APIs" |
 | Implementation commit | `c0cfb3073e5f162c96f942ffbd9a756b688e681b` — "feat: expose controlled intelligence interactions and user settings" |
+| Repair commit | `ce1b098f5e184702d471cb8a3a5a2d984c8e47c6` — "fix: refuse a review of an inactive observation and pin the revoked scope refusal" |
 | Migrations | none. `0001`–`0007` are byte-unchanged; no schema, registry or checksum file was touched. |
 
 ## What was built
@@ -93,6 +94,9 @@ All against the implementation commit `c0cfb3073e`, Node v24.20.0, pnpm 11.0.8.
 
 The whole-project `pnpm test` and the merge into `codex/ai-native-journal` belong to the coordinator.
 
+The table above is the run against the implementation commit. The repair re-ran the route test and the
+web typecheck against the repair commit; its commands are in the repair section below.
+
 ## The fixtures
 
 - A scratch journal: `mkdtempSync(join(tmpdir(), "journal-intelligence-routes-"))` as
@@ -135,6 +139,8 @@ recorded: a test that never failed proves nothing.
 | Purge race: the command of a purged workflow is `409` and writes nothing | `the purge race > refuses the command of a purged workflow and writes nothing` | removed the purged-workflow check → `-t "purge"` → **1 failed**: "expected transitionWorkflow to not be called at all, but actually been called 1 times" | restored → 16 passed |
 | The existing AI contract is unchanged | `the existing AI contracts > the Ask route still answers with the answer and the scope` | — | green |
 
+The two rows added by the repair are in the repair section below.
+
 ## The review and its findings
 
 One implementation review, per the phase budget. The report is `.omp/reviewer-report.md`
@@ -164,6 +170,73 @@ Resolved before the commit:
 - The first version of the test proved the existing AI contracts with a `git status` check, which
   proves nothing about behaviour. It now asserts the Ask route's response body.
 
+## The repair
+
+The implementation review of the phase diff found one real bug and one missing proof. Both are fixed
+in `ce1b098f5e` ("fix: refuse a review of an inactive observation and pin the revoked scope
+refusal"), on top of the phase commits. No schema, no migration, no dependency and no other
+behaviour changed.
+
+### Finding 1 — a review could start for an inactive observation (FAIL, fixed)
+
+`POST /api/intelligence/observations` selected the observation by id with no status predicate, so an
+observation that was `invalidated` (its trade was deleted) or `superseded` (a newer revision replaced
+it) could still be put into review and a workflow started for it. The route's own docstring and the
+plan's route table both say one active observation, and the GET surface filters `status = "active"`.
+
+The read model now resolves the active observation only (`findActiveObservation`,
+`apps/web/src/app/api/intelligence/queries.ts`), and the POST refuses anything else with
+`400 invalid_request` before it reads any evidence and before it starts a workflow.
+
+### Finding 2 — the revoked-scope refusal had no independent proof (FAIL, fixed)
+
+The behaviour was already right: `apps/web/src/server/intelligence/experience/commands.ts` refuses a
+command that names an account that does not exist with `403 scope_denied`, unconditionally and before
+the workflow-scope check. The proof was missing: the suite's only unknown-account case named an
+account-bound workflow, and there the workflow-scope check refuses the same request with the same
+body, so deleting the unknown-account check left the suite green.
+
+The new case opens a journal-wide workflow (`accountId: null`), where the workflow-scope rule cannot
+refuse anything: the commands route resolves no scope of its own, and the service's workflow-scope
+check skips a workflow with no account. Only the revoked-scope rule can refuse that request. The case
+also asserts that the engine never ran and that no command row was written.
+
+### The other observation reads
+
+`observationOfRevision` (the opportunities surface) attributes an evidence revision to an account for
+the dismissal scope. That attribution must outlive the observation's lifecycle — a revision of a
+superseded observation still belongs to that observation's account — so the lookup stays
+status-agnostic and now says so in its docstring. The conversations surface reads no observation at
+all: `listConversations` filters `status = "open"` and `listMessages` filters by conversation.
+
+### The proof of teeth of the repair
+
+| Behaviour | Test | Broken run | Restored run |
+| --- | --- | --- | --- |
+| An invalidated or superseded observation cannot start a review | `the observation reviews > refuses to start a review of an observation that is no longer active` | the unfixed lookup → **1 failed**: "expected 200 to be 400" | restored → 21 passed |
+| A command that names an account that does not exist is refused, even against a journal-wide workflow | `the scope policy > refuses a command that names an unknown account against a journal-wide workflow` | the revoked-scope check disabled (`if (false && …)`) → **1 failed**: "expected 200 to be 403" | restored → 21 passed |
+
+The reviewer of the repair repeated both mutations in a scratch copy outside the repository and
+relaxed the status assertions alone: the spy assertions then fail by themselves (`startWorkflow` was
+called twice, `transitionWorkflow` once). Both cases can fail for the reason they claim.
+
+### The commands of the repair
+
+Against the repair commit `ce1b098f5e`, Node v24.20.0, pnpm 11.0.8.
+
+| Command | Exit | Runtime | Result |
+| --- | --- | --- | --- |
+| `pnpm exec vitest run apps/web/tests/intelligence-routes.test.ts` | 0 | 10.0 s | 21 passed |
+| `pnpm --filter web typecheck` | 0 | 13.4 s | `next typegen` + `tsc --noEmit` clean |
+| `pnpm exec prettier --check <the three touched files>` | 0 | 1.8 s | all three prettier-clean |
+
+The reviewer of the repair additionally ran the neighbouring intelligence suites
+(`intelligence-boundaries`, `intelligence-workflows`, `intelligence-engagement`: 70 passed;
+`intelligence-observations`, `intelligence-jobs`, `intelligence-migrations`,
+`intelligence-supervisor`, `intelligence-worker`, `intelligence-boundaries`: 85 passed) and
+`node scripts/check-licenses.mjs` (exit 0). The whole-project `pnpm test` and the merge belong to
+the coordinator.
+
 ## Deviations from the plan
 
 1. **`invalid_request`, not `invalid_command`.** The plan's step 1 names `invalid_command`; the
@@ -191,6 +264,7 @@ Resolved before the commit:
 - The routes and their exact bodies:
   - `GET /api/intelligence/observations?scope=<a,b>` → `{ observations, intents }`.
   - `POST /api/intelligence/observations` `{ observationId, scope? }` → `{ workflowId, revision, intent }`.
+    The observation must be active: a superseded or invalidated one is `400 invalid_request`.
   - `GET /api/intelligence/opportunities?scope=<a,b>` → `{ opportunities, intents }` (live rows only).
   - `POST /api/intelligence/opportunities` `{ actionId, scope, target, accounts? }` → `{ kind: "dismissed", scope, target }`.
   - `POST /api/intelligence/commands` `{ actionId, commandId, expectedRevision, action, correction?, deferUntil?, scope? }` → the engine's `WorkflowResult`.
@@ -206,5 +280,6 @@ Resolved before the commit:
 ## Definition of done
 
 The assigned scope is implemented, the targeted test and the web typecheck are green, the existing
-intelligence suites are unchanged and green, one implementation review passed, and this report is
+intelligence suites are unchanged and green, one implementation review passed, the two findings of
+that review are repaired with their own proof of teeth, one repair review passed, and this report is
 committed. The merge into `codex/ai-native-journal` is the coordinator's job.
