@@ -1966,15 +1966,15 @@
         },
         {
           "path": "apps/web/src/server/intelligence/experience/workflows.ts",
-          "status": "planned"
+          "status": "existing"
         },
         {
           "path": "apps/web/src/server/intelligence/infrastructure/experience-store.ts",
-          "status": "planned"
+          "status": "existing"
         },
         {
           "path": "apps/web/src/server/intelligence/contracts/experience.ts",
-          "status": "planned"
+          "status": "existing"
         }
       ],
       "ownership": {
