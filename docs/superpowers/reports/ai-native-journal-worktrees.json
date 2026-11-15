@@ -1,7 +1,7 @@
 {
   "schemaVersion": 1,
   "feature": "ai-native-journal",
-  "updatedAt": "2026-11-15T11:38:38Z",
+  "updatedAt": "2026-11-15T15:40:24Z",
   "owner": "parent OMP coordinator (exclusive owner of this record)",
   "repository": {
     "name": "trade-journal",
@@ -35,7 +35,7 @@
     },
     "featureBranch": "codex/ai-native-journal",
     "featureBootstrapSha": "0a278503fd67c0f9e82138dfecb744f4bfd307ad",
-    "featureHeadSha": "14f8ec3aa0451c53c91d9503c2b79425232cdfaf",
+    "featureHeadSha": "0a449b0bfff05d6919481a9bb7577147b3687266",
     "featureHeadShaNote": "feature branch HEAD at the Phase 19 dispatch and the exact base of the Phase 19 worktree; the coordinator record commit advances the branch by one commit",
     "featureCheckpointCommits": [
       "0a278503fd67c0f9e82138dfecb744f4bfd307ad",
@@ -77,7 +77,8 @@
       "a616a67cf340144e294a607ef048a0c6bcc77a49",
       "3dd7ff1ccedb9b95f1eb32d60c6e6974d42a62c4",
       "a322965ead515695be0af5ed04bb34b7bb38f8bf",
-      "14f8ec3aa0451c53c91d9503c2b79425232cdfaf"
+      "14f8ec3aa0451c53c91d9503c2b79425232cdfaf",
+      "0a449b0bfff05d6919481a9bb7577147b3687266"
     ],
     "featureBranchNote": "Orca slugified the requested name to codex-ai-native-journal at creation; the coordinator renamed the newly created, exclusively owned branch to the contract-required codex/ai-native-journal. Orca reads the renamed ref live (refs/heads/codex/ai-native-journal). No pre-existing branch was overwritten."
   },
@@ -344,7 +345,7 @@
         "orcaParentWorktreeId": "aa54a522-a9af-4cb4-9de7-f1d9a349c0fd::E:/4004/orca/workspaces/trade-journal/codex-ai-native-journal",
         "setup": "pnpm install --frozen-lockfile completed in the worker checkout; working tree clean; Node v24.20.0, pnpm 11.0.8; own node_modules and own pnpm virtual store",
         "state": "dispatched: ctx_39512353a5c7, worker handle term_24dfe4a0-4d44-4dd1-bbce-17c4a8f9daa7",
-        "note": "Phase 19 is the native inbox and control UI half of detailed plan Task 12, and it carries the COMPLETE SLICE B GATE. The brief pins the UI surface - the inbox, the interaction card and the controls over the EXISTING shadcn primitives per ADR 0003, exposing the background AI and proactive opt-ins, the evidence, the correction, pause and resume, the worker status and the intelligence deletion - and the gate: observation to optional AI to opportunity to policy to user command to persisted knowledge, RESTARTING BEFORE THE CONTINUATION, with the completed effect unique and the no-provider path usable. Keyboard and privacy cases are required, the Ask, Reports, Recap, Critique and Import JSON contracts stay unchanged, and no route may change because the routes were Phase 18s."
+        "note": "Phase 19 is the native inbox and control UI half of detailed plan Task 12, and it carries the COMPLETE SLICE B GATE. The brief pins the UI surface - the inbox, the interaction card and the controls over the EXISTING shadcn primitives per ADR 0003, exposing the background AI and proactive opt-ins, the evidence, the correction, pause and resume, the worker status and the intelligence deletion - and the gate: observation to optional AI to opportunity to policy to user command to persisted knowledge, RESTARTING BEFORE THE CONTINUATION, with the completed effect unique and the no-provider path usable. Keyboard and privacy cases are required, the Ask, Reports, Recap, Critique and Import JSON contracts stay unchanged, and no route may change because the routes were Phase 18s. The worker escalated a scope question before implementing and it found a real error in the coordinator brief. Two of the seven exposures had no committed server surface: the proactive opt-in was only an input to engagementCoordinator.engage() with nothing persisting it and no route serving it, and the deletion of PERSISTENT intelligence was named by the brief although the contract review assigns it to the retention phase, Phase 20. A third gap was that nothing in the committed code calls engage() outside tests, so the opportunity producer that Phase 18 report named as Phase 19 Slice B did not exist and the Slice B chain was not a running path. The coordinator granted option A with one correction: the producer module under server/intelligence/experience/ plus its composition wiring, and one controls route apps/web/src/app/api/intelligence/controls/route.ts that persists the proactive opt-in and the pause flag in the existing settings key/value table with no schema change and no new dependency, were granted; the deletion of persistent intelligence was refused and deferred to Phase 20, and the coordinator recorded that the brief was wrong to list it in Phase 19."
       }
     ]
   },
@@ -692,7 +693,7 @@
       "state": "dispatched",
       "outcome": null,
       "nativeDispatch": "ctx_39512353a5c7",
-      "note": "the native inbox and control UI half of detailed plan Task 12, and the complete Slice B gate; the brief pins the shadcn primitives decision, the keyboard and privacy cases, the restart-to-continuation requirement with a unique completed effect, the usable no-provider path, and the teeth bar for every claimed behaviour."
+      "note": "the native inbox and control UI half of detailed plan Task 12, and the complete Slice B gate; the brief pins the shadcn primitives decision, the keyboard and privacy cases, the restart-to-continuation requirement with a unique completed effect, the usable no-provider path, and the teeth bar for every claimed behaviour. The coordinator granted the opportunity producer, the composition wiring and one controls route during the phase, because the complete Slice B gate needs a running path and the proactive opt-in must be a real control, and refused the deletion of persistent intelligence, which the contract review assigns to Phase 20."
     },
     {
       "stable": "T-020",
