@@ -2189,7 +2189,11 @@
           "apps/web/src/lib/intelligence-interactions.ts",
           "apps/web/src/lib/use-api.ts",
           "apps/web/src/lib/use-ai-request.ts",
-          "docs/decisions/0003-adopt-shadcn-ui.md"
+          "docs/decisions/0003-adopt-shadcn-ui.md",
+          "apps/web/src/server/intelligence/experience/",
+          "apps/web/src/server/intelligence/composition.ts",
+          "apps/web/src/app/api/intelligence/controls/route.ts",
+          "apps/web/src/server/settings.ts"
         ],
         "exclusive": true,
         "sharedFilesPolicy": "Single phase owner; see integration-plan.md. No edits outside task subset without coordinator allocation."
@@ -2229,7 +2233,8 @@
           "path": "apps/web/tests/intelligence-slice-b.test.ts",
           "status": "planned"
         }
-      ]
+      ],
+      "note": " The coordinator granted the worker a scope extension during the phase: the opportunity producer module and its composition wiring, because the complete Slice B gate needs a running path and Phase 18 report names the producer as Phase 19 Slice B, plus one controls route that persists the proactive opt-in and the pause flag in the existing settings key/value table, because the plan requires the proactive opt-in to be exposed and a toggle nothing reads is a fake control. The deletion of PERSISTENT intelligence was refused: design section 16 wants it but the contract review assigns the deletion of persistent intelligence to the retention phase, Phase 20, so Phase 19 exposes the served dismissals and records the deletion as a Phase 20 input."
     },
     {
       "id": "T-020",
