@@ -2,14 +2,14 @@
 
 Phase guide row 18 · detailed-plan Task 12 (backend half) · milestone M5 · schema allocation: **None**
 
-| | |
-| --- | --- |
-| Branch | `codex/ai-native-journal-p18` (child of the feature worktree) |
-| Base | `a616a67cf340144e294a607ef048a0c6bcc77a49` (verified feature HEAD) |
-| Plan commit | `326179835039ce27c85459db8b541cf286ed0e51` — "docs: plan the authenticated interaction APIs" |
-| Implementation commit | `c0cfb3073e5f162c96f942ffbd9a756b688e681b` — "feat: expose controlled intelligence interactions and user settings" |
-| Repair commit | `ce1b098f5e184702d471cb8a3a5a2d984c8e47c6` — "fix: refuse a review of an inactive observation and pin the revoked scope refusal" |
-| Migrations | none. `0001`–`0007` are byte-unchanged; no schema, registry or checksum file was touched. |
+|                       |                                                                                                                                  |
+| --------------------- | -------------------------------------------------------------------------------------------------------------------------------- |
+| Branch                | `codex/ai-native-journal-p18` (child of the feature worktree)                                                                    |
+| Base                  | `a616a67cf340144e294a607ef048a0c6bcc77a49` (verified feature HEAD)                                                               |
+| Plan commit           | `326179835039ce27c85459db8b541cf286ed0e51` — "docs: plan the authenticated interaction APIs"                                     |
+| Implementation commit | `c0cfb3073e5f162c96f942ffbd9a756b688e681b` — "feat: expose controlled intelligence interactions and user settings"               |
+| Repair commit         | `ce1b098f5e184702d471cb8a3a5a2d984c8e47c6` — "fix: refuse a review of an inactive observation and pin the revoked scope refusal" |
+| Migrations            | none. `0001`–`0007` are byte-unchanged; no schema, registry or checksum file was touched.                                        |
 
 ## What was built
 
@@ -57,14 +57,14 @@ The operator can now be told what to do over HTTP, and what they say is applied 
 
 ### The status codes
 
-| Code | Body | When |
-| --- | --- | --- |
-| `400` | `{"error":"invalid_request"}` | the body does not parse, the action id is malformed, the action id and the expected revision disagree, the command payload is illegal |
-| `401` | `{"error":"Unauthorized"}` | a password is configured and the session is missing or invalid |
-| `403` | `{"error":"origin_denied"}` | the origin is refused |
-| `403` | `{"error":"scope_denied"}` | a named account does not exist, or the workflow is outside the scope |
-| `409` | `{"error":"stale_revision","currentRevision":n}` | the expected revision is stale, or the workflow is gone |
-| `500` | `{"error":"Internal error"}` | an unexpected error, sanitized |
+| Code  | Body                                             | When                                                                                                                                  |
+| ----- | ------------------------------------------------ | ------------------------------------------------------------------------------------------------------------------------------------- |
+| `400` | `{"error":"invalid_request"}`                    | the body does not parse, the action id is malformed, the action id and the expected revision disagree, the command payload is illegal |
+| `401` | `{"error":"Unauthorized"}`                       | a password is configured and the session is missing or invalid                                                                        |
+| `403` | `{"error":"origin_denied"}`                      | the origin is refused                                                                                                                 |
+| `403` | `{"error":"scope_denied"}`                       | a named account does not exist, or the workflow is outside the scope                                                                  |
+| `409` | `{"error":"stale_revision","currentRevision":n}` | the expected revision is stale, or the workflow is gone                                                                               |
+| `500` | `{"error":"Internal error"}`                     | an unexpected error, sanitized                                                                                                        |
 
 ### The rules that carry the phase
 
@@ -84,13 +84,13 @@ The operator can now be told what to do over HTTP, and what they say is applied 
 
 All against the implementation commit `c0cfb3073e`, Node v24.20.0, pnpm 11.0.8.
 
-| Command | Exit | Runtime | Result |
-| --- | --- | --- | --- |
-| `pnpm exec vitest run apps/web/tests/intelligence-routes.test.ts` | 0 | 10.2 s (14.5 s wall) | 19 passed |
-| `pnpm --filter web typecheck` | 0 | 14.9 s | `next typegen` + `tsc --noEmit` clean |
-| `pnpm typecheck` (repository root) | **101** | 22.1 s | **fails in `desktop` only** — `resource path 'binaries/node-x86_64-pc-windows-msvc.exe' doesn't exist`. The Tauri sidecar is downloaded at build time and is not tracked (`desktop/src-tauri/binaries/` holds only `.gitkeep`), so the Rust package cannot be checked on this host. No desktop, Rust or configuration file is in this phase's diff; `core`, `importers` and `web` all pass. |
-| `pnpm exec vitest run apps/web/tests/ai-reports-route.test.ts apps/web/tests/api-auth.test.ts apps/web/tests/auth-gate.unit.test.ts apps/web/tests/intelligence-workflows.test.ts apps/web/tests/intelligence-engagement.test.ts apps/web/tests/intelligence-boundaries.test.ts apps/web/tests/account-mutation-routes.test.ts apps/web/tests/ai-ask-agent.test.ts` | 0 | 9.9 s | 110 passed |
-| `pnpm format:check` | 1 | 32.6 s | 77 files are unformatted; **none of them is a Phase 18 file** (they are `packages/importers/**`, `PRODUCT.md` and other pre-existing paths). The Phase 18 files are prettier-clean. |
+| Command                                                                                                                                                                                                                                                                                                                                                             | Exit    | Runtime              | Result                                                                                                                                                                                                                                                                                                                                                                                      |
+| ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------- | -------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `pnpm exec vitest run apps/web/tests/intelligence-routes.test.ts`                                                                                                                                                                                                                                                                                                   | 0       | 10.2 s (14.5 s wall) | 19 passed                                                                                                                                                                                                                                                                                                                                                                                   |
+| `pnpm --filter web typecheck`                                                                                                                                                                                                                                                                                                                                       | 0       | 14.9 s               | `next typegen` + `tsc --noEmit` clean                                                                                                                                                                                                                                                                                                                                                       |
+| `pnpm typecheck` (repository root)                                                                                                                                                                                                                                                                                                                                  | **101** | 22.1 s               | **fails in `desktop` only** — `resource path 'binaries/node-x86_64-pc-windows-msvc.exe' doesn't exist`. The Tauri sidecar is downloaded at build time and is not tracked (`desktop/src-tauri/binaries/` holds only `.gitkeep`), so the Rust package cannot be checked on this host. No desktop, Rust or configuration file is in this phase's diff; `core`, `importers` and `web` all pass. |
+| `pnpm exec vitest run apps/web/tests/ai-reports-route.test.ts apps/web/tests/api-auth.test.ts apps/web/tests/auth-gate.unit.test.ts apps/web/tests/intelligence-workflows.test.ts apps/web/tests/intelligence-engagement.test.ts apps/web/tests/intelligence-boundaries.test.ts apps/web/tests/account-mutation-routes.test.ts apps/web/tests/ai-ask-agent.test.ts` | 0       | 9.9 s                | 110 passed                                                                                                                                                                                                                                                                                                                                                                                  |
+| `pnpm format:check`                                                                                                                                                                                                                                                                                                                                                 | 1       | 32.6 s               | 77 files are unformatted; **none of them is a Phase 18 file** (they are `packages/importers/**`, `PRODUCT.md` and other pre-existing paths). The Phase 18 files are prettier-clean.                                                                                                                                                                                                         |
 
 The whole-project `pnpm test` and the merge into `codex/ai-native-journal` belong to the coordinator.
 
@@ -117,27 +117,27 @@ web typecheck against the repair commit; its commands are in the repair section 
 Every behaviour was broken once, seen to fail, then restored and seen to pass. Both results are
 recorded: a test that never failed proves nothing.
 
-| Behaviour | Test | Broken run | Restored run |
-| --- | --- | --- | --- |
-| Auth: `401` without a session, `200` with one, on all seven route calls | `the authentication gate > refuses every route without a session and admits every route with one` | — (the gate is the pre-existing one; a missing cookie answers `401` by construction) | green |
-| Origin: a foreign origin is refused and changes nothing | `the origin policy > refuses a foreign origin and changes nothing` | removed the `options.origin` block in `api.ts` → `-t "origin"` → **2 failed**: "expected 200 to be 403" (the foreign origin and the cross-site fetch were both admitted) | restored → 4 passed |
-| Origin: a missing origin with no fetch site is allowed | `the origin policy > allows a request without an origin and without a fetch site` | same break | restored → 4 passed |
-| Origin: a missing origin that declares a cross-site fetch is refused | `the origin policy > refuses a request without an origin that declares a cross-site fetch` | same break | restored → 4 passed |
-| Origin: a same-origin request is allowed | `the origin policy > allows a same-origin request` | same break | restored → 4 passed |
-| Scope: a named account that does not exist is refused | `the scope policy > refuses a request that names an account that does not exist` | removed the revoked-scope check in `resolveScope` → `-t "scope"` → **1 failed**: "expected 200 to be 403" (the ghost account was admitted) | restored → 3 passed |
-| Scope: a read answers only the rows of the scope | `the scope policy > returns only the rows of the scope` | same break | restored → 3 passed |
-| Scope: a command on a workflow outside the scope is refused | `the scope policy > refuses a command on a workflow outside the scope` | same break | restored → 3 passed |
-| Scope: an evidence revision that belongs to no account needs an unrestricted scope | `the scope policy > refuses to dismiss an evidence revision that belongs to no account when the request names accounts` | `else if (false && !scope.all)` in the opportunities route → **1 failed**: "expected 200 to be 403" | restored → 19 passed |
-| Stale: a command at the current revision applies | `the stale actions > applies a command at the current revision` | — | green |
-| Stale: the same command id is answered `duplicate` and applies once | `the stale actions > answers a repeated command with a duplicate and applies it once` | — | green |
-| Stale: a command at an old revision is `409` and writes nothing | `the stale actions > refuses a command at an old revision and writes nothing` | removed the revision check in `commands.ts` → `-t "stale"` → **1 failed**: "expected transitionWorkflow to not be called at all, but actually been called 1 times" | restored → 3 passed |
-| Consistency: an action id and an expected revision that disagree are `400` | `the inconsistent commands > refuses a command whose action id and expected revision disagree and writes nothing` | `if (false && actionId.revision !== request.expectedRevision)` → **1 failed**: "expected 200 to be 400" | restored → 19 passed |
-| Correction: the correction text is recorded and the revision advances | `the corrections, dismissals and deferrals > records a correction on the workflow and advances the revision` | — | green |
-| Deferral: `deferUntil` is set and the workflow is scheduled | `the corrections, dismissals and deferrals > defers the workflow until the given instant` | — | green |
-| Dismissal: the opportunity is dismissed, the dismissal is recorded, a repeat stays dismissed | `the corrections, dismissals and deferrals > dismisses an opportunity, records the dismissal and keeps it dismissed` | — | green |
-| Dismissal: a dismissed opportunity is no longer listed | `the corrections, dismissals and deferrals > no longer lists an opportunity that was dismissed` | added `"dismissed"` to the live-status list in `queries.ts` → **1 failed**: the listing contained the dismissed row and the dismissal record | restored → 19 passed |
-| Purge race: the command of a purged workflow is `409` and writes nothing | `the purge race > refuses the command of a purged workflow and writes nothing` | removed the purged-workflow check → `-t "purge"` → **1 failed**: "expected transitionWorkflow to not be called at all, but actually been called 1 times" | restored → 16 passed |
-| The existing AI contract is unchanged | `the existing AI contracts > the Ask route still answers with the answer and the scope` | — | green |
+| Behaviour                                                                                    | Test                                                                                                                    | Broken run                                                                                                                                                               | Restored run         |
+| -------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------ | -------------------- |
+| Auth: `401` without a session, `200` with one, on all seven route calls                      | `the authentication gate > refuses every route without a session and admits every route with one`                       | — (the gate is the pre-existing one; a missing cookie answers `401` by construction)                                                                                     | green                |
+| Origin: a foreign origin is refused and changes nothing                                      | `the origin policy > refuses a foreign origin and changes nothing`                                                      | removed the `options.origin` block in `api.ts` → `-t "origin"` → **2 failed**: "expected 200 to be 403" (the foreign origin and the cross-site fetch were both admitted) | restored → 4 passed  |
+| Origin: a missing origin with no fetch site is allowed                                       | `the origin policy > allows a request without an origin and without a fetch site`                                       | same break                                                                                                                                                               | restored → 4 passed  |
+| Origin: a missing origin that declares a cross-site fetch is refused                         | `the origin policy > refuses a request without an origin that declares a cross-site fetch`                              | same break                                                                                                                                                               | restored → 4 passed  |
+| Origin: a same-origin request is allowed                                                     | `the origin policy > allows a same-origin request`                                                                      | same break                                                                                                                                                               | restored → 4 passed  |
+| Scope: a named account that does not exist is refused                                        | `the scope policy > refuses a request that names an account that does not exist`                                        | removed the revoked-scope check in `resolveScope` → `-t "scope"` → **1 failed**: "expected 200 to be 403" (the ghost account was admitted)                               | restored → 3 passed  |
+| Scope: a read answers only the rows of the scope                                             | `the scope policy > returns only the rows of the scope`                                                                 | same break                                                                                                                                                               | restored → 3 passed  |
+| Scope: a command on a workflow outside the scope is refused                                  | `the scope policy > refuses a command on a workflow outside the scope`                                                  | same break                                                                                                                                                               | restored → 3 passed  |
+| Scope: an evidence revision that belongs to no account needs an unrestricted scope           | `the scope policy > refuses to dismiss an evidence revision that belongs to no account when the request names accounts` | `else if (false && !scope.all)` in the opportunities route → **1 failed**: "expected 200 to be 403"                                                                      | restored → 19 passed |
+| Stale: a command at the current revision applies                                             | `the stale actions > applies a command at the current revision`                                                         | —                                                                                                                                                                        | green                |
+| Stale: the same command id is answered `duplicate` and applies once                          | `the stale actions > answers a repeated command with a duplicate and applies it once`                                   | —                                                                                                                                                                        | green                |
+| Stale: a command at an old revision is `409` and writes nothing                              | `the stale actions > refuses a command at an old revision and writes nothing`                                           | removed the revision check in `commands.ts` → `-t "stale"` → **1 failed**: "expected transitionWorkflow to not be called at all, but actually been called 1 times"       | restored → 3 passed  |
+| Consistency: an action id and an expected revision that disagree are `400`                   | `the inconsistent commands > refuses a command whose action id and expected revision disagree and writes nothing`       | `if (false && actionId.revision !== request.expectedRevision)` → **1 failed**: "expected 200 to be 400"                                                                  | restored → 19 passed |
+| Correction: the correction text is recorded and the revision advances                        | `the corrections, dismissals and deferrals > records a correction on the workflow and advances the revision`            | —                                                                                                                                                                        | green                |
+| Deferral: `deferUntil` is set and the workflow is scheduled                                  | `the corrections, dismissals and deferrals > defers the workflow until the given instant`                               | —                                                                                                                                                                        | green                |
+| Dismissal: the opportunity is dismissed, the dismissal is recorded, a repeat stays dismissed | `the corrections, dismissals and deferrals > dismisses an opportunity, records the dismissal and keeps it dismissed`    | —                                                                                                                                                                        | green                |
+| Dismissal: a dismissed opportunity is no longer listed                                       | `the corrections, dismissals and deferrals > no longer lists an opportunity that was dismissed`                         | added `"dismissed"` to the live-status list in `queries.ts` → **1 failed**: the listing contained the dismissed row and the dismissal record                             | restored → 19 passed |
+| Purge race: the command of a purged workflow is `409` and writes nothing                     | `the purge race > refuses the command of a purged workflow and writes nothing`                                          | removed the purged-workflow check → `-t "purge"` → **1 failed**: "expected transitionWorkflow to not be called at all, but actually been called 1 times"                 | restored → 16 passed |
+| The existing AI contract is unchanged                                                        | `the existing AI contracts > the Ask route still answers with the answer and the scope`                                 | —                                                                                                                                                                        | green                |
 
 The two rows added by the repair are in the repair section below.
 
@@ -211,9 +211,9 @@ all: `listConversations` filters `status = "open"` and `listMessages` filters by
 
 ### The proof of teeth of the repair
 
-| Behaviour | Test | Broken run | Restored run |
-| --- | --- | --- | --- |
-| An invalidated or superseded observation cannot start a review | `the observation reviews > refuses to start a review of an observation that is no longer active` | the unfixed lookup → **1 failed**: "expected 200 to be 400" | restored → 21 passed |
+| Behaviour                                                                                            | Test                                                                                                 | Broken run                                                                                    | Restored run         |
+| ---------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------- | -------------------- |
+| An invalidated or superseded observation cannot start a review                                       | `the observation reviews > refuses to start a review of an observation that is no longer active`     | the unfixed lookup → **1 failed**: "expected 200 to be 400"                                   | restored → 21 passed |
 | A command that names an account that does not exist is refused, even against a journal-wide workflow | `the scope policy > refuses a command that names an unknown account against a journal-wide workflow` | the revoked-scope check disabled (`if (false && …)`) → **1 failed**: "expected 200 to be 403" | restored → 21 passed |
 
 The reviewer of the repair repeated both mutations in a scratch copy outside the repository and
@@ -224,11 +224,11 @@ called twice, `transitionWorkflow` once). Both cases can fail for the reason the
 
 Against the repair commit `ce1b098f5e`, Node v24.20.0, pnpm 11.0.8.
 
-| Command | Exit | Runtime | Result |
-| --- | --- | --- | --- |
-| `pnpm exec vitest run apps/web/tests/intelligence-routes.test.ts` | 0 | 10.0 s | 21 passed |
-| `pnpm --filter web typecheck` | 0 | 13.4 s | `next typegen` + `tsc --noEmit` clean |
-| `pnpm exec prettier --check <the three touched files>` | 0 | 1.8 s | all three prettier-clean |
+| Command                                                           | Exit | Runtime | Result                                |
+| ----------------------------------------------------------------- | ---- | ------- | ------------------------------------- |
+| `pnpm exec vitest run apps/web/tests/intelligence-routes.test.ts` | 0    | 10.0 s  | 21 passed                             |
+| `pnpm --filter web typecheck`                                     | 0    | 13.4 s  | `next typegen` + `tsc --noEmit` clean |
+| `pnpm exec prettier --check <the three touched files>`            | 0    | 1.8 s   | all three prettier-clean              |
 
 The reviewer of the repair additionally ran the neighbouring intelligence suites
 (`intelligence-boundaries`, `intelligence-workflows`, `intelligence-engagement`: 70 passed;

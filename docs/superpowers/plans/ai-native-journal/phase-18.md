@@ -1,6 +1,6 @@
 # Phase 18 — Authenticated interaction and control APIs
 
-> Phase guide row 18: *Authenticated interaction/control APIs* — Task 12 backend
+> Phase guide row 18: _Authenticated interaction/control APIs_ — Task 12 backend
 > routes/origin checks only. Schema allocation: **None**. Milestone M5.
 >
 > This phase is the **backend half** of detailed-plan Task 12. Phase 19 owns the
@@ -8,7 +8,7 @@
 
 ## Objective and outcome
 
-The journal can now be *told what to do* by the operator, over HTTP, safely.
+The journal can now be _told what to do_ by the operator, over HTTP, safely.
 
 This phase delivers the authenticated server surface of the intelligence
 interaction loop: a read surface that hands the operator the interactions that
@@ -33,7 +33,7 @@ The outcome is:
   become reachable from the routes.
 
 The server decides what an action may do. A payload that names an action is a
-*request to be authorized*, never an authorization (modernization plan Task 12;
+_request to be authorized_, never an authorization (modernization plan Task 12;
 design §15).
 
 ## Scope in
@@ -58,7 +58,7 @@ design §15).
 - No change to the existing Ask/Reports/Recap/Critique/Import JSON contracts.
 - No provider, credential, cTrader, financial-hash or import behaviour change.
 - No new dependency; no ADR is needed.
-- No observation→opportunity production wiring: the opportunity *producer* is
+- No observation→opportunity production wiring: the opportunity _producer_ is
   Phase 19's Slice B. Phase 18 exposes the opportunity surface and the
   dismissal path.
 
@@ -66,16 +66,16 @@ design §15).
 
 Everything this phase reads or writes already exists in migration `0007`:
 
-| Table | Used for |
-| --- | --- |
-| `intelligence_observations` | the active observations a review is about |
-| `observation_evidence` | the evidence revisions behind an observation |
-| `intelligence_workflows` | the durable workflow a command acts on |
-| `workflow_transitions` | the audit trail of every applied command |
-| `interaction_commands` | the idempotency ledger of every command |
-| `intelligence_opportunities` | the inbox items and their dismissals |
-| `intelligence_conversations` / `intelligence_messages` | the conversation surface |
-| `intelligence_policy` | the background policy document the status surface serves |
+| Table                                                  | Used for                                                 |
+| ------------------------------------------------------ | -------------------------------------------------------- |
+| `intelligence_observations`                            | the active observations a review is about                |
+| `observation_evidence`                                 | the evidence revisions behind an observation             |
+| `intelligence_workflows`                               | the durable workflow a command acts on                   |
+| `workflow_transitions`                                 | the audit trail of every applied command                 |
+| `interaction_commands`                                 | the idempotency ledger of every command                  |
+| `intelligence_opportunities`                           | the inbox items and their dismissals                     |
+| `intelligence_conversations` / `intelligence_messages` | the conversation surface                                 |
+| `intelligence_policy`                                  | the background policy document the status surface serves |
 
 The account foreign keys cascade: deleting an account purges its workflows,
 opportunities, conversations and observations in the same statement. The purge
@@ -183,11 +183,11 @@ export type InteractionIntent =
 
 The action id format is server-owned and stable:
 
-| Intent | Action id |
-| --- | --- |
-| workflow action | `act:<workflowId>:<action>:<revision>` |
+| Intent                | Action id                                 |
+| --------------------- | ----------------------------------------- |
+| workflow action       | `act:<workflowId>:<action>:<revision>`    |
 | opportunity dismissal | `act:opportunity:<opportunityId>:dismiss` |
-| evidence dismissal | `act:evidence:<revisionId>:dismiss` |
+| evidence dismissal    | `act:evidence:<revisionId>:dismiss`       |
 
 A malformed action id is a client error (`400`), never a lookup that guesses.
 
@@ -254,7 +254,7 @@ working:
 - `origin: true` — the request must pass `checkRequestOrigin`; a refusal is
   `403` with the reason.
 - `sanitize: true` — an unexpected error becomes `500 {"error":"Internal
-  error"}`. Without the option the existing behaviour (the error message) is
+error"}`. Without the option the existing behaviour (the error message) is
   kept, so no existing route changes its contract.
 
 The authentication gate stays where it is: when `JOURNAL_PASSWORD` is set, a
@@ -334,26 +334,26 @@ composition; composition never imports a route (import-guard rule 2).
 
 ### The routes
 
-| Route | Method | Answers |
-| --- | --- | --- |
-| `/api/intelligence/observations` | `GET` | the active observations of the scope, each with the review intent of its workflow |
-| `/api/intelligence/observations` | `POST` | starts the review workflow of one active observation, so the operator can act on it |
-| `/api/intelligence/opportunities` | `GET` | the live opportunities of the scope, each with its dismissal intent |
-| `/api/intelligence/opportunities` | `POST` | dismisses an opportunity or one evidence revision |
-| `/api/intelligence/commands` | `POST` | applies one workflow command; answers `WorkflowResult` |
-| `/api/intelligence/conversations` | `GET` | the open conversations of the scope and their messages |
-| `/api/intelligence/status` | `GET` | the background policy view, the worker status and the engagement defaults |
+| Route                             | Method | Answers                                                                             |
+| --------------------------------- | ------ | ----------------------------------------------------------------------------------- |
+| `/api/intelligence/observations`  | `GET`  | the active observations of the scope, each with the review intent of its workflow   |
+| `/api/intelligence/observations`  | `POST` | starts the review workflow of one active observation, so the operator can act on it |
+| `/api/intelligence/opportunities` | `GET`  | the live opportunities of the scope, each with its dismissal intent                 |
+| `/api/intelligence/opportunities` | `POST` | dismisses an opportunity or one evidence revision                                   |
+| `/api/intelligence/commands`      | `POST` | applies one workflow command; answers `WorkflowResult`                              |
+| `/api/intelligence/conversations` | `GET`  | the open conversations of the scope and their messages                              |
+| `/api/intelligence/status`        | `GET`  | the background policy view, the worker status and the engagement defaults           |
 
 The `POST` routes are mutating and therefore carry the origin check.
 
 Status codes are fixed:
 
-| Code | When |
-| --- | --- |
+| Code  | When                                                                                          |
+| ----- | --------------------------------------------------------------------------------------------- |
 | `400` | the request does not parse, the action id is malformed, the action is illegal for the payload |
-| `401` | a password is configured and the session is missing or invalid |
-| `403` | the origin is refused, or the scope is refused |
-| `409` | the expected revision is stale (or the workflow is gone) |
+| `401` | a password is configured and the session is missing or invalid                                |
+| `403` | the origin is refused, or the scope is refused                                                |
+| `409` | the expected revision is stale (or the workflow is gone)                                      |
 
 Every unexpected error is sanitized: the client sees `500 {"error":"Internal
 error"}` and nothing of the internal message.
@@ -386,17 +386,17 @@ engine's own transaction is all-or-nothing.
 Write `apps/web/tests/intelligence-routes.test.ts` first, then implement in
 this order.
 
-| Step | File | Change |
-| --- | --- | --- |
-| 1 | `apps/web/tests/intelligence-routes.test.ts` | the failing route test |
-| 2 | `apps/web/src/lib/intelligence-interactions.ts` | the public DTOs and the request schemas |
-| 3 | `apps/web/src/server/request-origin.ts` | the origin policy |
-| 4 | `apps/web/src/server/api.ts` | the `origin` and `sanitize` handler options |
-| 5 | `apps/web/src/server/intelligence/experience/intents.ts` | the intent builders |
-| 6 | `apps/web/src/server/intelligence/experience/commands.ts` | the command service |
-| 7 | `apps/web/src/server/intelligence/composition.ts` | the wiring |
-| 8 | `apps/web/src/app/api/intelligence/*/route.ts` | the routes |
-| 9 | `apps/web/src/server/intelligence/experience/interactions.ts` | rename the Phase 17 `InteractionIntent` to `EngagementIntent` (the public DTO takes the free name; the shape is unchanged) |
+| Step | File                                                          | Change                                                                                                                     |
+| ---- | ------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------- |
+| 1    | `apps/web/tests/intelligence-routes.test.ts`                  | the failing route test                                                                                                     |
+| 2    | `apps/web/src/lib/intelligence-interactions.ts`               | the public DTOs and the request schemas                                                                                    |
+| 3    | `apps/web/src/server/request-origin.ts`                       | the origin policy                                                                                                          |
+| 4    | `apps/web/src/server/api.ts`                                  | the `origin` and `sanitize` handler options                                                                                |
+| 5    | `apps/web/src/server/intelligence/experience/intents.ts`      | the intent builders                                                                                                        |
+| 6    | `apps/web/src/server/intelligence/experience/commands.ts`     | the command service                                                                                                        |
+| 7    | `apps/web/src/server/intelligence/composition.ts`             | the wiring                                                                                                                 |
+| 8    | `apps/web/src/app/api/intelligence/*/route.ts`                | the routes                                                                                                                 |
+| 9    | `apps/web/src/server/intelligence/experience/interactions.ts` | rename the Phase 17 `InteractionIntent` to `EngagementIntent` (the public DTO takes the free name; the shape is unchanged) |
 
 ## Test plan (`apps/web/tests/intelligence-routes.test.ts`)
 
