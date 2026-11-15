@@ -72,15 +72,15 @@ SCHEMA VERDICT: ALLOWED
 - No path under `apps/web/src/db/` changed at all: the schema, the migration registry `apps/web/src/db/migrations.ts` and the checksum artifact `apps/web/src/db/migration-checksums.json` are untouched. The diff `git diff --name-status --find-renames c4abdfbde237f6bea42fe6fea83c67d3b1c8924b..35e34cb6b97f69b6e9437f6611035795ed2f5354 -- apps/web/src/db/` returned no path.
 - Migrations `0001 through 0007` are byte-unchanged against the merge base `c4abdfbde237f6bea42fe6fea83c67d3b1c8924b`: the git blob hash of every migration file is identical at the merge base and at the candidate tip.
 
-| Migration | File | Git blob hash |
-| --- | --- | --- |
-| `0001` | `apps/web/src/db/migrations/0001-legacy-baseline.ts` | `5a2fd458699ecc523a237b9c13b33f35251c8453` (base = tip) |
-| `0002` | `apps/web/src/db/migrations/0002-trade-projections.ts` | `ae720a2c5beff259a16c71891548dd7f8e82b46e` (base = tip) |
-| `0003` | `apps/web/src/db/migrations/0003-durable-jobs.ts` | `030b6a8bf7688eaa4d8113665cba6cf526a8ef03` (base = tip) |
-| `0004` | `apps/web/src/db/migrations/0004-observations.ts` | `103bb72ea3b71c6d0ef047eb57cd6e4df2292f9e` (base = tip) |
-| `0005` | `apps/web/src/db/migrations/0005-intelligence-runtime.ts` | `353e55137c567af27e854fe9d2c6c4bb26c1ce4b` (base = tip) |
-| `0006` | `apps/web/src/db/migrations/0006-knowledge-scheduling.ts` | `86bdbf2fe7facb7565c2b3d253042e22dd2d6185` (base = tip) |
-| `0007` | `apps/web/src/db/migrations/0007-intelligence-experience.ts` | `fe693722d11445f2b6b73623d288a9199c2efdff` (base = tip) |
+| Migration | File                                                         | Git blob hash                                           |
+| --------- | ------------------------------------------------------------ | ------------------------------------------------------- |
+| `0001`    | `apps/web/src/db/migrations/0001-legacy-baseline.ts`         | `5a2fd458699ecc523a237b9c13b33f35251c8453` (base = tip) |
+| `0002`    | `apps/web/src/db/migrations/0002-trade-projections.ts`       | `ae720a2c5beff259a16c71891548dd7f8e82b46e` (base = tip) |
+| `0003`    | `apps/web/src/db/migrations/0003-durable-jobs.ts`            | `030b6a8bf7688eaa4d8113665cba6cf526a8ef03` (base = tip) |
+| `0004`    | `apps/web/src/db/migrations/0004-observations.ts`            | `103bb72ea3b71c6d0ef047eb57cd6e4df2292f9e` (base = tip) |
+| `0005`    | `apps/web/src/db/migrations/0005-intelligence-runtime.ts`    | `353e55137c567af27e854fe9d2c6c4bb26c1ce4b` (base = tip) |
+| `0006`    | `apps/web/src/db/migrations/0006-knowledge-scheduling.ts`    | `86bdbf2fe7facb7565c2b3d253042e22dd2d6185` (base = tip) |
+| `0007`    | `apps/web/src/db/migrations/0007-intelligence-experience.ts` | `fe693722d11445f2b6b73623d288a9199c2efdff` (base = tip) |
 
 ## Layer-boundary verdict
 
@@ -232,16 +232,16 @@ Database imports counted as layer boundary violations:
 
 One full gate run on the destination branch, alone on the host, sequentially. Every exit code is the exit status of the command itself, never the status of a pipe.
 
-| Command | Exit | Result |
-| --- | --- | --- |
-| `pnpm install --frozen-lockfile` | 0 | passed |
-| `pnpm --filter web typecheck` | 0 | passed |
-| `pnpm --filter @luxalgo/journal-core --filter @luxalgo/journal-importers typecheck` | 0 | passed |
-| `pnpm --filter web migrations:check` | 0 | passed |
-| `node scripts/check-licenses.mjs` | 0 | passed |
-| `pnpm exec prettier --check <8 merged files>` | 0 | passed |
-| `pnpm build` | 0 | passed |
-| `pnpm test` | 0 | passed |
+| Command                                                                             | Exit | Result |
+| ----------------------------------------------------------------------------------- | ---- | ------ |
+| `pnpm install --frozen-lockfile`                                                    | 0    | passed |
+| `pnpm --filter web typecheck`                                                       | 0    | passed |
+| `pnpm --filter @luxalgo/journal-core --filter @luxalgo/journal-importers typecheck` | 0    | passed |
+| `pnpm --filter web migrations:check`                                                | 0    | passed |
+| `node scripts/check-licenses.mjs`                                                   | 0    | passed |
+| `pnpm exec prettier --check <8 merged files>`                                       | 0    | passed |
+| `pnpm build`                                                                        | 0    | passed |
+| `pnpm test`                                                                         | 0    | passed |
 
 The prettier file list was computed after the merge, from the merge commit itself: `git diff --name-only b3be6fd9fd35b0ff7f6bd1b41db0e4914b9c1edc..ca1db69ee78ae9d9c68df763950d708b7c6d5198` in the feature worktree, with deleted paths excluded because prettier cannot check them (8 files).
 
@@ -259,6 +259,35 @@ The `desktop` workspace was deliberately not typechecked: its `cargo check` fail
 ## Review verdict
 
 PASS. The candidate commits were reviewed, the ownership boundary held (ALLOWED), the schema verdict is no migration owned with 0001 through 0007 byte-unchanged (ALLOWED), the layer-boundary verdict, including the contracts file of this phase, the experience layer with its no-runtime-database-import rule and the pure core package rule, is ALLOWED, and the destination gate passed on the destination branch.
+
+### The opportunity scan cost, verified
+
+The phase report states that the proactive queries could not use the `dedup_key` index because
+SQLite applies its LIKE optimisation to an indexed column only when `case_sensitive_like` is on,
+and this journal never sets it. The repair added a `status = 'delivered'` filter to both proactive
+queries, which does not change what they count — a delivery row carries that status, `delivered` is
+terminal, and only delivery rows carry the `delivery/proactive/` namespace — and lets the existing
+`intelligence_opportunities_eligibility_idx` on `(status, eligible_at)` serve the query.
+
+The coordinator verified that claim against a scratch journal carrying the 0007 schema, with
+`EXPLAIN QUERY PLAN`:
+
+    WITH THE STATUS FILTER
+    SEARCH intelligence_opportunities USING INDEX intelligence_opportunities_eligibility_idx (status=? AND eligible_at>?)
+
+    WITHOUT THE STATUS FILTER
+    SCAN intelligence_opportunities
+
+    THE SUBJECT QUERY
+    SCAN intelligence_opportunities
+
+So the daily count and the last-proactive read moved from a full table scan to an index search, and
+the subject query still scans — exactly as the phase report states. No index covers `subject_type`
+and `subject_id`, and no status filter preserves that query's set, because the rows it looks for may
+hold any status. That cost is handed to the next migration, which owns the schema.
+
+The phase report carries the claim but not the plan output itself; the output above is the
+coordinator's independent copy.
 
 ## What was not done
 
