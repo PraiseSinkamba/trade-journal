@@ -21,7 +21,7 @@ Deliver:
 - `decideEngagement(input)` as a **pure** policy: no database, no clock, no network, no random
   source. Every fact it decides on arrives in the input.
 - the six engagement outcomes with a reason and the next eligibility: `observe | inbox |
-  contextual | proactive | defer | suppress`.
+contextual | proactive | defer | suppress`.
 - a **central coordinator** that owns the reservations the contract needs:
   - an **opportunity reservation** — one row per opportunity, so the same dedup key can never
     produce two opportunities;
@@ -60,14 +60,21 @@ Because the phase may not add a migration, the table carries **three row kinds**
 can never collide with a reserved one: every key this phase writes starts with `opportunity/`,
 `delivery/` or `dismissal/`, and a producer key is always stored **inside** `opportunity/`.
 
-| Kind        | `dedup_key`                                | `status`                                | Meaning                                                             |
-| ----------- | ------------------------------------------ | --------------------------------------- | ------------------------------------------------------------------- |
-| Opportunity | `opportunity/{producerKey}`                | `pending \| eligible \| dismissed \| expired` | one engagement opportunity; the unique key is the dedup guarantee |
-| Delivery    | `delivery/proactive/{opportunityId}`        | `delivered`                             | one proactive delivery; the immutable push record                  |
-| Dismissal   | `dismissal/{scope}/{target}`                | `suppressed`                            | the operator dismissed an opportunity or an evidence revision       |
+| Kind        | `dedup_key`                          | `status`                                                                 | Meaning                                                           |
+| ----------- | ------------------------------------ | ------------------------------------------------------------------------ | ----------------------------------------------------------------- |
+| Opportunity | `opportunity/{producerKey}`          | `pending \| eligible \| delivered \| dismissed \| expired \| suppressed` | one engagement opportunity; the unique key is the dedup guarantee |
+| Delivery    | `delivery/proactive/{opportunityId}` | `delivered`                                                              | one proactive delivery; the immutable push record                 |
+| Dismissal   | `dismissal/{scope}/{target}`         | `dismissed`                                                              | the operator dismissed an opportunity or an evidence revision     |
+
+`dismissed`, `expired` and `delivered` are **terminal** opportunity statuses: nothing moves a row
+out of them, and a row that does not move keeps the status the store holds. `pending`, `eligible`
+and `suppressed` are the states an engagement may still move away from.
 
 Every column of every kind, and the rules that keep them apart:
 
+- **The `dedup_key` namespace says which kind a row is; its status says what
+  happened to that row.** The kind is never inferred from the status, and
+  every query filters on the namespace.
 - **Opportunity rows** carry the producer's subject (`subject_type`, `subject_id`), its account
   (`account_id`), the instant it may be surfaced (`eligible_at`), the instant it expires
   (`expires_at`, default: seven days after it was recorded) and the evidence revisions it rests on
@@ -80,12 +87,8 @@ Every column of every kind, and the rules that keep them apart:
 - **Dismissal rows** name their scope in `subject_type` (`opportunity` or `evidence`) and the target
   in `subject_id`; `expires_at` is `neverExpires`, because a dismissal does not expire — it holds
   until the journal is reset. A dismissal therefore suppresses opportunities that do not exist yet.
-- **The statuses are disjoint by kind, and every read relies on that.** Only opportunity rows hold
-  `eligible` (the inbox), only delivery rows hold `delivered` (the counters), only dismissal rows
-  hold `suppressed`. `dismissed` and `expired` are opportunity states; a dismissal *record* is
-  `suppressed`, so the two never share a status.
 - **The counters scan.** The phase may not add an index, so the daily count and the cooldown read
-  the engagement rows by status. The table is journal-local and holds one delivery row per
+  the engagement rows by namespace. The table is journal-local and holds one delivery row per
   proactive push — at most one per day by the daily rule itself — so the scan is bounded by a
   handful of rows. A future index belongs to a later migration.
 
@@ -96,7 +99,12 @@ Every column of every kind, and the rules that keep them apart:
 ```ts
 /** What engagement can do with an opportunity. */
 export const ENGAGEMENT_ACTIONS = [
-  "observe", "inbox", "contextual", "proactive", "defer", "suppress",
+  "observe",
+  "inbox",
+  "contextual",
+  "proactive",
+  "defer",
+  "suppress",
 ] as const;
 export type EngagementAction = (typeof ENGAGEMENT_ACTIONS)[number];
 
@@ -182,10 +190,8 @@ export const opportunityKey = (producerKey: string): string => `opportunity/${pr
 /** The stored key of a proactive delivery. */
 export const deliveryKey = (opportunityId: string): string => `delivery/proactive/${opportunityId}`;
 /** The stored key of a dismissal. */
-export const dismissalKey = (
-  scope: "opportunity" | "evidence",
-  target: string,
-): string => `dismissal/${scope}/${target}`;
+export const dismissalKey = (scope: "opportunity" | "evidence", target: string): string =>
+  `dismissal/${scope}/${target}`;
 ```
 
 The store port gains the reads and writes the coordinator needs:
@@ -231,11 +237,7 @@ export interface ExperienceStore {
   /** The proactive deliveries made since an instant, journal-wide. */
   countProactiveDeliveriesSince(tx: JournalTx, since: number): number;
   /** The instant of the last proactive delivery for a subject, or null. */
-  lastProactiveDeliveryAt(
-    tx: JournalTx,
-    subjectType: string,
-    subjectId: string,
-  ): number | null;
+  lastProactiveDeliveryAt(tx: JournalTx, subjectType: string, subjectId: string): number | null;
 }
 ```
 
@@ -327,23 +329,23 @@ workflow engine: it opens no connection of its own and imports nothing that open
 
 Rules, in the order they are evaluated. The table is authoritative; the prose below explains it.
 
-| #  | Condition                                            | Outcome     | Reason                 | Next eligibility              |
-| - | ---------------------------------------------------- | ----------- | ---------------------- | ----------------------------- |
-| 1  | the opportunity was dismissed                        | `suppress`  | `dismissed_opportunity`| null                          |
-| 2  | one of its evidence revisions was dismissed          | `suppress`  | `dismissed_evidence`   | null                          |
-| 3  | `now >= expiresAt`                                   | `suppress`  | `expired`              | null                          |
-| 4  | the opportunity was already delivered                | `suppress`  | `already_delivered`    | null                          |
-| 5  | the material is historical                           | `observe`   | `historical_material`   | null                          |
-| 6  | the material is baseline                             | `observe`   | `baseline_material`    | null                          |
-| 7  | a current observation carries no action              | `observe`   | `not_actionable`       | null                          |
-| 8  | `now < eligibleAt`                                   | `defer`     | `not_yet_eligible`     | `eligibleAt`                  |
-| 9  | the trading activity is unknown                      | `inbox`     | `activity_unknown`     | null                          |
-| 10 | the operator is busy trading                         | `inbox`     | `activity_busy`        | null                          |
-| 11 | the UI context matches the subject                   | `contextual`| `context_match`        | null                          |
-| 12 | the operator did not opt in                          | `inbox`     | `not_opted_in`         | null                          |
-| 13 | today's proactive allowance is spent                 | `inbox`     | `daily_limit`          | the start of the next UTC day |
-| 14 | the subject is inside its cooldown                   | `inbox`     | `cooldown`             | the end of the cooldown        |
-| 15 | otherwise                                            | `proactive` | `proactive_allowed`    | null                          |
+| #   | Condition                                   | Outcome      | Reason                  | Next eligibility              |
+| --- | ------------------------------------------- | ------------ | ----------------------- | ----------------------------- |
+| 1   | the opportunity was dismissed               | `suppress`   | `dismissed_opportunity` | null                          |
+| 2   | one of its evidence revisions was dismissed | `suppress`   | `dismissed_evidence`    | null                          |
+| 3   | `now >= expiresAt`                          | `suppress`   | `expired`               | null                          |
+| 4   | the opportunity was already delivered       | `suppress`   | `already_delivered`     | null                          |
+| 5   | the material is historical                  | `observe`    | `historical_material`   | null                          |
+| 6   | the material is baseline                    | `observe`    | `baseline_material`     | null                          |
+| 7   | a current observation carries no action     | `observe`    | `not_actionable`        | null                          |
+| 8   | `now < eligibleAt`                          | `defer`      | `not_yet_eligible`      | `eligibleAt`                  |
+| 9   | the trading activity is unknown             | `inbox`      | `activity_unknown`      | null                          |
+| 10  | the operator is busy trading                | `inbox`      | `activity_busy`         | null                          |
+| 11  | the UI context matches the subject          | `contextual` | `context_match`         | null                          |
+| 12  | the operator did not opt in                 | `inbox`      | `not_opted_in`          | null                          |
+| 13  | today's proactive allowance is spent        | `inbox`      | `daily_limit`           | the start of the next UTC day |
+| 14  | the subject is inside its cooldown          | `inbox`      | `cooldown`              | the end of the cooldown       |
+| 15  | otherwise                                   | `proactive`  | `proactive_allowed`     | null                          |
 
 Reading of the contract, stated so the reviewer can check it:
 
@@ -353,7 +355,7 @@ Reading of the contract, stated so the reviewer can check it:
   fallback).
 - **Proactive delivery needs the opt-in** (rule 12) and both interruption limits (rules 13–14).
 - **Unknown activity uses the inbox** (rule 9) and never invents an idle state: a proactive push
-  needs a *known* idle operator, so `busy` and `unknown` both fall back to the inbox. Rules 9–10
+  needs a _known_ idle operator, so `busy` and `unknown` both fall back to the inbox. Rules 9–10
   precede rule 11 deliberately: an unknown activity yields the inbox even when the UI context
   matches the subject, because the packet states that outcome without exception.
 - **Contextual delivery requires a matching UI context** (rule 11) and is never an interruption, so
@@ -374,7 +376,14 @@ Reading of the contract, stated so the reviewer can check it:
 - **Consolidation.** Two capabilities that offer the same subject on the same evidence resolve to
   one opportunity: the coordinator reuses the opportunity already recorded for that subject and
   evidence set instead of writing a second one. Overlapping capabilities therefore cannot flood the
-  operator with the same interaction.
+  operator with the same interaction. The reuse holds whatever status the recorded row holds — a
+  dismissed or a delivered row is reused too — so neither a dismissal nor a previous push can be
+  side-stepped under another producer key. When more than one row matches, a dismissal and a
+  delivery win over a merely open row, and an expired row comes last: its window closed, so a live
+  row describes the interaction better.
+- **Terminal statuses.** `dismissed`, `expired` and `delivered` are terminal: nothing moves an
+  opportunity row out of them. A row that does not move keeps its status, and the coordinator
+  reports the status the store holds — never a newer one it wanted.
 - **Delivery reservation.** A proactive delivery stores `delivery/proactive/{opportunityId}` with
   `onConflictDoNothing`; the first insert owns the push and the caller may notify, a retry finds the
   row and is told `delivered: false`. The row is immutable, so neither a later dismissal nor a
@@ -385,8 +394,10 @@ Reading of the contract, stated so the reviewer can check it:
   spend the day's single proactive slot.
 - **Dismissal.** `dismiss(scope, target)` stores `dismissal/{scope}/{target}` with
   `expires_at = neverExpires`, and additionally moves an existing opportunity to `dismissed` so the
-  inbox drops it. A dismissal of an evidence revision suppresses every opportunity that rests on it,
-  including opportunities recorded later.
+  inbox drops it. An opportunity is named by its stored key, by the key that created it, or by its
+  row id — all three resolve to the same opportunity, so no handle loses a dismissal. A dismissal of
+  an evidence revision suppresses every opportunity that rests on it, including opportunities
+  recorded later and the revisions a later request cites.
 - **Expiry.** The default expiry is seven days from the moment the opportunity is recorded; an
   explicit `expiresAt` overrides it. An expired opportunity is suppressed and never delivered.
 - **No financial writes.** The coordinator writes engagement rows only: no trade, execution,
@@ -410,26 +421,41 @@ Each case is listed with the behaviour it proves. Every case must be seen to fai
 production behaviour is deliberately broken, and to pass again after the break is restored; the
 phase report records both results.
 
-| #   | Case                                                          | Proves                                                 |
-| -  | ------------------------------------------------------------- | ------------------------------------------------------ |
-| 1  | the same dedup key records one opportunity                    | the dedup guarantee                                   |
-| 2  | two capabilities offering the same subject and evidence record one opportunity | the consolidation of overlapping opportunities |
-| 3  | an expired opportunity is suppressed and never delivered       | the seven-day default expiry                           |
-| 4  | a dismissed opportunity is suppressed                          | dismissal of an opportunity                            |
-| 5  | a dismissed evidence revision suppresses the opportunity       | dismissal of an evidence revision                       |
-| 6  | one proactive delivery is reserved, a retry reserves nothing    | the delivery reservation                               |
-| 7  | the day's allowance allows one proactive delivery only          | the journal-wide daily limit                           |
-| 8  | the same subject is inside its cooldown for 24 hours            | the per-subject cooldown                               |
-| 9  | another subject is outside the cooldown                        | the cooldown is per subject                            |
-| 10 | unknown activity yields the inbox, never a proactive delivery   | no invented idle state                                 |
-| 11 | no opt-in yields the inbox, never a proactive delivery          | the opt-in gate                                        |
-| 12 | a matching UI context yields a contextual delivery              | the contextual rule                                    |
-| 13 | historical and baseline material is observed, never delivered   | the observe rule                                       |
-| 14 | an opportunity that is not eligible yet defers                  | the defer rule and the next eligibility                 |
-| 15 | the default expiry is seven days                               | the expiry default                                     |
-| 16 | the policy depends only on its input                            | purity: no clock, no database, no random               |
-| 17 | importing the domain layer opens no journal                    | the domain layer reaches nothing that opens the journal |
-| 18 | the financial rows are untouched                                | no financial write                                     |
+| #   | Case                                                                                | Proves                                                   |
+| --- | ----------------------------------------------------------------------------------- | -------------------------------------------------------- |
+| 1   | the policy delivers proactively only with the opt-in                                | the opt-in gate                                          |
+| 2   | the policy sends unknown and busy activity to the inbox                             | no invented idle state                                   |
+| 3   | the policy observes historical and baseline material                                | the observe rule                                         |
+| 4   | the policy suppresses a dismissal and an expiry                                     | dismissal and expiry                                     |
+| 5   | the policy defers an opportunity that is not eligible yet                           | the defer rule and the next eligibility                  |
+| 6   | the policy serves a matching UI context contextually                                | the contextual rule                                      |
+| 7   | the policy allows one proactive delivery per day                                    | the journal-wide daily limit                             |
+| 8   | the policy keeps a subject inside its 24-hour cooldown                              | the per-subject cooldown                                 |
+| 9   | the policy decides only from its input                                              | purity: no clock, no database, no random                 |
+| 10  | the coordinator records one opportunity per dedup key                               | the dedup guarantee                                      |
+| 11  | the coordinator consolidates two capabilities on one subject                        | the consolidation of overlapping opportunities           |
+| 12  | the coordinator reserves one proactive delivery and refuses the retry               | the delivery reservation                                 |
+| 13  | the coordinator allows one proactive delivery per day                               | the journal-wide daily limit                             |
+| 14  | the coordinator holds a subject in its cooldown                                     | the per-subject cooldown                                 |
+| 15  | the coordinator suppresses a dismissed opportunity                                  | dismissal of an opportunity                              |
+| 16  | the coordinator suppresses a dismissed evidence revision                            | dismissal of an evidence revision                        |
+| 17  | the coordinator suppresses an opportunity recorded after its evidence was dismissed | dismissal outlives the opportunity                       |
+| 18  | the coordinator never delivers an expired opportunity                               | the seven-day default expiry                             |
+| 19  | the coordinator records the default expiry as seven days                            | the expiry default                                       |
+| 20  | the coordinator defers an opportunity that is not eligible yet                      | the defer rule                                           |
+| 21  | the coordinator sends unknown activity to the inbox                                 | no invented idle state                                   |
+| 22  | the coordinator leaves the financial rows untouched                                 | no financial write                                       |
+| 23  | importing the domain layer opens no journal                                         | the domain layer reaches nothing that opens the journal  |
+| 24  | the coordinator runs its work through the injected seam                             | the transaction seam                                     |
+| 25  | the three row kinds stay apart                                                      | the storage namespaces                                   |
+| 26  | a producer key cannot collide with a reserved namespace                             | the namespace protection                                 |
+| 27  | a delivery row reads back by its key                                                | the delivery record                                      |
+| 28  | a dismissal holds across a capability that offers the same interaction later        | dismissal is not side-stepped under another producer key |
+| 29  | the coordinator reports the status the store persisted                              | the report never claims an unpersisted status            |
+| 30  | a delivered opportunity keeps its stored status when it expires                     | the terminal statuses hold                               |
+| 31  | unknown activity reaches the inbox even when the context matches                    | the precedence of the activity rules                     |
+| 32  | a dismissal made against the opportunity's row id is honoured                       | every handle on an opportunity names the same one        |
+| 33  | a dismissal of a revision a later request cites is honoured                         | a dismissal cannot be slipped past the recorded row      |
 
 ## Checks and stop condition
 

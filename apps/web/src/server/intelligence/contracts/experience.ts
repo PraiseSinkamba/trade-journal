@@ -1,5 +1,10 @@
 import { z } from "zod";
-import type { intelligenceWorkflows, interactionCommands, workflowTransitions } from "@/db/schema";
+import type {
+  intelligenceOpportunities,
+  intelligenceWorkflows,
+  interactionCommands,
+  workflowTransitions,
+} from "@/db/schema";
 import type { JournalTx } from "@/db/transaction";
 
 /**
@@ -275,6 +280,135 @@ export type RunInTransaction = <T>(
   fn: (tx: JournalTx) => T extends PromiseLike<unknown> ? never : T,
 ) => T;
 
+/* ---------------------------------------------------------------------------
+ * Engagement (Phase 17).
+ *
+ * An opportunity is a candidate interaction. The engagement policy decides
+ * what happens to it — observe, inbox, contextual, proactive, defer or
+ * suppress — and the coordinator persists the opportunity, the delivery and
+ * the dismissal that follow.
+ * ------------------------------------------------------------------------- */
+
+/** What engagement can do with an opportunity. */
+export const ENGAGEMENT_ACTIONS = [
+  "observe",
+  "inbox",
+  "contextual",
+  "proactive",
+  "defer",
+  "suppress",
+] as const;
+
+/** One engagement outcome. */
+export type EngagementAction = (typeof ENGAGEMENT_ACTIONS)[number];
+
+/** Why the policy decided what it decided. */
+export type EngagementReason =
+  | "dismissed_opportunity"
+  | "dismissed_evidence"
+  | "expired"
+  | "already_delivered"
+  | "historical_material"
+  | "baseline_material"
+  | "not_actionable"
+  | "not_yet_eligible"
+  | "activity_unknown"
+  | "activity_busy"
+  | "context_match"
+  | "not_opted_in"
+  | "daily_limit"
+  | "cooldown"
+  | "proactive_allowed";
+
+/** The material an opportunity rests on. */
+export type EngagementMaterial = "historical" | "baseline" | "current";
+
+/** The operator's trading activity, when it is reliably known. */
+export type EngagementActivity = "idle" | "busy" | "unknown";
+
+/** What the engagement policy decided. */
+export interface EngagementDecision {
+  /** What happens to the opportunity. */
+  readonly outcome: EngagementAction;
+  /** Why the policy decided that. */
+  readonly reason: EngagementReason;
+  /** The instant the opportunity may next be engaged, or null. */
+  readonly nextEligibleAt: number | null;
+}
+
+/**
+ * Everything the engagement policy decides on.
+ *
+ * The policy reads this input and nothing else: no clock, no database, no
+ * network, no random source.
+ */
+export interface EngagementInput {
+  /** The instant the decision is made. */
+  readonly now: number;
+  /** The material the opportunity rests on. */
+  readonly material: EngagementMaterial;
+  /** Whether a current observation carries an action the operator can take. */
+  readonly actionable: boolean;
+  /** The subject the opportunity is about. */
+  readonly subject: { readonly type: string; readonly id: string };
+  /** The instant the opportunity may be surfaced. */
+  readonly eligibleAt: number;
+  /** The instant the opportunity expires. */
+  readonly expiresAt: number;
+  /** Whether the operator opted in to proactive delivery. */
+  readonly proactiveOptIn: boolean;
+  /** The operator's trading activity, when it is reliably known. */
+  readonly activity: EngagementActivity;
+  /** The UI context the operator has open, if any. */
+  readonly context: { readonly subjectType: string; readonly subjectId: string } | null;
+  /** Whether the opportunity itself was dismissed. */
+  readonly dismissedOpportunity: boolean;
+  /** Whether one of the opportunity's evidence revisions was dismissed. */
+  readonly dismissedEvidence: boolean;
+  /** Whether this opportunity was already delivered. */
+  readonly alreadyDelivered: boolean;
+  /** The proactive deliveries already made on the UTC day of `now`. */
+  readonly proactiveDeliveriesToday: number;
+  /** The instant of the last proactive delivery for this subject, if any. */
+  readonly lastProactiveDeliveryAt: number | null;
+}
+
+/**
+ * The central engagement defaults.
+ *
+ * The numbers come from the contract: one proactive delivery per day, a
+ * 24-hour cooldown per subject and a seven-day expiry.
+ */
+export const ENGAGEMENT_DEFAULTS = {
+  /** The per-subject cooldown between proactive deliveries: 24 hours. */
+  proactiveCooldownMs: 86_400_000,
+  /** The proactive deliveries a journal may make in one day. */
+  proactivePerDay: 1,
+  /** The default lifetime of an opportunity: seven days. */
+  opportunityExpiryMs: 604_800_000,
+  /** The expiry of a record that does not expire. */
+  neverExpires: 9_007_199_254_740_991,
+} as const;
+
+/** The stored key of an opportunity. */
+export const opportunityKey = (producerKey: string): string => `opportunity/${producerKey}`;
+
+/** The stored key of a proactive delivery. */
+export const deliveryKey = (opportunityId: string): string => `delivery/proactive/${opportunityId}`;
+
+/** The stored key of a dismissal. */
+export const dismissalKey = (scope: "opportunity" | "evidence", target: string): string =>
+  `dismissal/${scope}/${target}`;
+
+/** An engagement row. */
+export type OpportunityRow = typeof intelligenceOpportunities.$inferSelect;
+
+/** An engagement row to store. */
+export type NewOpportunityRow = typeof intelligenceOpportunities.$inferInsert;
+
+/** The engagement statuses. */
+export type OpportunityStatus = OpportunityRow["status"];
+
 /**
  * The experience store.
  *
@@ -305,4 +439,41 @@ export interface ExperienceStore {
    * finishes it.
    */
   releaseWorkflowJobs(tx: JournalTx, workflowId: string, now: number): void;
+
+  /** Reads an engagement row by its stored key. */
+  loadEngagement(tx: JournalTx, dedupKey: string): OpportunityRow | null;
+  /** Reads an opportunity row by its id. */
+  loadOpportunityById(tx: JournalTx, id: string): OpportunityRow | null;
+  /**
+   * Stores an engagement row.
+   *
+   * A repeated key keeps the first row, so the same dedup key can never
+   * produce two opportunities. `created` is false when the row already
+   * existed.
+   */
+  insertEngagement(
+    tx: JournalTx,
+    row: NewOpportunityRow,
+  ): { row: OpportunityRow; created: boolean };
+  /**
+   * Moves an opportunity to a new status, but only from one of `from`.
+   * Returns whether the row moved.
+   */
+  advanceOpportunity(
+    tx: JournalTx,
+    dedupKey: string,
+    from: readonly OpportunityStatus[],
+    to: OpportunityStatus,
+    now: number,
+  ): boolean;
+  /** The opportunities already recorded for a subject. */
+  findOpportunitiesBySubject(
+    tx: JournalTx,
+    subjectType: string,
+    subjectId: string,
+  ): OpportunityRow[];
+  /** The proactive deliveries made since an instant, journal-wide. */
+  countProactiveDeliveriesSince(tx: JournalTx, since: number): number;
+  /** The instant of the last proactive delivery for a subject, or null. */
+  lastProactiveDeliveryAt(tx: JournalTx, subjectType: string, subjectId: string): number | null;
 }
