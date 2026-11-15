@@ -1,7 +1,7 @@
 {
   "schemaVersion": 1,
   "feature": "ai-native-journal",
-  "updatedAt": "2026-11-15T11:34:39Z",
+  "updatedAt": "2026-11-15T11:38:38Z",
   "owner": "parent OMP coordinator (exclusive owner of this record)",
   "repository": {
     "name": "trade-journal",
@@ -35,8 +35,8 @@
     },
     "featureBranch": "codex/ai-native-journal",
     "featureBootstrapSha": "0a278503fd67c0f9e82138dfecb744f4bfd307ad",
-    "featureHeadSha": "a322965ead515695be0af5ed04bb34b7bb38f8bf",
-    "featureHeadShaNote": "feature branch HEAD at the Phase 18 integration and the exact base of the Phase 19 worktree; the coordinator record commit advances the branch by one commit",
+    "featureHeadSha": "14f8ec3aa0451c53c91d9503c2b79425232cdfaf",
+    "featureHeadShaNote": "feature branch HEAD at the Phase 19 dispatch and the exact base of the Phase 19 worktree; the coordinator record commit advances the branch by one commit",
     "featureCheckpointCommits": [
       "0a278503fd67c0f9e82138dfecb744f4bfd307ad",
       "80d53ccb62fda801897852a6f4e5d2aab8b0d58b",
@@ -76,7 +76,8 @@
       "1a7c6ba57d7767d74765a5e89ba86c3739e90c39",
       "a616a67cf340144e294a607ef048a0c6bcc77a49",
       "3dd7ff1ccedb9b95f1eb32d60c6e6974d42a62c4",
-      "a322965ead515695be0af5ed04bb34b7bb38f8bf"
+      "a322965ead515695be0af5ed04bb34b7bb38f8bf",
+      "14f8ec3aa0451c53c91d9503c2b79425232cdfaf"
     ],
     "featureBranchNote": "Orca slugified the requested name to codex-ai-native-journal at creation; the coordinator renamed the newly created, exclusively owned branch to the contract-required codex/ai-native-journal. Orca reads the renamed ref live (refs/heads/codex/ai-native-journal). No pre-existing branch was overwritten."
   },
@@ -332,6 +333,18 @@
         "setup": "pnpm install --frozen-lockfile completed in the worker checkout; working tree clean; Node v24.20.0, pnpm 11.0.8; own node_modules and own pnpm virtual store",
         "state": "integrated into codex/ai-native-journal at d5a230e and verified on the destination branch (destination gate green on the destination branch after the merge: pnpm install --frozen-lockfile, pnpm --filter web typecheck, the core and importers typecheck, pnpm --filter web migrations:check, node scripts/check-licenses.mjs, prettier --check on every merged file and pnpm build all exit 0; pnpm test 111 test files, 1271 tests passed, 155.25s). The worktree, the git worktree registration, the branch and the leftover directory remain until the user requests cleanup.",
         "note": "Phase 18 is the authenticated interaction and control API half of detailed plan Task 12, with schema allocation None. The brief pins the backend only - the React components, shell.tsx and the settings page belong to Phase 19 - and the security rules: mutating routes require same-origin validation, a missing Origin follows an explicit trusted nonbrowser policy rather than accepting arbitrary cross-site requests, no UI command is authorized by its presence in a generated payload alone, and the status codes are fixed at 409 stale revision, 400 invalid input, 401 auth and 403 denied origin or scope. The Ask, Reports, Recap, Critique and Import JSON contracts must stay unchanged. The independent implementation-diff review returned 2 findings. One is a real bug: the observations POST started a review workflow for a superseded or invalidated observation, because findObservation selects by id with no status predicate while the GET surface filters status = active and the route docstring and the phase plan both say one ACTIVE observation. The coordinator confirmed it against the schema and the knowledge store, which set the status to active on insert, invalidated on trade deletion and superseded when a newer revision replaced it. The other is a missing proof rather than a behavioural defect: the revoked-scope refusal for an unknown account has no independent teeth, because the suite exercises it only against an ACCOUNT-BOUND workflow, where the workflow-scope check refuses the same request, so removing the unknown-account check leaves the suite green. The behaviour itself is correct in every reachable case, including a request naming an unknown account against a journal-wide workflow. The coordinator also ran a seven-mutation teeth proof over the phase: six were decisive, each breaking exactly its own test - the foreign-origin refusal, the trusted-nonbrowser policy, the stale-revision check, the action-id consistency check, the purged-workflow refusal and the workflow-scope check - and the seventh was the unknown-account check, which is the finding. The first destination gate run failed at prettier --check because the candidate plan and report had never been formatted, so pnpm build and pnpm test did not run at all. The formatting was applied with prettier --write in 2783ab4 and proven to be formatting only: every changed line is a table row or a list marker with identical cell content, and only prettier column padding differs. The whole gate was then re-run alone on the host."
+      },
+      {
+        "phase": "19",
+        "stableTask": "T-019",
+        "orcaWorktreeId": "aa54a522-a9af-4cb4-9de7-f1d9a349c0fd::E:/4004/orca/workspaces/trade-journal/codex-ai-native-journal-p19",
+        "path": "E:/4004/orca/workspaces/trade-journal/codex-ai-native-journal-p19",
+        "branch": "codex/ai-native-journal-p19",
+        "startSha": "14f8ec3aa0451c53c91d9503c2b79425232cdfaf",
+        "orcaParentWorktreeId": "aa54a522-a9af-4cb4-9de7-f1d9a349c0fd::E:/4004/orca/workspaces/trade-journal/codex-ai-native-journal",
+        "setup": "pnpm install --frozen-lockfile completed in the worker checkout; working tree clean; Node v24.20.0, pnpm 11.0.8; own node_modules and own pnpm virtual store",
+        "state": "dispatched: ctx_39512353a5c7, worker handle term_24dfe4a0-4d44-4dd1-bbce-17c4a8f9daa7",
+        "note": "Phase 19 is the native inbox and control UI half of detailed plan Task 12, and it carries the COMPLETE SLICE B GATE. The brief pins the UI surface - the inbox, the interaction card and the controls over the EXISTING shadcn primitives per ADR 0003, exposing the background AI and proactive opt-ins, the evidence, the correction, pause and resume, the worker status and the intelligence deletion - and the gate: observation to optional AI to opportunity to policy to user command to persisted knowledge, RESTARTING BEFORE THE CONTINUATION, with the completed effect unique and the no-provider path usable. Keyboard and privacy cases are required, the Ask, Reports, Recap, Critique and Import JSON contracts stay unchanged, and no route may change because the routes were Phase 18s."
       }
     ]
   },
@@ -675,8 +688,11 @@
       "wave": 19,
       "branch": "codex/ai-native-journal-p19",
       "deps": ["task_ed0e380a3fa9"],
-      "status": "pending",
-      "state": "created"
+      "status": "dispatched",
+      "state": "dispatched",
+      "outcome": null,
+      "nativeDispatch": "ctx_39512353a5c7",
+      "note": "the native inbox and control UI half of detailed plan Task 12, and the complete Slice B gate; the brief pins the shadcn primitives decision, the keyboard and privacy cases, the restart-to-continuation requirement with a unique completed effect, the usable no-provider path, and the teeth bar for every claimed behaviour."
     },
     {
       "stable": "T-020",
@@ -1173,6 +1189,22 @@
       "verified": true,
       "outcome": "verified by the coordinator with an eight-mutation teeth proof, merged and verified on the destination branch",
       "tip": "2683b8c"
+    },
+    {
+      "task": "T-019",
+      "native": "task_9eb1b8b7ab2f",
+      "dispatch": "ctx_39512353a5c7",
+      "agent": "omp",
+      "provider": "omp",
+      "worktree": "aa54a522-a9af-4cb4-9de7-f1d9a349c0fd::E:/4004/orca/workspaces/trade-journal/codex-ai-native-journal-p19",
+      "base": "14f8ec3aa0451c53c91d9503c2b79425232cdfaf",
+      "purpose": "Phase 19 - native inbox and control UI, and the complete Slice B gate",
+      "state": "dispatched",
+      "candidate": [],
+      "reviewed": false,
+      "integrated": false,
+      "verified": false,
+      "outcome": null
     }
   ],
   "integration": {
