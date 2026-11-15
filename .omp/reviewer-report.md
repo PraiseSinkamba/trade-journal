@@ -10,7 +10,13 @@ documentation-formatting regression is reported below ([FAIL] tag; it does not c
 the repo's `format:check` gate is already red on 74 untouched baseline files, so no green gate flips,
 and the fix is a single `prettier --write`).
 
-### Findings
+PASS — the phase implements the committed plan (`docs/superpowers/plans/ai-native-journal/phase-16.md`)
+and the packet (`docs/orchestration/ai-native-journal/tasks/T-016.md`): a persistent, versioned
+workflow with recorded transition history, compare-and-swap on the expected revision, exact-retry
+replay from the command ledger, a digest-bound command id, a conflict that mutates nothing, the
+transition and its durable effect enqueued in one transaction, an idempotent effect, a job release
+on every transition, a self-report correction, the scope rule, and migration `0007` with the whole
+workflow/experience table set.
 
 - [PASS] Finding 1 (damaged checkpoint) — `apps/web/src/server/intelligence/infrastructure/scheduler.ts:146-172` — `readCheckpoint` now returns a tagged `StoredCheckpoint` (`:141-144`): absent (`raw === null`), unparseable, non-object/array, non-numeric `lastRecordedAt` and missing/invalid `lastSourceId` are **damaged**, while the anchored value `{"lastRecordedAt":0,"lastSourceId":null}` parses as a **valid empty cursor** (`:167-171`), so "anchored and empty" is no longer conflated with "damaged".
 - [PASS] Finding 1 (recovery) — `scheduler.ts:245-253` — `effectiveCheckpoint` re-anchors a damaged cursor to `offeredFrontier` (`:204-234`), never to epoch 0, and only falls back to the empty cursor when the occurrence ledger is empty (nothing was ever consumed — `:250-253`). The frontier is the newest **offered** condition occurrence (`:217-230`), keyed on the occurrence payload's `dueAt`/`sourceId`, which are exactly the source change's `recordedAt`/`id` the handler writes into the checkpoint — so the recovered position matches the poll's own `(recordedAt, id)` ordering (`changesAfterCheckpoint`, `:283-313`).
@@ -35,3 +41,11 @@ and the fix is a single `prettier --write`).
 findings are fixed in production code (not only in the tests), the three new tests fail for the
 reasons they claim, and the boundary, style, schema and dependency gates are clean. The single FAIL
 is a markdown-padding regression in the phase report; run `prettier --write` on it and commit.
+
+| Command | Exit | Result |
+| ------- | ---- | ------ |
+| `pnpm exec vitest run apps/web/tests/intelligence-workflows.test.ts` | 0 | 19 passed |
+| `pnpm exec vitest run apps/web/tests/intelligence-{boundaries,migrations,knowledge-revisions,jobs,worker}.test.ts` | 0 | 92 passed |
+| `pnpm --filter web typecheck` | 0 | clean |
+| `pnpm exec prettier --check <changed files>` | 0 | clean |
+| `pnpm --filter web migrations:check` | 0 | manifest up to date |

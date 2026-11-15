@@ -58,15 +58,15 @@ financial engine, the provider adapters, the book methodology.
 `0007` creates the tables the phase guide allocates to this phase. The tables grouped here form one
 coherent schema, which is what the phase guide allows; their consumers arrive in later phases.
 
-| Table                       | Purpose                                                                             |
-| --------------------------- | ----------------------------------------------------------------------------------- |
-| `intelligence_workflows`    | the durable workflow: definition, version, current revision, status, subject, scope    |
-| `workflow_transitions`      | the transition history: one row per applied revision, unique over (workflow, revision) |
-| `interaction_commands`      | the command ledger: unique command id, payload digest, stored result                  |
-| `intelligence_opportunities`| the engagement queue for Phase 17: unique dedup key, eligibility and expiry indexes  |
-| `intelligence_conversations`| a conversation, independent of any workflow                                          |
-| `intelligence_messages`     | the messages of a conversation, ordered by (conversation, created_at)                  |
-| `workflow_conversations`    | the join between a workflow and a conversation, unique over the pair                  |
+| Table                        | Purpose                                                                                |
+| ---------------------------- | -------------------------------------------------------------------------------------- |
+| `intelligence_workflows`     | the durable workflow: definition, version, current revision, status, subject, scope    |
+| `workflow_transitions`       | the transition history: one row per applied revision, unique over (workflow, revision) |
+| `interaction_commands`       | the command ledger: unique command id, payload digest, stored result                   |
+| `intelligence_opportunities` | the engagement queue for Phase 17: unique dedup key, eligibility and expiry indexes    |
+| `intelligence_conversations` | a conversation, independent of any workflow                                            |
+| `intelligence_messages`      | the messages of a conversation, ordered by (conversation, created_at)                  |
+| `workflow_conversations`     | the join between a workflow and a conversation, unique over the pair                   |
 
 Notes on the constraints:
 
@@ -148,6 +148,8 @@ export const REVIEW_OBSERVATION_VERSION = 1;
 export interface WorkflowEngineDeps {
   db: JournalDb;
   jobs: JobStore;
+  /** The experience store port, wired to the SQLite adapter at composition. */
+  store: ExperienceStore;
   clock?: () => number;
 }
 
@@ -172,22 +174,30 @@ export const createWorkflowEngine = (deps: WorkflowEngineDeps): WorkflowEngine;
 ```
 
 `transitionWorkflow` is the authority named by the detailed plan and the coordinator's brief. It
-is bound to the journal and the job store by the factory, exactly like `createScheduler` and
-`createJobStore`.
+is bound to the journal, the job store and the experience store by the factory, exactly like
+`createScheduler` and `createJobStore`.
+
+**The store is a port, not an import.** The repository's own import-boundary rule (`rule 5` of
+`apps/web/tests/intelligence-boundaries.test.ts`) allows a domain to reach a sibling's
+`contracts/` and nothing else; only `composition.ts` may wire a concrete adapter. The engine
+therefore depends on the `ExperienceStore` **port** declared in `contracts/experience.ts` and
+receives the SQLite implementation (`createExperienceStore()` in
+`infrastructure/experience-store.ts`) through its dependencies. The engine reaches no concrete
+adapter, and the boundary rule stays intact without an exemption.
 
 ## The state machine
 
 One neutral review-observation workflow. `running → waiting_for_user → completed | cancelled`, and
 `scheduled → waiting_for_user`.
 
-| From              | Action       | To               | Notes                                                        |
-| ----------------- | ------------ | ---------------- | ------------------------------------------------------------ |
-| `waiting_for_user`| `acknowledge`| `completed`      | the user accepted the observation                             |
-| `waiting_for_user`| `correct`    | `completed`      | the self-report is recorded with the workflow                 |
-| `waiting_for_user`| `defer`      | `scheduled`      | `deferUntil` decides when the workflow wakes up again        |
-| `waiting_for_user`| `cancel`     | `cancelled`      | the user dismissed the workflow                              |
-| `running`         | *(system)*   | `waiting_for_user` | the effect presented the observation to the user           |
-| `scheduled`       | *(system)*   | `waiting_for_user` | the deferred condition cleared                            |
+| From               | Action        | To                 | Notes                                                 |
+| ------------------ | ------------- | ------------------ | ----------------------------------------------------- |
+| `waiting_for_user` | `acknowledge` | `completed`        | the user accepted the observation                     |
+| `waiting_for_user` | `correct`     | `completed`        | the self-report is recorded with the workflow         |
+| `waiting_for_user` | `defer`       | `scheduled`        | `deferUntil` decides when the workflow wakes up again |
+| `waiting_for_user` | `cancel`      | `cancelled`        | the user dismissed the workflow                       |
+| `running`          | _(system)_    | `waiting_for_user` | the effect presented the observation to the user      |
+| `scheduled`        | _(system)_    | `waiting_for_user` | the deferred condition cleared                        |
 
 Any other action from any other status is refused: it is a conflict, and it mutates nothing.
 
@@ -233,16 +243,16 @@ crash:
 - the transition and the enqueue commit together, so a crash between them cannot leave a
   transition without its effect.
 
-| Target status      | Effect job                                             |
-| ------------------ | ------------------------------------------------------ |
-| `running`          | enqueued, available now                                |
-| `scheduled`        | enqueued, available at `deferUntil`                    |
+| Target status      | Effect job                                                 |
+| ------------------ | ---------------------------------------------------------- |
+| `running`          | enqueued, available now                                    |
+| `scheduled`        | enqueued, available at `deferUntil`                        |
 | `waiting_for_user` | **none** — the workflow waits for a human and holds no job |
-| `completed`        | none — terminal                                         |
-| `cancelled`        | none — terminal                                         |
+| `completed`        | none — terminal                                            |
+| `cancelled`        | none — terminal                                            |
 
 Every transition **releases** the workflow's pending jobs first: a job left pending from an
-earlier state is cancelled in the same transaction. A job that is currently *running* is not
+earlier state is cancelled in the same transaction. A job that is currently _running_ is not
 touched — the worker that owns it finishes it.
 
 `applyWorkflowEffect(workflowId, transitionRevision)` applies the effect:
@@ -283,22 +293,22 @@ Each case is listed with the behaviour it proves. Every case must be seen to fai
 production behaviour is deliberately broken, and to pass again after the break is restored; the
 phase report records both results.
 
-| # | Case                                                                                  | Proves                                                        |
-| - | ------------------------------------------------------------------------------------- | ------------------------------------------------------------- |
-| 1 | creates the seven tables the phase owns                                              | the migration runs                                             |
-| 2 | binds the registered checksum of 0007 to the migration source and the ledger          | the manifest is not stale                                      |
-| 3 | upgrades a journal that is at 0006 to the same seven tables                          | the upgrade path                                               |
-| 4 | applies a command and records the transition                                          | the happy path                                                 |
-| 5 | refuses a command whose expected revision is stale and changes nothing               | the CAS                                                        |
-| 6 | returns the stored prior result for the same command id and the same payload          | the exact retry                                                |
-| 7 | refuses the same command id with a different payload and changes nothing             | the digest                                                      |
-| 8 | applies the transition and the effect enqueue in one transaction                      | no half state (a failing enqueue rolls the transition back)    |
-| 9 | keeps the effect pending when the worker crashes and applies it exactly once          | the crash-before-effect case                                   |
-| 10| holds no job while the workflow waits for the user                                    | the waiting workflow is not busy                                |
-| 11| releases the workflow's job when the waiting condition clears                        | the release                                                    |
-| 12| returns a deferred workflow to the user when the deferred job fires                  | scheduled → waiting_for_user                                   |
-| 13| records a correction as a self-report and leaves the financial rows untouched         | the correction is not a financial write                        |
-| 14| refuses a command for a workflow outside the commander's scope                        | the scope rule                                                 |
+| #   | Case                                                                          | Proves                                                      |
+| --- | ----------------------------------------------------------------------------- | ----------------------------------------------------------- |
+| 1   | creates the seven tables the phase owns                                       | the migration runs                                          |
+| 2   | binds the registered checksum of 0007 to the migration source and the ledger  | the manifest is not stale                                   |
+| 3   | upgrades a journal that is at 0006 to the same seven tables                   | the upgrade path                                            |
+| 4   | applies a command and records the transition                                  | the happy path                                              |
+| 5   | refuses a command whose expected revision is stale and changes nothing        | the CAS                                                     |
+| 6   | returns the stored prior result for the same command id and the same payload  | the exact retry                                             |
+| 7   | refuses the same command id with a different payload and changes nothing      | the digest                                                  |
+| 8   | applies the transition and the effect enqueue in one transaction              | no half state (a failing enqueue rolls the transition back) |
+| 9   | keeps the effect pending when the worker crashes and applies it exactly once  | the crash-before-effect case                                |
+| 10  | holds no job while the workflow waits for the user                            | the waiting workflow is not busy                            |
+| 11  | releases the workflow's job when the waiting condition clears                 | the release                                                 |
+| 12  | returns a deferred workflow to the user when the deferred job fires           | scheduled → waiting_for_user                                |
+| 13  | records a correction as a self-report and leaves the financial rows untouched | the correction is not a financial write                     |
+| 14  | refuses a command for a workflow outside the commander's scope                | the scope rule                                              |
 
 ## Checks and stop condition
 

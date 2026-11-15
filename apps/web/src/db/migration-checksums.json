@@ -30,6 +30,11 @@
       "file": "0006-knowledge-scheduling.ts",
       "name": "knowledge-scheduling",
       "checksum": "3ed72f4081e20110c55bbec878914e04cc9515f7b6b2a6466caff94b5529ef28"
+    },
+    "7": {
+      "file": "0007-intelligence-experience.ts",
+      "name": "intelligence-experience",
+      "checksum": "ca51aa7bee573b35261e626332ca4cbb25b3007c9c3ca67258c570f802eb63c3"
     }
   }
 }

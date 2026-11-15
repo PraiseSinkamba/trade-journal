@@ -966,3 +966,231 @@ export const intelligenceSchedules = sqliteTable(
   },
   (table) => [index("intelligence_schedules_next_due_idx").on(table.nextDueAt)],
 );
+
+/**
+ * The workflows (Phase 16).
+ *
+ * One row per workflow the engine drives: what the workflow is (definition
+ * key and version), which subject it acts on, where it is (status) and how
+ * far it has come (revision). `revision` and `definition_version` are
+ * positive counters. `account_id` is null for the workflows that are not
+ * account-bound; it cascades from `accounts`.
+ */
+export const intelligenceWorkflows = sqliteTable(
+  "intelligence_workflows",
+  {
+    id: text("id").primaryKey(),
+    /** The key of the workflow definition. */
+    definitionKey: text("definition_key").notNull(),
+    /** The version of the workflow definition. */
+    definitionVersion: integer("definition_version").notNull(),
+    /** The revision of the workflow state. */
+    revision: integer("revision").notNull(),
+    status: text("status", {
+      enum: ["running", "waiting_for_user", "scheduled", "completed", "cancelled", "failed"],
+    }).notNull(),
+    /** The kind of the subject the workflow acts on. */
+    subjectType: text("subject_type").notNull(),
+    /** The identity of the subject the workflow acts on. */
+    subjectId: text("subject_id").notNull(),
+    /** The account the workflow belongs to; null when it is not account-bound. */
+    accountId: text("account_id").references(() => accounts.id, { onDelete: "cascade" }),
+    /** The evidence the workflow rests on. */
+    evidenceIdsJson: text("evidence_ids_json").notNull().default("[]"),
+    /** What the workflow reported about itself, verbatim. */
+    selfReportJson: text("self_report_json"),
+    /** The instant the workflow is deferred until, in epoch milliseconds. */
+    deferUntil: integer("defer_until"),
+    /** The revision of the effect the workflow produced. */
+    effectRevision: integer("effect_revision").notNull().default(0),
+    createdAt: integer("created_at").notNull(),
+    updatedAt: integer("updated_at").notNull(),
+  },
+  (table) => [
+    index("intelligence_workflows_status_idx").on(table.status, table.updatedAt),
+    index("intelligence_workflows_subject_idx").on(table.subjectType, table.subjectId),
+    index("intelligence_workflows_account_idx").on(table.accountId),
+  ],
+);
+
+/**
+ * The workflow transitions (Phase 16).
+ *
+ * The append-only audit of a workflow: every transition writes a row.
+ * `from_status` is null only for the first transition of a workflow, and the
+ * unique key over (workflow id, revision) makes a repeated transition a
+ * no-op. `action` is the closed set of commands the engine accepts.
+ */
+export const workflowTransitions = sqliteTable(
+  "workflow_transitions",
+  {
+    id: text("id").primaryKey(),
+    /** The workflow the transition belongs to. */
+    workflowId: text("workflow_id")
+      .notNull()
+      .references(() => intelligenceWorkflows.id, { onDelete: "cascade" }),
+    /** The revision the workflow reached with this transition. */
+    revision: integer("revision").notNull(),
+    /** The status the workflow left; null for the first transition. */
+    fromStatus: text("from_status", {
+      enum: ["running", "waiting_for_user", "scheduled", "completed", "cancelled", "failed"],
+    }),
+    /** The status the workflow reached. */
+    toStatus: text("to_status", {
+      enum: ["running", "waiting_for_user", "scheduled", "completed", "cancelled", "failed"],
+    }).notNull(),
+    /** The command that caused the transition. */
+    action: text("action", {
+      enum: ["start", "acknowledge", "correct", "defer", "cancel", "present"],
+    }).notNull(),
+    /** The command that caused the transition, when it was one. */
+    commandId: text("command_id"),
+    /** The digest of the command payload. */
+    payloadDigest: text("payload_digest"),
+    /** The command payload, verbatim. */
+    payloadJson: text("payload_json").notNull(),
+    createdAt: integer("created_at").notNull(),
+  },
+  (table) => [
+    uniqueIndex("workflow_transitions_workflow_revision_unique").on(
+      table.workflowId,
+      table.revision,
+    ),
+    index("workflow_transitions_command_idx").on(table.commandId),
+  ],
+);
+
+/**
+ * The interaction commands (Phase 16).
+ *
+ * The idempotency ledger: the unique key over `command_id` means a retried
+ * command is answered from the stored result instead of being applied twice.
+ */
+export const interactionCommands = sqliteTable(
+  "interaction_commands",
+  {
+    id: text("id").primaryKey(),
+    /** The identifier of the command; unique across the journal. */
+    commandId: text("command_id").notNull(),
+    /** The workflow the command was applied to. */
+    workflowId: text("workflow_id")
+      .notNull()
+      .references(() => intelligenceWorkflows.id, { onDelete: "cascade" }),
+    /** The digest of the command payload. */
+    payloadDigest: text("payload_digest").notNull(),
+    /** The result of the command, verbatim. */
+    resultJson: text("result_json").notNull(),
+    createdAt: integer("created_at").notNull(),
+  },
+  (table) => [uniqueIndex("interaction_commands_command_unique").on(table.commandId)],
+);
+
+/**
+ * The opportunities (Phase 16).
+ *
+ * The things worth telling the user about. The unique key over `dedup_key`
+ * stops the same opportunity from being offered twice, and the status is a
+ * closed set so an offer cannot be silently forgotten.
+ */
+export const intelligenceOpportunities = sqliteTable(
+  "intelligence_opportunities",
+  {
+    id: text("id").primaryKey(),
+    /** The deduplication key of the opportunity. */
+    dedupKey: text("dedup_key").notNull(),
+    /** The kind of the subject the opportunity is about. */
+    subjectType: text("subject_type").notNull(),
+    /** The identity of the subject the opportunity is about. */
+    subjectId: text("subject_id").notNull(),
+    /** The account the opportunity belongs to; null when it is not account-bound. */
+    accountId: text("account_id").references(() => accounts.id, { onDelete: "cascade" }),
+    status: text("status", {
+      enum: ["pending", "eligible", "delivered", "dismissed", "expired", "suppressed"],
+    }).notNull(),
+    /** The instant the opportunity becomes eligible, in epoch milliseconds. */
+    eligibleAt: integer("eligible_at").notNull(),
+    /** The instant the opportunity expires, in epoch milliseconds. */
+    expiresAt: integer("expires_at").notNull(),
+    /** The evidence the opportunity rests on. */
+    evidenceIdsJson: text("evidence_ids_json").notNull().default("[]"),
+    createdAt: integer("created_at").notNull(),
+    updatedAt: integer("updated_at").notNull(),
+  },
+  (table) => [
+    uniqueIndex("intelligence_opportunities_dedup_unique").on(table.dedupKey),
+    index("intelligence_opportunities_eligibility_idx").on(table.status, table.eligibleAt),
+    index("intelligence_opportunities_expiry_idx").on(table.expiresAt),
+    index("intelligence_opportunities_account_idx").on(table.accountId),
+  ],
+);
+
+/**
+ * The conversations (Phase 16).
+ *
+ * The dialogue that belongs to a subject. `status` is a closed set so an
+ * open conversation cannot be mistaken for a closed one.
+ */
+export const intelligenceConversations = sqliteTable(
+  "intelligence_conversations",
+  {
+    id: text("id").primaryKey(),
+    /** The kind of the subject the conversation is about. */
+    subjectType: text("subject_type").notNull(),
+    /** The identity of the subject the conversation is about. */
+    subjectId: text("subject_id").notNull(),
+    /** The account the conversation belongs to; null when it is not account-bound. */
+    accountId: text("account_id").references(() => accounts.id, { onDelete: "cascade" }),
+    status: text("status", { enum: ["open", "closed"] }).notNull(),
+    createdAt: integer("created_at").notNull(),
+    updatedAt: integer("updated_at").notNull(),
+  },
+  (table) => [index("intelligence_conversations_account_idx").on(table.accountId)],
+);
+
+/**
+ * The messages (Phase 16).
+ *
+ * A message belongs to exactly one conversation and cascades with it.
+ */
+export const intelligenceMessages = sqliteTable(
+  "intelligence_messages",
+  {
+    id: text("id").primaryKey(),
+    /** The conversation the message belongs to. */
+    conversationId: text("conversation_id")
+      .notNull()
+      .references(() => intelligenceConversations.id, { onDelete: "cascade" }),
+    /** Who wrote the message. */
+    role: text("role", { enum: ["user", "assistant", "system"] }).notNull(),
+    /** The message, verbatim. */
+    content: text("content").notNull(),
+    createdAt: integer("created_at").notNull(),
+  },
+  (table) => [
+    index("intelligence_messages_conversation_order_idx").on(table.conversationId, table.createdAt),
+  ],
+);
+
+/**
+ * The workflow-to-conversation links (Phase 16).
+ *
+ * A workflow is attached to a conversation at most once: the named unique
+ * index over the pair states that rule.
+ */
+export const workflowConversations = sqliteTable(
+  "workflow_conversations",
+  {
+    /** The workflow the link belongs to. */
+    workflowId: text("workflow_id")
+      .notNull()
+      .references(() => intelligenceWorkflows.id, { onDelete: "cascade" }),
+    /** The conversation the link belongs to. */
+    conversationId: text("conversation_id")
+      .notNull()
+      .references(() => intelligenceConversations.id, { onDelete: "cascade" }),
+    createdAt: integer("created_at").notNull(),
+  },
+  (table) => [
+    uniqueIndex("workflow_conversations_pair_unique").on(table.workflowId, table.conversationId),
+  ],
+);
