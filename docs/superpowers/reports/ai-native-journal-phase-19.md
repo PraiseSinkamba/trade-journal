@@ -2,13 +2,13 @@
 
 Phase guide row 19 · detailed-plan Task 12 · milestone M5 · schema allocation: **None**
 
-|                       |                                                                                                |
-| --------------------- | ---------------------------------------------------------------------------------------------- |
-| Branch                | `codex/ai-native-journal-p19` (child of the feature worktree)                                  |
-| Base                  | `14f8ec3aa0451c53c91d9503c2b79425232cdfaf` (verified feature HEAD)                             |
-| Plan commit           | `f8f0525c11` — "docs: plan the native inbox and the Slice B gate"                              |
-| Implementation commit | `c9849963bb` — "feat: expose controlled intelligence interactions and user settings"                                       |
-| Migrations            | none. `0001`–`0007` are byte-unchanged; no schema, registry or checksum file was touched.      |
+|                       |                                                                                           |
+| --------------------- | ----------------------------------------------------------------------------------------- |
+| Branch                | `codex/ai-native-journal-p19` (child of the feature worktree)                             |
+| Base                  | `14f8ec3aa0451c53c91d9503c2b79425232cdfaf` (verified feature HEAD)                        |
+| Plan commit           | `f8f0525c11` — "docs: plan the native inbox and the Slice B gate"                         |
+| Implementation commit | `c9849963bb` — "feat: expose controlled intelligence interactions and user settings"      |
+| Migrations            | none. `0001`–`0007` are byte-unchanged; no schema, registry or checksum file was touched. |
 
 ## What was built
 
