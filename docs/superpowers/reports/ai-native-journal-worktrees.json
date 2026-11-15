@@ -1,7 +1,7 @@
 {
   "schemaVersion": 1,
   "feature": "ai-native-journal",
-  "updatedAt": "2026-11-15T02:40:21Z",
+  "updatedAt": "2026-11-15T03:11:46Z",
   "owner": "parent OMP coordinator (exclusive owner of this record)",
   "repository": {
     "name": "trade-journal",
@@ -35,8 +35,8 @@
     },
     "featureBranch": "codex/ai-native-journal",
     "featureBootstrapSha": "0a278503fd67c0f9e82138dfecb744f4bfd307ad",
-    "featureHeadSha": "79347f0c8b9365081bf55a0dd0baf3950f253bd2",
-    "featureHeadShaNote": "feature branch HEAD at the Phase 16 integration and the exact base of the Phase 16 worktree; the coordinator record commit advances the branch by one commit",
+    "featureHeadSha": "e62fcf0841660e3b52b830c761330a70222dcaa6",
+    "featureHeadShaNote": "feature branch HEAD at the Phase 16 integration and the exact base of the Phase 17 worktree; the coordinator record commit advances the branch by one commit",
     "featureCheckpointCommits": [
       "0a278503fd67c0f9e82138dfecb744f4bfd307ad",
       "80d53ccb62fda801897852a6f4e5d2aab8b0d58b",
@@ -69,7 +69,8 @@
       "1f23f7bbb6d8f94d9c49030a03feeb528a0ea6cc",
       "e798d517faba85373d38163280ab724202a8090c",
       "96b39b3062ec381f15b2ba00fee143ee8e8d4dce",
-      "79347f0c8b9365081bf55a0dd0baf3950f253bd2"
+      "79347f0c8b9365081bf55a0dd0baf3950f253bd2",
+      "e62fcf0841660e3b52b830c761330a70222dcaa6"
     ],
     "featureBranchNote": "Orca slugified the requested name to codex-ai-native-journal at creation; the coordinator renamed the newly created, exclusively owned branch to the contract-required codex/ai-native-journal. Orca reads the renamed ref live (refs/heads/codex/ai-native-journal). No pre-existing branch was overwritten."
   },
@@ -299,7 +300,7 @@
         "startSha": "96b39b3062ec381f15b2ba00fee143ee8e8d4dce",
         "orcaParentWorktreeId": "aa54a522-a9af-4cb4-9de7-f1d9a349c0fd::E:/4004/orca/workspaces/trade-journal/codex-ai-native-journal",
         "setup": "pnpm install --frozen-lockfile completed in the worker checkout; working tree clean; Node v24.20.0, pnpm 11.0.8; own node_modules and own pnpm virtual store",
-        "state": "the implementation-diff review failed with 2 findings; the phase was reopened and the repair dispatched as ctx_8ea72a69ff8a",
+        "state": "integrated into codex/ai-native-journal at a305aba and verified on the destination branch (destination gate green on the destination branch after the merge: pnpm install --frozen-lockfile, pnpm --filter web typecheck, the core and importers typecheck, pnpm --filter web migrations:check, node scripts/check-licenses.mjs, prettier --check on every merged file and pnpm build all exit 0; pnpm test 109 test files, 1212 tests passed, 152.66s). The worktree, the git worktree registration, the branch and the leftover directory remain until the user requests cleanup.",
         "note": "Phase 16 is the workflow half of detailed plan Task 11: the persistent workflow command and transition engine, with schema allocation 0007. The brief pins the command semantics - CAS on the expected revision, an exact retry returning the stored prior result, the same command id with a different payload conflicting, the transition and the effect job enqueueing in the same transaction, and a waiting workflow releasing its job. It excludes the engagement policy, which is Phase 17. Because the phase guide allocates the opportunities table to Phase 17 with \"Uses opportunities in 0007\" and gives Phase 18 no schema at all, migration 0007 must carry the whole table set of Task 11 even though only the workflow behaviour is implemented here. The independent implementation-diff review returned 2 findings. One is a BLOCK: the new experience domain layer runtime-imported @/db/transaction, whose module-level db singleton opens the journal and runs the migration runner at import time, so importing the domain layer performed a database side effect and bound the domain to the database layer, against the contract review direction of Experience to Contracts only. The other is that definition_key and definition_version were written on every workflow and never read, so a workflow stored under a different definition or version would still have been advanced by review-observation v1 rules. The reviewer confirmed the rest of the phase, including that the CAS conflict, the exact-retry replay, the digest conflict, the transition-plus-enqueue atomicity and the correction-never-writes-financial-rows all have teeth, that migration 0007 registry, manifest and ledger checksums all match, that the DDL and the typed schema agree column for column on all seven tables, and that the eleven lines the worker added to the Phase 14 test are genuinely required because the ledger at version 5 is non-contiguous once 0007 exists."
       }
     ]
@@ -569,12 +570,23 @@
       "wave": 16,
       "branch": "codex/ai-native-journal-p16",
       "deps": ["task_3956a51d9794"],
-      "status": "dispatched",
-      "state": "dispatched",
-      "outcome": null,
+      "status": "completed",
+      "state": "integrated",
+      "outcome": "succeeded",
       "nativeDispatch": "ctx_8ea72a69ff8a",
       "note": "the workflow half of detailed plan Task 11; the brief pins the command digest and CAS semantics, the transition history, the transactional effect scheduling, the exclusion of the engagement policy that belongs to Phase 17, the requirement that migration 0007 carry the whole Task 11 table set, and the teeth bar for every claimed behaviour. The implementation-diff review failed with a BLOCK on the domain layer importing the database at runtime, and a finding that the definition version was written but never read. The coordinator verified both in the code before dispatching the repair. The eleven lines the worker added to the Phase 14 knowledge-revisions test are coordinator-approved scope: the ledger at version 5 is non-contiguous once migration 0007 exists, so that test must drop the 0007 tables too.",
-      "priorDispatch": "ctx_8d5ca1444856"
+      "priorDispatch": "ctx_8d5ca1444856",
+      "commits": [
+        "cee2009",
+        "6f0dd32",
+        "d84150b",
+        "f9b5ff5",
+        "8b3d84d",
+        "a305aba1f5f0f10dc633fe40c44b0b49262c6769",
+        "e62fcf0"
+      ],
+      "verified": "destination gate green on the destination branch after the merge: pnpm install --frozen-lockfile, pnpm --filter web typecheck, the core and importers typecheck, pnpm --filter web migrations:check, node scripts/check-licenses.mjs, prettier --check on every merged file and pnpm build all exit 0; pnpm test 109 test files, 1212 tests passed, 152.66s",
+      "evidence": "the independent implementation-diff review raised 2 findings: the experience domain layer runtime-imported the database module, whose module-level connection opens the journal at import time, and definition_key and definition_version were written but never read. The reviewer confirmed the rest of the phase, including that the CAS conflict, the exact-retry replay, the digest conflict, the transition-plus-enqueue atomicity and the correction-never-writes-financial-rows all have teeth, that migration 0007 registry, manifest and ledger checksums all match, that the DDL and the typed schema agree column for column on all seven tables, and that the eleven lines added to the Phase 14 test are genuinely required because the ledger at version 5 is non-contiguous once 0007 exists. The coordinator verified both defects in the code and then proved the repaired tests have teeth with four mutations of the production plumbing. Evidence: docs/superpowers/plans/ai-native-journal/phase-16.md, docs/superpowers/reports/ai-native-journal-phase-16.md, docs/superpowers/reports/ai-native-journal-integration-16.md"
     },
     {
       "stable": "T-017",
@@ -1026,12 +1038,13 @@
       "worktree": "aa54a522-a9af-4cb4-9de7-f1d9a349c0fd::E:/4004/orca/workspaces/trade-journal/codex-ai-native-journal-p16",
       "base": "96b39b3062ec381f15b2ba00fee143ee8e8d4dce",
       "purpose": "Phase 16 repair - inject the transaction seam so the workflow domain layer imports the database type-only, and validate the workflow definition version before applying a transition",
-      "state": "dispatched",
-      "candidate": [],
+      "state": "completed; the repair injected the transaction seam and made the engine validate the workflow definition version",
+      "candidate": ["f9b5ff5", "8b3d84d"],
       "reviewed": false,
-      "integrated": false,
-      "verified": false,
-      "outcome": null
+      "integrated": true,
+      "verified": true,
+      "outcome": "verified by the coordinator with an independent four-mutation teeth proof, merged and verified on the destination branch",
+      "tip": "8b3d84d"
     }
   ],
   "integration": {
@@ -1380,6 +1393,22 @@
       "review": "one implementation-diff review, then one repair round and one coordinator re-verification; the review found three defects where a schedule could stall silently forever. The coordinator ran an independent six-mutation teeth proof.",
       "note": "no schema change: nothing under apps/web/src/db/ moved and migrations 0001 through 0006 are byte-unchanged. The worker was granted a two-file scope extension - contracts/jobs.ts and infrastructure/worker.ts - because contract review section 5 makes unique (scheduleId, dueAt, version) jobs the restart-safety mechanism, and neither file is owned by any other phase. No dependency and no lockfile change. No push, no pull request and no merge into main.",
       "report": "docs/superpowers/reports/ai-native-journal-integration-15.md"
+    },
+    {
+      "phase": "16",
+      "stable": "T-016",
+      "native": "task_53e2b3da13f7",
+      "branch": "codex/ai-native-journal-p16",
+      "merge": "a305aba1f5f0f10dc633fe40c44b0b49262c6769",
+      "destinationBefore": "cd78d5fcc76d9c61bba8d9f4c486b78de2bec07c",
+      "head": "e62fcf0",
+      "commits": ["cee2009", "6f0dd32", "d84150b", "f9b5ff5", "8b3d84d", "e62fcf0"],
+      "files": 13,
+      "schema": "0007 - intelligence_workflows, workflow_transitions, interaction_commands, intelligence_opportunities, intelligence_conversations, intelligence_messages and workflow_conversations",
+      "verification": "destination gate green on the destination branch after the merge: pnpm install --frozen-lockfile, pnpm --filter web typecheck, the core and importers typecheck, pnpm --filter web migrations:check, node scripts/check-licenses.mjs, prettier --check on every merged file and pnpm build all exit 0; pnpm test 109 test files, 1212 tests passed, 152.66s",
+      "review": "one implementation-diff review, then one repair round and one coordinator re-verification; the review found a BLOCK on the domain layer importing the database at runtime and a finding that the definition version was written but never read. The coordinator ran an independent four-mutation teeth proof.",
+      "note": "migration 0007 carries the whole table set of Task 11 because Phase 17 allocates the opportunities table to it and Phase 18 gets no schema, even though only the workflow behaviour is implemented here. The eleven lines added to the Phase 14 knowledge-revisions test are coordinator-approved scope: the ledger at version 5 is non-contiguous once 0007 exists. No dependency and no lockfile change. No push, no pull request and no merge into main.",
+      "report": "docs/superpowers/reports/ai-native-journal-integration-16.md"
     }
   ],
   "recordShape": "This file is the index and the authoritative stable-to-native task mapping: stable/native task mapping, worktree and dispatch identifiers, and one compact entry per integrated phase. Narrative, findings, deviations and command output live in the per-phase reports under docs/superpowers/reports/. Keep this file compact - one entry per phase, no duplicated prose. Resolve a native task id from taskMap here or from the native task list, never from a chat summary: a transcription slip once named T-019 as T-005, and the near miss was caught because the native task list disagreed with the prose.",
