@@ -10,6 +10,7 @@ import {
   intelligenceWorkflows,
   observationEvidence,
 } from "@/db";
+import { REVIEW_OBSERVATION_DEFINITION } from "@/server/intelligence/contracts/experience";
 
 /**
  * The read model of the interaction routes (Phase 18).
@@ -132,9 +133,17 @@ export const observationOfRevision = (revisionId: string) =>
     .where(eq(observationEvidence.revisionId, revisionId))
     .get()?.observation ?? null;
 
-/** The workflows of the scope that act on the given subjects. */
-export const listWorkflows = (scope: RequestScope, subjectIds: readonly string[]) =>
-  subjectIds.length === 0
+/**
+ * The review workflows of the given observations, oldest first.
+ *
+ * Only the review definition counts: a workflow of another kind that acts on
+ * the same subject is not a review of it. The reviews are not filtered by
+ * scope — a review belongs to its observation, so a scope may not hide it.
+ * The order is the order the reviews were created in: the revision of a
+ * workflow counts its own transitions, not the age of the review.
+ */
+export const listObservationReviews = (observationIds: readonly string[]) =>
+  observationIds.length === 0
     ? []
     : db
         .select()
@@ -142,11 +151,12 @@ export const listWorkflows = (scope: RequestScope, subjectIds: readonly string[]
         .where(
           and(
             eq(intelligenceWorkflows.subjectType, "observation"),
-            inArray(intelligenceWorkflows.subjectId, [...subjectIds]),
-            inScope(intelligenceWorkflows.accountId, scope),
+            eq(intelligenceWorkflows.definitionKey, REVIEW_OBSERVATION_DEFINITION),
+            inArray(intelligenceWorkflows.subjectId, [...observationIds]),
           ),
         )
-        .all();
+        .all()
+        .sort((left, right) => left.createdAt - right.createdAt);
 
 /** One workflow by id. */
 export const findWorkflow = (id: string) =>

@@ -29,6 +29,7 @@ const OBSERVATION = {
   timingQuality: "source_reported",
   recordedAt: 1_700_000_000_000,
   updatedAt: 1_700_000_000_000,
+  reviewState: "unreviewed",
 };
 
 const OPPORTUNITY = {
@@ -254,10 +255,52 @@ it("starts the review of an observation the journal has not asked about", async 
   expect(posted("/api/intelligence/observations")?.body).toEqual({ observationId: "obs-1" });
 });
 
+it("never offers a review of an observation the server says carries one", async () => {
+  routes.set("GET /api/intelligence/opportunities", {
+    status: 200,
+    body: { opportunities: [], intents: [] },
+  });
+
+  for (const reviewState of ["live", "reviewed"]) {
+    routes.set("GET /api/intelligence/observations", {
+      status: 200,
+      body: { observations: [{ ...OBSERVATION, reviewState }], intents: [] },
+    });
+
+    await render(createElement(IntelligenceInbox));
+
+    const reviewButtons = Array.from(container.querySelectorAll("button")).filter(
+      (element) => element.textContent?.trim() === "Review",
+    );
+    expect(reviewButtons).toHaveLength(0);
+    expect(posted("/api/intelligence/observations")).toBeUndefined();
+  }
+});
+
+it("reports the refusal of a second review and refreshes the list", async () => {
+  routes.set("GET /api/intelligence/observations", {
+    status: 200,
+    body: { observations: [OBSERVATION], intents: [] },
+  });
+  routes.set("GET /api/intelligence/opportunities", {
+    status: 200,
+    body: { opportunities: [], intents: [] },
+  });
+  routes.set("POST /api/intelligence/observations", {
+    status: 409,
+    body: { error: "review_already_started" },
+  });
+
+  await render(createElement(IntelligenceInbox));
+  await activate(button("Review"));
+
+  expect(container.textContent).toContain("already under review");
+});
+
 it("shows the review it started and never offers that review again", async () => {
-  // The observation surface serves no intent at all: the server pairs the
-  // first workflow of an observation, so the review the client just started
-  // would never be served. The client must still show it, actionable.
+  // The observation surface serves no intent at all: the read has not
+  // answered yet, so the client must still show the review it started,
+  // actionable.
   routes.set("GET /api/intelligence/observations", {
     status: 200,
     body: { observations: [OBSERVATION], intents: [] },

@@ -258,6 +258,9 @@ describe("the authentication gate", () => {
   it("refuses every route without a session and admits every route with one", async () => {
     seedAccount(ACCOUNT);
     seedObservation("observation-1", ACCOUNT);
+    // The review is started for an observation that carries none: an
+    // observation that already carries a review is refused (Phase 19).
+    seedObservation("observation-2", ACCOUNT);
     const workflowId = openWorkflow(ACCOUNT, "observation-1");
     const opportunity = engageOpportunity(ACCOUNT, "observation-1");
     const target = opportunity.opportunity.id;
@@ -266,7 +269,7 @@ describe("the authentication gate", () => {
       () => getObservations(get("/api/intelligence/observations")),
       () =>
         postObservations(
-          post("/api/intelligence/observations", { observationId: "observation-1" }),
+          post("/api/intelligence/observations", { observationId: "observation-2" }),
         ),
       () => getOpportunities(get("/api/intelligence/opportunities")),
       () =>

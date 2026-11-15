@@ -214,6 +214,18 @@ export const observationReviewRequestSchema = z
  * this module and the server imports it too.
  * ------------------------------------------------------------------------ */
 
+/**
+ * The review state of one observation.
+ *
+ * `unreviewed` — the observation carries no review, so the operator may start
+ * one. `live` — a review is in progress: it waits for the operator, it runs,
+ * or it is deferred. `reviewed` — the operator already gave the review.
+ */
+export const OBSERVATION_REVIEW_STATES = ["unreviewed", "live", "reviewed"] as const;
+
+/** The review state of one observation. */
+export type ObservationReviewState = (typeof OBSERVATION_REVIEW_STATES)[number];
+
 /** The summary of one observation the observation surface serves. */
 export interface ObservationSummary {
   readonly id: string;
@@ -228,6 +240,8 @@ export interface ObservationSummary {
   readonly timingQuality: string;
   readonly recordedAt: number;
   readonly updatedAt: number;
+  /** The review the observation carries, so the client never re-offers one. */
+  readonly reviewState: ObservationReviewState;
 }
 
 /** The summary of one opportunity the opportunity surface serves. */

@@ -10,7 +10,7 @@ import {
   type ObservationsResponse,
   type OpportunitySummary,
 } from "@/lib/intelligence-interactions";
-import { postJson, useApi } from "@/lib/use-api";
+import { ApiError, postJson, useApi } from "@/lib/use-api";
 import { InteractionCard, ObservationFacts } from "./interaction-card";
 
 /**
@@ -39,18 +39,20 @@ export function IntelligenceInbox() {
   /**
    * The observations this client has started a review for.
    *
-   * The server does not serve which observations already carry a review
-   * workflow, so the client keeps the ids for the session: an observation
-   * that was already put up for review is never offered a second review.
+   * The server serves the review state of every observation, so the client
+   * knows after a reload which observations already carry a review. The
+   * session keeps its own list as well: an observation that was already put
+   * up for review is never offered a second review while the session lives.
    */
   const [startedReviews, setStartedReviews] = useState<ReadonlySet<string>>(() => new Set());
   /**
    * The intents the server answered with when a review was started, by
    * intent id.
    *
-   * The server pairs the first workflow of an observation when it serves, so
-   * the review it just started may never be served at all. The client keeps
-   * what it was handed so the operator can act on the review right away.
+   * The server pairs the review that waits for the operator, so the review it
+   * just started is served at the next read. The client keeps what it was
+   * handed so the operator can act on the review right away, before the next
+   * read answers.
    */
   const [localIntents, setLocalIntents] = useState<ReadonlyMap<string, InteractionIntent>>(
     () => new Map(),
@@ -135,7 +137,15 @@ export function IntelligenceInbox() {
       }
       refresh();
     } catch (cause) {
-      setFailure(cause instanceof Error ? cause.message : "Could not start the review.");
+      if (cause instanceof ApiError && cause.status === 409) {
+        // The observation already carries a review: the server refuses a
+        // second one, and the list is refreshed so the operator sees the
+        // review that is live.
+        setFailure("This observation is already under review.");
+        refresh();
+      } else {
+        setFailure(cause instanceof Error ? cause.message : "Could not start the review.");
+      }
     } finally {
       setReviewing(null);
     }
@@ -182,17 +192,24 @@ export function IntelligenceInbox() {
             </CardHeader>
             <CardContent className="space-y-3">
               <ObservationFacts observation={observation} />
-              {/* An observation this client already put up for review is not
-                  offered a second review: the server pairs the first
-                  workflow of an observation, so the new one would never be
-                  served. */}
-              {!startedReviews.has(observation.id) && (
+              {/* The server serves the review the observation carries: an
+                  observation that is under review or already reviewed is not
+                  offered a review again. The session keeps its own list as
+                  well, so a review that was just started is never offered
+                  twice while it is still being read back. */}
+              {observation.reviewState === "unreviewed" && !startedReviews.has(observation.id) && (
                 <Button
                   onClick={() => void startReview(observation)}
                   disabled={reviewing === observation.id}
                 >
                   Review
                 </Button>
+              )}
+              {observation.reviewState === "live" && (
+                <p className="text-xs text-muted-foreground">This observation is being reviewed.</p>
+              )}
+              {observation.reviewState === "reviewed" && (
+                <p className="text-xs text-muted-foreground">This observation was reviewed.</p>
               )}
             </CardContent>
           </Card>

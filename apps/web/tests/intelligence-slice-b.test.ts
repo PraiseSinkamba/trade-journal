@@ -71,6 +71,8 @@ const serverSettings = await import("../src/server/settings");
 const { sessionToken } = await import("../src/server/auth");
 const { GET: getControls, POST: postControls } =
   await import("../src/app/api/intelligence/controls/route");
+const { GET: getObservations, POST: postObservations } =
+  await import("../src/app/api/intelligence/observations/route");
 
 const NOW = 1_800_000_000_000;
 const OWNER = "slice-b-worker";
@@ -241,6 +243,20 @@ const controlsPost = (body: unknown, headers: Record<string, string> = {}) =>
     headers: { "Content-Type": "application/json", Origin: "http://localhost", ...headers },
     body: JSON.stringify(body),
   });
+
+/** The observation surface, as the inbox reads it. */
+const observationsGet = (path: string) => new Request(`http://localhost${path}`);
+
+/** A review the inbox starts, as the inbox posts it. */
+const observationsPost = (body: unknown) =>
+  new Request("http://localhost/api/intelligence/observations", {
+    method: "POST",
+    headers: { "Content-Type": "application/json", Origin: "http://localhost" },
+    body: JSON.stringify(body),
+  });
+
+/** The workflows of the scratch journal. */
+const workflowRows = () => db.select().from(intelligenceWorkflows).all();
 
 beforeEach(() => {
   db.delete(interactionCommands).run();
@@ -529,6 +545,121 @@ describe("the operator's command", () => {
       .get();
     expect(corrected?.status).toBe("completed");
     expect(JSON.parse(corrected!.selfReportJson!).text).toBe("The exit filled at 103, not 102.");
+  });
+});
+
+describe("the observation reviews", () => {
+  it("pairs the review that waits, refuses a second one and leaks no row", async () => {
+    const account = createAccount("acct-review");
+    insertTrade(account);
+    await drain();
+    const observation = observations()[0]!;
+
+    // The inbox starts the review of the observation.
+    const started = await postObservations(observationsPost({ observationId: observation.id }));
+    expect(started.status).toBe(200);
+    const answer = (await started.json()) as {
+      workflowId: string;
+      intent: {
+        kind: string;
+        expectedRevision: number;
+        actions: { action: string; actionId: string }[];
+      } | null;
+    };
+    expect(answer.intent?.kind).toBe("observation-review");
+
+    // The surface serves the review that waits for the operator.
+    const served = await getObservations(observationsGet("/api/intelligence/observations"));
+    expect(served.status).toBe(200);
+    const body = (await served.json()) as {
+      observations: { id: string; reviewState: string }[];
+      intents: { kind: string; workflowId: string }[];
+    };
+    expect(body.intents).toHaveLength(1);
+    expect(body.intents[0]!.workflowId).toBe(answer.workflowId);
+    expect(body.observations).toHaveLength(1);
+    expect(body.observations[0]!.reviewState).toBe("live");
+
+    // Exactly one workflow, and it waits for the operator.
+    expect(workflowRows()).toHaveLength(1);
+    expect(workflowRows()[0]!.status).toBe("waiting_for_user");
+
+    // A second start is refused while the review is live, and writes nothing.
+    const repeated = await postObservations(observationsPost({ observationId: observation.id }));
+    expect(repeated.status).toBe(409);
+    expect(await repeated.json()).toEqual({ error: "review_already_started" });
+    expect(workflowRows()).toHaveLength(1);
+
+    // The operator gives the review.
+    const acknowledge = answer.intent!.actions.find((action) => action.action === "acknowledge")!;
+    const outcome = composition.interactionCommands.apply({
+      actionId: acknowledge.actionId,
+      commandId: "cmd-acknowledge-review",
+      expectedRevision: answer.intent!.expectedRevision,
+      action: "acknowledge",
+    });
+    expect(outcome.status).toBe(200);
+    expect(workflowRows()[0]!.status).toBe("completed");
+
+    // The review is given: the surface serves no intent, the observation
+    // says it was reviewed, and the start is refused again. No row leaked.
+    const after = await getObservations(observationsGet("/api/intelligence/observations"));
+    const afterBody = (await after.json()) as {
+      observations: { id: string; reviewState: string }[];
+      intents: { kind: string }[];
+    };
+    expect(afterBody.intents).toHaveLength(0);
+    expect(afterBody.observations[0]!.reviewState).toBe("reviewed");
+
+    const refused = await postObservations(observationsPost({ observationId: observation.id }));
+    expect(refused.status).toBe(409);
+    expect(await refused.json()).toEqual({ error: "review_already_started" });
+    expect(workflowRows()).toHaveLength(1);
+  });
+
+  it("serves the review that waits after an abandoned one was replaced", async () => {
+    const account = createAccount("acct-replaced-review");
+    insertTrade(account);
+    await drain();
+    const observation = observations()[0]!;
+
+    // The first review is started and then abandoned by the operator.
+    const first = await postObservations(observationsPost({ observationId: observation.id }));
+    expect(first.status).toBe(200);
+    const firstAnswer = (await first.json()) as {
+      workflowId: string;
+      intent: { expectedRevision: number; actions: { action: string; actionId: string }[] } | null;
+    };
+    const cancel = firstAnswer.intent!.actions.find((action) => action.action === "cancel")!;
+    const cancelled = composition.interactionCommands.apply({
+      actionId: cancel.actionId,
+      commandId: "cmd-cancel-review",
+      expectedRevision: firstAnswer.intent!.expectedRevision,
+      action: "cancel",
+    });
+    expect(cancelled.status).toBe(200);
+    expect(workflowRows()[0]!.status).toBe("cancelled");
+
+    // An abandoned review holds nothing: the observation may be reviewed
+    // again, and the new review waits for the operator.
+    const second = await postObservations(observationsPost({ observationId: observation.id }));
+    expect(second.status).toBe(200);
+    const secondAnswer = (await second.json()) as { workflowId: string };
+    expect(secondAnswer.workflowId).not.toBe(firstAnswer.workflowId);
+
+    // The surface serves the review that waits, not the abandoned one.
+    const served = await getObservations(observationsGet("/api/intelligence/observations"));
+    const body = (await served.json()) as {
+      observations: { id: string; reviewState: string }[];
+      intents: { kind: string; workflowId: string }[];
+    };
+    expect(body.intents).toHaveLength(1);
+    expect(body.intents[0]!.workflowId).toBe(secondAnswer.workflowId);
+    expect(body.observations[0]!.reviewState).toBe("live");
+
+    // Exactly one live workflow, and no leaked row.
+    expect(workflowRows().filter((row) => row.status === "waiting_for_user")).toHaveLength(1);
+    expect(workflowRows()).toHaveLength(2);
   });
 });
 
