@@ -150,9 +150,12 @@ One implementation review, per the phase budget. The report is `.omp/reviewer-re
   exists. The coordinator was asked for the ownership to fix it server-side
   (`msg_dc600a06763b`, options A/B/C). What ships now is the client half of the fix, inside this
   phase's ownership: the inbox renders the intent the POST answers, so the review the operator just
-  started is actionable, and it never offers a second review of the same observation. The server-side
-  pairing — serve the observation's review state, pair the actionable workflow, refuse a duplicate
-  start — is a Phase 20 input unless the coordinator grants the ownership.
+  started is actionable, and it never offers a second review of the same observation while the
+  session lives. The residual is named: after a reload the client no longer knows the observation was
+  reviewed, so one more workflow row can still be started for it — the operator does get an
+  actionable review, but the row leaks. The server-side pairing — serve the observation's review
+  state, pair the actionable workflow, refuse a duplicate start — is a Phase 20 input unless the
+  coordinator grants the ownership.
 - The seven MINOR findings — a duplicated background-policy shape, an unreadable success body, two
   producer inputs no caller sets, the whole evidence table read in the consent path, a count that
   counted re-engagements, two switches written in two statements, and two unformatted files — are all

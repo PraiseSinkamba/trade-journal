@@ -254,7 +254,10 @@ What ships now is the client half of the fix, which is inside this phase's owner
   the GET may pair a different workflow of the same observation.
 - **The inbox never offers a second review of the same observation.** The client keeps the ids of
   the observations it put up for review and does not offer "Review" again, so the workflow leak
-  cannot happen through this surface.
+  cannot happen through this surface while the session lives.
+
+The residual is named: after a reload the client no longer knows the observation was reviewed, so one
+more workflow row can still be started for it. The operator gets an actionable review; the row leaks.
 
 The server-side pairing (serve the observation's review state, pair the actionable workflow, refuse
 a duplicate start) stays a Phase 20 input unless the coordinator grants the ownership.
