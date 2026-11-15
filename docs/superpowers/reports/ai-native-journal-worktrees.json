@@ -1,7 +1,7 @@
 {
   "schemaVersion": 1,
   "feature": "ai-native-journal",
-  "updatedAt": "2026-11-15T08:37:31Z",
+  "updatedAt": "2026-11-15T10:09:57Z",
   "owner": "parent OMP coordinator (exclusive owner of this record)",
   "repository": {
     "name": "trade-journal",
@@ -35,8 +35,8 @@
     },
     "featureBranch": "codex/ai-native-journal",
     "featureBootstrapSha": "0a278503fd67c0f9e82138dfecb744f4bfd307ad",
-    "featureHeadSha": "a616a67cf340144e294a607ef048a0c6bcc77a49",
-    "featureHeadShaNote": "feature branch HEAD at the Phase 18 dispatch and the exact base of the Phase 18 worktree; the coordinator record commit advances the branch by one commit",
+    "featureHeadSha": "3dd7ff1ccedb9b95f1eb32d60c6e6974d42a62c4",
+    "featureHeadShaNote": "feature branch HEAD at the Phase 18 integration and the exact base of the Phase 18 worktree; the coordinator record commit advances the branch by one commit",
     "featureCheckpointCommits": [
       "0a278503fd67c0f9e82138dfecb744f4bfd307ad",
       "80d53ccb62fda801897852a6f4e5d2aab8b0d58b",
@@ -74,7 +74,8 @@
       "c4abdfbde237f6bea42fe6fea83c67d3b1c8924b",
       "f4b3eac45e413c5b293baccd6af61edcd3f28e20",
       "1a7c6ba57d7767d74765a5e89ba86c3739e90c39",
-      "a616a67cf340144e294a607ef048a0c6bcc77a49"
+      "a616a67cf340144e294a607ef048a0c6bcc77a49",
+      "3dd7ff1ccedb9b95f1eb32d60c6e6974d42a62c4"
     ],
     "featureBranchNote": "Orca slugified the requested name to codex-ai-native-journal at creation; the coordinator renamed the newly created, exclusively owned branch to the contract-required codex/ai-native-journal. Orca reads the renamed ref live (refs/heads/codex/ai-native-journal). No pre-existing branch was overwritten."
   },
@@ -328,8 +329,8 @@
         "startSha": "a616a67cf340144e294a607ef048a0c6bcc77a49",
         "orcaParentWorktreeId": "aa54a522-a9af-4cb4-9de7-f1d9a349c0fd::E:/4004/orca/workspaces/trade-journal/codex-ai-native-journal",
         "setup": "pnpm install --frozen-lockfile completed in the worker checkout; working tree clean; Node v24.20.0, pnpm 11.0.8; own node_modules and own pnpm virtual store",
-        "state": "dispatched: ctx_a5839c0017ea, worker handle term_d6a75e9d-a2cb-4ade-8fd8-cc9d5bb27b9e",
-        "note": "Phase 18 is the authenticated interaction and control API half of detailed plan Task 12, with schema allocation None. The brief pins the backend only - the React components, shell.tsx and the settings page belong to Phase 19 - and the security rules: mutating routes require same-origin validation, a missing Origin follows an explicit trusted nonbrowser policy rather than accepting arbitrary cross-site requests, no UI command is authorized by its presence in a generated payload alone, and the status codes are fixed at 409 stale revision, 400 invalid input, 401 auth and 403 denied origin or scope. The Ask, Reports, Recap, Critique and Import JSON contracts must stay unchanged."
+        "state": "the implementation-diff review failed with 2 findings; the phase was reopened and the repair dispatched as ctx_ca7bc0dee259",
+        "note": "Phase 18 is the authenticated interaction and control API half of detailed plan Task 12, with schema allocation None. The brief pins the backend only - the React components, shell.tsx and the settings page belong to Phase 19 - and the security rules: mutating routes require same-origin validation, a missing Origin follows an explicit trusted nonbrowser policy rather than accepting arbitrary cross-site requests, no UI command is authorized by its presence in a generated payload alone, and the status codes are fixed at 409 stale revision, 400 invalid input, 401 auth and 403 denied origin or scope. The Ask, Reports, Recap, Critique and Import JSON contracts must stay unchanged. The independent implementation-diff review returned 2 findings. One is a real bug: the observations POST started a review workflow for a superseded or invalidated observation, because findObservation selects by id with no status predicate while the GET surface filters status = active and the route docstring and the phase plan both say one ACTIVE observation. The coordinator confirmed it against the schema and the knowledge store, which set the status to active on insert, invalidated on trade deletion and superseded when a newer revision replaced it. The other is a missing proof rather than a behavioural defect: the revoked-scope refusal for an unknown account has no independent teeth, because the suite exercises it only against an ACCOUNT-BOUND workflow, where the workflow-scope check refuses the same request, so removing the unknown-account check leaves the suite green. The behaviour itself is correct in every reachable case, including a request naming an unknown account against a journal-wide workflow. The coordinator also ran a seven-mutation teeth proof over the phase: six were decisive, each breaking exactly its own test - the foreign-origin refusal, the trusted-nonbrowser policy, the stale-revision check, the action-id consistency check, the purged-workflow refusal and the workflow-scope check - and the seventh was the unknown-account check, which is the finding."
       }
     ]
   },
@@ -650,8 +651,9 @@
       "status": "dispatched",
       "state": "dispatched",
       "outcome": null,
-      "nativeDispatch": "ctx_a5839c0017ea",
-      "note": "the backend route and origin half of detailed plan Task 12; the brief pins the origin policy for mutating routes including the missing-Origin case, the refusal that no payload alone authorizes a command, the fixed status codes, the exclusion of the React components that Phase 19 owns, and the teeth bar for every claimed behaviour."
+      "nativeDispatch": "ctx_ca7bc0dee259",
+      "note": "the backend route and origin half of detailed plan Task 12; the brief pins the origin policy for mutating routes including the missing-Origin case, the refusal that no payload alone authorizes a command, the fixed status codes, the exclusion of the React components that Phase 19 owns, and the teeth bar for every claimed behaviour. The implementation-diff review found a real bug - a review workflow could start for a superseded or invalidated observation - and a missing proof - the revoked scope refusal is only exercised against an account-bound workflow, so a second rule refuses the same request and the suite cannot tell them apart. The coordinator verified both in the code and ran a seven-mutation teeth proof whose sixth mutation was not decisive for exactly that reason.",
+      "priorDispatch": "ctx_a5839c0017ea"
     },
     {
       "stable": "T-019",
@@ -1134,6 +1136,23 @@
       "worktree": "aa54a522-a9af-4cb4-9de7-f1d9a349c0fd::E:/4004/orca/workspaces/trade-journal/codex-ai-native-journal-p18",
       "base": "a616a67cf340144e294a607ef048a0c6bcc77a49",
       "purpose": "Phase 18 - authenticated interaction and control APIs; the backend route and origin half of Task 12, with no schema allocation",
+      "state": "completed; the implementation-diff review failed with 2 findings and the phase was reopened for repair",
+      "candidate": ["3261798", "c0cfb30", "ddbd0db"],
+      "reviewed": true,
+      "integrated": false,
+      "verified": false,
+      "outcome": "candidate superseded by the repair dispatch after the implementation-diff review failed",
+      "tip": "ddbd0db"
+    },
+    {
+      "task": "T-018",
+      "native": "task_ed0e380a3fa9",
+      "dispatch": "ctx_ca7bc0dee259",
+      "agent": "omp",
+      "provider": "omp",
+      "worktree": "aa54a522-a9af-4cb4-9de7-f1d9a349c0fd::E:/4004/orca/workspaces/trade-journal/codex-ai-native-journal-p18",
+      "base": "a616a67",
+      "purpose": "Phase 18 repair - refuse a review of a superseded or invalidated observation, and pin the revoked scope refusal independently with a journal-wide workflow",
       "state": "dispatched",
       "candidate": [],
       "reviewed": false,
