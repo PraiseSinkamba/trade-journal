@@ -107,8 +107,12 @@ const fills = (symbol: string, exit: number, date = "2026-09-15") => [
   },
 ];
 
-/** One active observation of an account, with its evidence link. */
-const seedObservation = (id: string, accountId: string): void => {
+/** One observation of an account, with its evidence link. */
+const seedObservation = (
+  id: string,
+  accountId: string,
+  status: "active" | "superseded" | "invalidated" = "active",
+): void => {
   const evidence = {
     revisionId: `revision-${id}`,
     tradeId: `trade-${id}`,
@@ -134,7 +138,7 @@ const seedObservation = (id: string, accountId: string): void => {
       evaluatorId: "trade.projection-observed",
       evaluatorVersion: "1",
       type: "trade_projection",
-      status: "active",
+      status,
       accountId,
       currency: "EUR",
       netPnl: 10,
@@ -376,6 +380,27 @@ describe("the scope policy", () => {
     expect(commandsOf(workflowId)).toHaveLength(0);
   });
 
+  it("refuses a command that names an unknown account against a journal-wide workflow", async () => {
+    seedAccount(ACCOUNT);
+    // A workflow with no account is journal-wide: the workflow-scope rule
+    // alone would admit it, so only the revoked-scope rule can refuse it.
+    const workflowId = openWorkflow(null);
+    const engine = vi.spyOn(workflowEngine, "transitionWorkflow");
+
+    const response = await postCommands(
+      post("/api/intelligence/commands", {
+        ...commandBody(workflowId, "acknowledge"),
+        scope: ["ghost"],
+      }),
+    );
+
+    expect(response.status).toBe(403);
+    expect(await response.json()).toEqual({ error: "scope_denied" });
+    // The revoked scope is refused before the engine runs, so nothing was written.
+    expect(engine).not.toHaveBeenCalled();
+    expect(commandsOf(workflowId)).toHaveLength(0);
+  });
+
   it("returns only the rows of the scope", async () => {
     seedAccount(ACCOUNT);
     seedAccount(OTHER_ACCOUNT);
@@ -438,6 +463,28 @@ describe("the scope policy", () => {
 
     expect(allowed.status).toBe(200);
     expect(await allowed.json()).toEqual({ kind: "dismissed", scope: "evidence", target });
+  });
+});
+
+describe("the observation reviews", () => {
+  it("refuses to start a review of an observation that is no longer active", async () => {
+    seedAccount(ACCOUNT);
+    seedObservation("observation-invalidated", ACCOUNT, "invalidated");
+    seedObservation("observation-superseded", ACCOUNT, "superseded");
+    const engine = vi.spyOn(workflowEngine, "startWorkflow");
+
+    for (const observationId of ["observation-invalidated", "observation-superseded"]) {
+      const response = await postObservations(
+        post("/api/intelligence/observations", { observationId }),
+      );
+
+      expect(response.status).toBe(400);
+      expect(await response.json()).toEqual({ error: "invalid_request" });
+    }
+
+    // The refusal happens before the workflow is started, so nothing was written.
+    expect(engine).not.toHaveBeenCalled();
+    expect(db.select().from(intelligenceWorkflows).all()).toHaveLength(0);
   });
 });
 

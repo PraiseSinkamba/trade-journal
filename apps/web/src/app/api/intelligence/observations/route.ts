@@ -11,7 +11,7 @@ import {
 } from "@/server/intelligence/composition";
 import {
   evidenceOf,
-  findObservation,
+  findActiveObservation,
   findWorkflow,
   listObservations,
   listWorkflows,
@@ -88,7 +88,9 @@ export const POST = handler(
     const scope = resolveScope(parsed.data.scope);
     if (!scope) return bad("scope_denied", 403);
 
-    const observation = findObservation(parsed.data.observationId);
+    // Only an active observation may be reviewed: a superseded or invalidated
+    // one is refused before any evidence is read and before a workflow starts.
+    const observation = findActiveObservation(parsed.data.observationId);
     if (!observation) return bad("invalid_request", 400);
     if (!scope.accountIds.includes(observation.accountId)) return bad("scope_denied", 403);
 

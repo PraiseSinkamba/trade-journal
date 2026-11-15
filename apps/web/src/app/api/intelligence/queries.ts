@@ -80,10 +80,19 @@ export const listObservations = (scope: RequestScope) =>
     )
     .all();
 
-/** One observation by id. */
-export const findObservation = (id: string) =>
-  db.select().from(intelligenceObservations).where(eq(intelligenceObservations.id, id)).get() ??
-  null;
+/**
+ * The active observation by id.
+ *
+ * Only an active observation may be reviewed: a superseded or invalidated one
+ * is a fact of the past, and a review of it would start a workflow about
+ * something the journal already replaced or withdrew.
+ */
+export const findActiveObservation = (id: string) =>
+  db
+    .select()
+    .from(intelligenceObservations)
+    .where(and(eq(intelligenceObservations.id, id), eq(intelligenceObservations.status, "active")))
+    .get() ?? null;
 
 /**
  * The statement the observation makes, for the operator to read.
@@ -104,7 +113,14 @@ export const evidenceOf = (observationIds: readonly string[]) =>
         .where(inArray(observationEvidence.observationId, [...observationIds]))
         .all();
 
-/** The observation the evidence revision belongs to, when it belongs to one. */
+/**
+ * The observation the evidence revision belongs to, when it belongs to one.
+ *
+ * The lookup is deliberately status-agnostic: the account a revision belongs
+ * to must outlive the observation's lifecycle, so the dismissal of a revision
+ * of a superseded observation stays scoped to that observation's account. Only
+ * a review needs an active observation.
+ */
 export const observationOfRevision = (revisionId: string) =>
   db
     .select({ observation: intelligenceObservations })
