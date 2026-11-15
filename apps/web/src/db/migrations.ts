@@ -5,6 +5,7 @@ import { durableJobs } from "./migrations/0003-durable-jobs.ts";
 import { observations } from "./migrations/0004-observations.ts";
 import { intelligenceRuntime } from "./migrations/0005-intelligence-runtime.ts";
 import { knowledgeScheduling } from "./migrations/0006-knowledge-scheduling.ts";
+import { intelligenceExperience } from "./migrations/0007-intelligence-experience.ts";
 import checksumManifest from "./migration-checksums.json" with { type: "json" };
 
 /**
@@ -100,6 +101,7 @@ const SOURCES: readonly JournalMigrationSource[] = [
   observations,
   intelligenceRuntime,
   knowledgeScheduling,
+  intelligenceExperience,
 ];
 
 let cachedRegistry: readonly JournalMigration[] | undefined;
