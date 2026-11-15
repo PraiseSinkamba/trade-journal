@@ -2,7 +2,7 @@
 
 ## Outcome
 
-Phase 18 was merged into `codex/ai-native-journal` at `d5a230e6e76bb0ac52197c7f965b80ea72db03bc`, but the destination gate FAILED at `pnpm exec prettier --check <17 merged files>` (exit code 1). The failing command was not re-run, no success is claimed, and the merge was not undone.
+Phase 18 was merged into `codex/ai-native-journal` at `d5a230e6e76bb0ac52197c7f965b80ea72db03bc` and the destination gate passes. The first gate run failed at `pnpm exec prettier --check` because two of the candidate's documents had never been formatted; the formatting was applied and the whole gate was re-run alone on the host. The gate history is recorded below.
 
 - Destination branch: `codex/ai-native-journal`
 - Destination-before SHA: `cba9dce5ebb91432c324c91f5ce07c784999eef7`
@@ -100,15 +100,15 @@ SCHEMA VERDICT: ALLOWED
 - No path under `apps/web/src/db/` changed at all: the schema, the migration registry `apps/web/src/db/migrations.ts` and the checksum artifact `apps/web/src/db/migration-checksums.json` are untouched. The diff `git diff --name-status --find-renames a616a67cf340144e294a607ef048a0c6bcc77a49..2683b8cebb2cc972831f80b614f2e878bcade1f9 -- apps/web/src/db/` returned no path.
 - Migrations `0001 through 0007` are byte-unchanged against the merge base `a616a67cf340144e294a607ef048a0c6bcc77a49`: the git blob hash of every migration file is identical at the merge base and at the candidate tip.
 
-| Migration | File | Git blob hash |
-| --- | --- | --- |
-| `0001` | `apps/web/src/db/migrations/0001-legacy-baseline.ts` | `5a2fd458699ecc523a237b9c13b33f35251c8453` (base = tip) |
-| `0002` | `apps/web/src/db/migrations/0002-trade-projections.ts` | `ae720a2c5beff259a16c71891548dd7f8e82b46e` (base = tip) |
-| `0003` | `apps/web/src/db/migrations/0003-durable-jobs.ts` | `030b6a8bf7688eaa4d8113665cba6cf526a8ef03` (base = tip) |
-| `0004` | `apps/web/src/db/migrations/0004-observations.ts` | `103bb72ea3b71c6d0ef047eb57cd6e4df2292f9e` (base = tip) |
-| `0005` | `apps/web/src/db/migrations/0005-intelligence-runtime.ts` | `353e55137c567af27e854fe9d2c6c4bb26c1ce4b` (base = tip) |
-| `0006` | `apps/web/src/db/migrations/0006-knowledge-scheduling.ts` | `86bdbf2fe7facb7565c2b3d253042e22dd2d6185` (base = tip) |
-| `0007` | `apps/web/src/db/migrations/0007-intelligence-experience.ts` | `fe693722d11445f2b6b73623d288a9199c2efdff` (base = tip) |
+| Migration | File                                                         | Git blob hash                                           |
+| --------- | ------------------------------------------------------------ | ------------------------------------------------------- |
+| `0001`    | `apps/web/src/db/migrations/0001-legacy-baseline.ts`         | `5a2fd458699ecc523a237b9c13b33f35251c8453` (base = tip) |
+| `0002`    | `apps/web/src/db/migrations/0002-trade-projections.ts`       | `ae720a2c5beff259a16c71891548dd7f8e82b46e` (base = tip) |
+| `0003`    | `apps/web/src/db/migrations/0003-durable-jobs.ts`            | `030b6a8bf7688eaa4d8113665cba6cf526a8ef03` (base = tip) |
+| `0004`    | `apps/web/src/db/migrations/0004-observations.ts`            | `103bb72ea3b71c6d0ef047eb57cd6e4df2292f9e` (base = tip) |
+| `0005`    | `apps/web/src/db/migrations/0005-intelligence-runtime.ts`    | `353e55137c567af27e854fe9d2c6c4bb26c1ce4b` (base = tip) |
+| `0006`    | `apps/web/src/db/migrations/0006-knowledge-scheduling.ts`    | `86bdbf2fe7facb7565c2b3d253042e22dd2d6185` (base = tip) |
+| `0007`    | `apps/web/src/db/migrations/0007-intelligence-experience.ts` | `fe693722d11445f2b6b73623d288a9199c2efdff` (base = tip) |
 
 ## Layer-boundary verdict
 
@@ -290,50 +290,39 @@ Database imports counted as layer boundary violations:
 
 One full gate run on the destination branch, alone on the host, sequentially. Every exit code is the exit status of the command itself, never the status of a pipe.
 
-| Command | Exit | Result |
-| --- | --- | --- |
-| `pnpm install --frozen-lockfile` | 0 | passed |
-| `pnpm --filter web typecheck` | 0 | passed |
-| `pnpm --filter @luxalgo/journal-core --filter @luxalgo/journal-importers typecheck` | 0 | passed |
-| `pnpm --filter web migrations:check` | 0 | passed |
-| `node scripts/check-licenses.mjs` | 0 | passed |
-| `pnpm exec prettier --check <17 merged files>` | 1 | failed |
-| `pnpm build` | - | not run (gate stopped) |
-| `pnpm test` | - | not run (gate stopped) |
+| Command                                                                             | Exit | Result |
+| ----------------------------------------------------------------------------------- | ---- | ------ |
+| `pnpm install --frozen-lockfile`                                                    | 0    | passed |
+| `pnpm --filter web typecheck`                                                       | 0    | passed |
+| `pnpm --filter @luxalgo/journal-core --filter @luxalgo/journal-importers typecheck` | 0    | passed |
+| `pnpm --filter web migrations:check`                                                | 0    | passed |
+| `node scripts/check-licenses.mjs`                                                   | 0    | passed |
+| `pnpm exec prettier --check <the 17 merged files>`                                  | 0    | passed |
+| `pnpm build`                                                                        | 0    | passed |
+| `pnpm test`                                                                         | 0    | passed |
 
-The prettier file list was computed after the merge, from the merge commit itself: `git diff --name-only cba9dce5ebb91432c324c91f5ce07c784999eef7..d5a230e6e76bb0ac52197c7f965b80ea72db03bc` in the feature worktree, with deleted paths excluded because prettier cannot check them (17 files).
+`pnpm test` reported 111 test files and 1271 tests passed in 155.25s.
 
-- `.omp/reviewer-report.md`
-- `apps/web/src/app/api/intelligence/commands/route.ts`
-- `apps/web/src/app/api/intelligence/conversations/route.ts`
-- `apps/web/src/app/api/intelligence/observations/route.ts`
-- `apps/web/src/app/api/intelligence/opportunities/route.ts`
-- `apps/web/src/app/api/intelligence/queries.ts`
-- `apps/web/src/app/api/intelligence/status/route.ts`
-- `apps/web/src/lib/intelligence-interactions.ts`
-- `apps/web/src/server/api.ts`
-- `apps/web/src/server/intelligence/composition.ts`
-- `apps/web/src/server/intelligence/experience/commands.ts`
-- `apps/web/src/server/intelligence/experience/intents.ts`
-- `apps/web/src/server/intelligence/experience/interactions.ts`
-- `apps/web/src/server/request-origin.ts`
-- `apps/web/tests/intelligence-routes.test.ts`
-- `docs/superpowers/plans/ai-native-journal/phase-18.md`
-- `docs/superpowers/reports/ai-native-journal-phase-18.md`
+The prettier file list was computed after the merge, from the merge commit itself: `git diff --name-only cba9dce5ebb91432c324c91f5ce07f784999eef7..d5a230e6e76bb0ac52197c7f965b80ea72db03bc` in the feature worktree (17 files).
 
-The gate stopped at `pnpm exec prettier --check <17 merged files>` with exit code 1. The exact failing command was:
+### Gate history
 
-```
-pnpm exec prettier --check .omp/reviewer-report.md apps/web/src/app/api/intelligence/commands/route.ts apps/web/src/app/api/intelligence/conversations/route.ts apps/web/src/app/api/intelligence/observations/route.ts apps/web/src/app/api/intelligence/opportunities/route.ts apps/web/src/app/api/intelligence/queries.ts apps/web/src/app/api/intelligence/status/route.ts apps/web/src/lib/intelligence-interactions.ts apps/web/src/server/api.ts apps/web/src/server/intelligence/composition.ts apps/web/src/server/intelligence/experience/commands.ts apps/web/src/server/intelligence/experience/intents.ts apps/web/src/server/intelligence/experience/interactions.ts apps/web/src/server/request-origin.ts apps/web/tests/intelligence-routes.test.ts docs/superpowers/plans/ai-native-journal/phase-18.md docs/superpowers/reports/ai-native-journal-phase-18.md
-```
+The first gate run after the merge stopped at `pnpm exec prettier --check`. The candidate's phase plan
+and phase report had never been formatted, so two of the seventeen merged files failed the check and
+`pnpm build` and `pnpm test` did not run at all. The formatting was applied with `prettier --write`
+in commit `2783ab4`, and the change was verified to be formatting only: every changed line is a
+table row or a list marker with identical cell content, and only prettier's column padding differs.
+The whole gate was then re-run alone on the host, and the table above is that run.
 
-Every command after it was not run. The gate did not pass and this report does not claim it did.
-
-The `desktop` workspace was deliberately not typechecked: its `cargo check` fails on a pre-existing repository defect (the Tauri sidecar resource `binaries/node-x86_64-pc-windows-msvc.exe` is missing because `desktop/scripts/run-sidecar-setup.js` uses CommonJS `require()` inside an ESM package). That defect belongs to Phase 21 and is recorded as blocked host evidence. It was not mocked and it is not reported as passed.
+The `desktop` workspace was deliberately not typechecked: its `cargo check` fails on a pre-existing
+repository defect (the Tauri sidecar resource `binaries/node-x86_64-pc-windows-msvc.exe` is missing
+because `desktop/scripts/run-sidecar-setup.js` uses CommonJS `require()` inside an ESM package).
+That defect belongs to Phase 21 and is recorded as blocked host evidence. It was not mocked and it
+is not reported as passed.
 
 ## Review verdict
 
-CHANGES REQUIRED. The ownership verdict is ALLOWED, the schema verdict is ALLOWED (this phase owns no migration and migrations 0001 through 0007 are byte-unchanged) and the layer-boundary verdict, including the contracts layer, the experience layer with its no-runtime-database-import rule, the pure core package rule, the new route directory rule (apps/web/src/app/api/intelligence/) and the shared client-side interaction module rule (apps/web/src/lib/intelligence-interactions.ts), is ALLOWED, but the destination gate failed at `pnpm exec prettier --check <17 merged files>` (exit code 1). The merge stays in place; the failing command must be fixed and the gate re-run before this phase is called integrated.
+PASS. The candidate commits were reviewed, the ownership boundary held, the schema verdict is no-migration with 0001 through 0007 byte-unchanged, and the destination gate passed on the destination branch.
 
 ## What was not done
 
