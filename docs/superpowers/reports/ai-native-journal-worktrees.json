@@ -1,7 +1,7 @@
 {
   "schemaVersion": 1,
   "feature": "ai-native-journal",
-  "updatedAt": "2026-11-15T03:11:46Z",
+  "updatedAt": "2026-11-15T03:14:26Z",
   "owner": "parent OMP coordinator (exclusive owner of this record)",
   "repository": {
     "name": "trade-journal",
@@ -35,8 +35,8 @@
     },
     "featureBranch": "codex/ai-native-journal",
     "featureBootstrapSha": "0a278503fd67c0f9e82138dfecb744f4bfd307ad",
-    "featureHeadSha": "e62fcf0841660e3b52b830c761330a70222dcaa6",
-    "featureHeadShaNote": "feature branch HEAD at the Phase 16 integration and the exact base of the Phase 17 worktree; the coordinator record commit advances the branch by one commit",
+    "featureHeadSha": "c4abdfbde237f6bea42fe6fea83c67d3b1c8924b",
+    "featureHeadShaNote": "feature branch HEAD at the Phase 17 dispatch and the exact base of the Phase 17 worktree; the coordinator record commit advances the branch by one commit",
     "featureCheckpointCommits": [
       "0a278503fd67c0f9e82138dfecb744f4bfd307ad",
       "80d53ccb62fda801897852a6f4e5d2aab8b0d58b",
@@ -70,7 +70,8 @@
       "e798d517faba85373d38163280ab724202a8090c",
       "96b39b3062ec381f15b2ba00fee143ee8e8d4dce",
       "79347f0c8b9365081bf55a0dd0baf3950f253bd2",
-      "e62fcf0841660e3b52b830c761330a70222dcaa6"
+      "e62fcf0841660e3b52b830c761330a70222dcaa6",
+      "c4abdfbde237f6bea42fe6fea83c67d3b1c8924b"
     ],
     "featureBranchNote": "Orca slugified the requested name to codex-ai-native-journal at creation; the coordinator renamed the newly created, exclusively owned branch to the contract-required codex/ai-native-journal. Orca reads the renamed ref live (refs/heads/codex/ai-native-journal). No pre-existing branch was overwritten."
   },
@@ -302,6 +303,18 @@
         "setup": "pnpm install --frozen-lockfile completed in the worker checkout; working tree clean; Node v24.20.0, pnpm 11.0.8; own node_modules and own pnpm virtual store",
         "state": "integrated into codex/ai-native-journal at a305aba and verified on the destination branch (destination gate green on the destination branch after the merge: pnpm install --frozen-lockfile, pnpm --filter web typecheck, the core and importers typecheck, pnpm --filter web migrations:check, node scripts/check-licenses.mjs, prettier --check on every merged file and pnpm build all exit 0; pnpm test 109 test files, 1212 tests passed, 152.66s). The worktree, the git worktree registration, the branch and the leftover directory remain until the user requests cleanup.",
         "note": "Phase 16 is the workflow half of detailed plan Task 11: the persistent workflow command and transition engine, with schema allocation 0007. The brief pins the command semantics - CAS on the expected revision, an exact retry returning the stored prior result, the same command id with a different payload conflicting, the transition and the effect job enqueueing in the same transaction, and a waiting workflow releasing its job. It excludes the engagement policy, which is Phase 17. Because the phase guide allocates the opportunities table to Phase 17 with \"Uses opportunities in 0007\" and gives Phase 18 no schema at all, migration 0007 must carry the whole table set of Task 11 even though only the workflow behaviour is implemented here. The independent implementation-diff review returned 2 findings. One is a BLOCK: the new experience domain layer runtime-imported @/db/transaction, whose module-level db singleton opens the journal and runs the migration runner at import time, so importing the domain layer performed a database side effect and bound the domain to the database layer, against the contract review direction of Experience to Contracts only. The other is that definition_key and definition_version were written on every workflow and never read, so a workflow stored under a different definition or version would still have been advanced by review-observation v1 rules. The reviewer confirmed the rest of the phase, including that the CAS conflict, the exact-retry replay, the digest conflict, the transition-plus-enqueue atomicity and the correction-never-writes-financial-rows all have teeth, that migration 0007 registry, manifest and ledger checksums all match, that the DDL and the typed schema agree column for column on all seven tables, and that the eleven lines the worker added to the Phase 14 test are genuinely required because the ledger at version 5 is non-contiguous once 0007 exists."
+      },
+      {
+        "phase": "17",
+        "stableTask": "T-017",
+        "orcaWorktreeId": "aa54a522-a9af-4cb4-9de7-f1d9a349c0fd::E:/4004/orca/workspaces/trade-journal/codex-ai-native-journal-p17",
+        "path": "E:/4004/orca/workspaces/trade-journal/codex-ai-native-journal-p17",
+        "branch": "codex/ai-native-journal-p17",
+        "startSha": "c4abdfbde237f6bea42fe6fea83c67d3b1c8924b",
+        "orcaParentWorktreeId": "aa54a522-a9af-4cb4-9de7-f1d9a349c0fd::E:/4004/orca/workspaces/trade-journal/codex-ai-native-journal",
+        "setup": "pnpm install --frozen-lockfile completed in the worker checkout; working tree clean; Node v24.20.0, pnpm 11.0.8; own node_modules and own pnpm virtual store",
+        "state": "dispatched: ctx_bfedd0f94ac5, worker handle term_d17e127e-ae61-4780-91d8-bbc0b219606b",
+        "note": "Phase 17 is the engagement half of detailed plan Task 11: engagement and opportunity coordination, with schema allocation \"Uses opportunities in 0007\". It owns NO migration - the intelligence_opportunities table already exists from Phase 16. The brief pins the policy - observe historical and baseline material, inbox for an actionable current observation, proactive only when opted in with at most one proactive delivery per day and a 24 hour per-subject cooldown, dismissal suppressing that opportunity or evidence revision, a default seven day expiry, contextual requiring matching UI context, unknown activity using the inbox rather than an invented idle state, and persisted delivery reservations so a retry cannot double-notify - and requires decideEngagement to be PURE."
       }
     ]
   },
@@ -595,8 +608,11 @@
       "wave": 17,
       "branch": "codex/ai-native-journal-p17",
       "deps": ["task_0ca236ab5428"],
-      "status": "pending",
-      "state": "created"
+      "status": "dispatched",
+      "state": "dispatched",
+      "outcome": null,
+      "nativeDispatch": "ctx_bfedd0f94ac5",
+      "note": "the engagement half of detailed plan Task 11; the brief pins the full engagement policy, requires decideEngagement to be pure, forbids a new migration and requires the experience layer to keep its database imports type-only, and carries the teeth bar for every claimed behaviour."
     },
     {
       "stable": "T-018",
@@ -1045,6 +1061,22 @@
       "verified": true,
       "outcome": "verified by the coordinator with an independent four-mutation teeth proof, merged and verified on the destination branch",
       "tip": "8b3d84d"
+    },
+    {
+      "task": "T-017",
+      "native": "task_00be9f35e203",
+      "dispatch": "ctx_bfedd0f94ac5",
+      "agent": "omp",
+      "provider": "omp",
+      "worktree": "aa54a522-a9af-4cb4-9de7-f1d9a349c0fd::E:/4004/orca/workspaces/trade-journal/codex-ai-native-journal-p17",
+      "base": "c4abdfbde237f6bea42fe6fea83c67d3b1c8924b",
+      "purpose": "Phase 17 - engagement and opportunity coordination; the engagement half of Task 11, with no schema allocation",
+      "state": "dispatched",
+      "candidate": [],
+      "reviewed": false,
+      "integrated": false,
+      "verified": false,
+      "outcome": null
     }
   ],
   "integration": {
