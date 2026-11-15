@@ -1,6 +1,6 @@
 import { eq } from "drizzle-orm";
 import { db, settings } from "@/db";
-import type { JournalTx } from "@/db/transaction";
+import { withJournalTransaction, type JournalTx } from "@/db/transaction";
 import { decryptJson, encryptJson } from "./crypto";
 import { EMPTY_DEFAULTS, type JournalDefaults } from "@/lib/journal-defaults";
 import { DEFAULT_CONVERSION, parseCurrencyConversion } from "@/lib/currencies";
@@ -293,4 +293,58 @@ export const setCurrentAccountId = (id: string | null): void => {
 export const setCurrentAccountIdInTx = (tx: JournalTx, id: string | null): void => {
   if (id === null) deleteSettingInTx(tx, "currentAccountId");
   else setSettingInTx(tx, "currentAccountId", id);
+};
+
+/**
+ * The journal's intelligence controls (Phase 19).
+ *
+ * The two switches the operator owns: the journal may raise the insights it
+ * noticed on its own, and it may be paused altogether. They live in the
+ * existing settings table, so there is no schema change and no migration.
+ */
+export interface IntelligenceControls {
+  /** Whether the journal may raise insights on its own. */
+  readonly proactiveOptIn: boolean;
+  /** Whether the journal raises nothing at all. */
+  readonly paused: boolean;
+}
+
+/** The setting key of the proactive opt-in. */
+const INTELLIGENCE_PROACTIVE_OPT_IN_KEY = "intelligenceProactiveOptIn";
+/** The setting key of the pause. */
+const INTELLIGENCE_PAUSED_KEY = "intelligencePaused";
+
+/** The controls as the default journal sees them. */
+export const getIntelligenceControls = (): IntelligenceControls => ({
+  proactiveOptIn: getSetting(INTELLIGENCE_PROACTIVE_OPT_IN_KEY) !== "false",
+  paused: getSetting(INTELLIGENCE_PAUSED_KEY) === "true",
+});
+
+/** The controls as the given transaction sees them. */
+export const getIntelligenceControlsInTx = (tx: JournalTx): IntelligenceControls => ({
+  proactiveOptIn: getSettingInTx(tx, INTELLIGENCE_PROACTIVE_OPT_IN_KEY) !== "false",
+  paused: getSettingInTx(tx, INTELLIGENCE_PAUSED_KEY) === "true",
+});
+
+/**
+ * Writes the switches the patch names and answers the merged state.
+ *
+ * A switch the patch does not name keeps its stored value: a surface that
+ * writes one switch never clears the other.
+ *
+ * Both switches are written in one transaction: a crash between two writes
+ * would leave the journal paused but still opted in, and the operator's
+ * decision is one decision.
+ */
+export const setIntelligenceControls = (patch: {
+  proactiveOptIn?: boolean;
+  paused?: boolean;
+}): IntelligenceControls => {
+  withJournalTransaction((tx) => {
+    if (patch.proactiveOptIn !== undefined)
+      setSettingInTx(tx, INTELLIGENCE_PROACTIVE_OPT_IN_KEY, String(patch.proactiveOptIn));
+    if (patch.paused !== undefined)
+      setSettingInTx(tx, INTELLIGENCE_PAUSED_KEY, String(patch.paused));
+  });
+  return getIntelligenceControls();
 };

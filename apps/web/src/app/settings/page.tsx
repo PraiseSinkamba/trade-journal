@@ -3,6 +3,7 @@
 import { Suspense, useEffect, useRef, useState } from "react";
 import {
   ArrowLeftRight,
+  Brain,
   ChartCandlestick,
   Database,
   Download,
@@ -14,6 +15,7 @@ import { JournalDefaultSettings } from "@/components/journal-default-settings";
 import { ContractMultiplierSettings, TimeZoneSettings } from "@/components/journal-settings";
 import { MarketDataSettings } from "@/components/market-data-settings";
 import { AiSettings } from "@/components/ai-settings";
+import { IntelligenceControls } from "@/components/intelligence/controls";
 import { CurrencySettings } from "@/components/currency-settings";
 import { FilterBar } from "@/components/filter-bar";
 import { Button } from "@/components/ui/button";
@@ -52,6 +54,12 @@ const sections = [
     label: "AI",
     icon: Sparkles,
     description: "Choose your AI provider and manage your model and API key.",
+  },
+  {
+    id: "intelligence",
+    label: "Intelligence",
+    icon: Brain,
+    description: "Control what the journal notices and what it offers you.",
   },
   {
     id: "your-data",
@@ -176,6 +184,7 @@ function Settings() {
                 {id === "currency-conversion" && <CurrencySettings />}
                 {id === "market-data" && <MarketDataSettings />}
                 {id === "ai-settings" && <AiSettings />}
+                {id === "intelligence" && <IntelligenceControls />}
                 {id === "your-data" && (
                   <Card>
                     <CardHeader>

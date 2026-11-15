@@ -1,6 +1,14 @@
-import { eq } from "drizzle-orm";
+import { and, eq, inArray, like } from "drizzle-orm";
 import { db, type JournalDb } from "@/db/connection";
-import { accounts, domainOutbox, intelligenceJobs, tradeProjectionRevisions } from "@/db/schema";
+import {
+  accounts,
+  domainOutbox,
+  intelligenceJobs,
+  intelligenceObservations,
+  intelligenceOpportunities,
+  observationEvidence,
+  tradeProjectionRevisions,
+} from "@/db/schema";
 import { withJournalTransaction, type JournalTx } from "@/db/transaction";
 import { parseTradeChanged, type SourceChange, type TradeChanged } from "@/server/domain-events";
 import {
@@ -8,12 +16,17 @@ import {
   getCurrentProviderConfiguration,
   getAiKey,
   getCompatibleBaseUrl,
+  getIntelligenceControls,
+  getIntelligenceControlsInTx,
   getTimeZone,
 } from "@/server/settings";
 import { newUuid } from "@/server/ids";
 import { runBackgroundAi } from "@/server/ai-runtime";
 import { AiRuntimeError } from "@/server/ai-contracts";
 import {
+  OBSERVATION_EVALUATOR_ID,
+  OBSERVATION_EVALUATOR_VERSION,
+  OBSERVATION_TYPE,
   evaluateTradeProjection,
   tradeProjectionEvidenceSchema,
   type ObservationResult,
@@ -42,7 +55,12 @@ import { createWorkflowEngine } from "./experience/workflows";
 import { createEngagementCoordinator } from "./experience/interactions";
 import { createCommandService } from "./experience/commands";
 import { createExecutionContext } from "./runtime/execution";
-import { ENGAGEMENT_DEFAULTS } from "./contracts/experience";
+import { ENGAGEMENT_DEFAULTS, type RunInTransaction } from "./contracts/experience";
+import {
+  buildOpportunityRequest,
+  type ProducerControls,
+  type ProducerObservation,
+} from "./experience/producer";
 import { persistObservationInTx } from "./infrastructure/knowledge-store";
 import { applySourceChange, nextSourceRevision } from "./infrastructure/knowledge-revisions";
 import { createOutboxDispatcher, type OutboxHandler } from "./infrastructure/outbox";
@@ -194,6 +212,48 @@ export const createTradeObservationHandler = (deps?: {
     }
 
     persistObservationInTx(tx, claim, event, result, now);
+
+    // The observation is read back inside the same transaction, so the
+    // opportunity rests on the row the journal actually stored: a repeated
+    // delivery resolves to the same row, and therefore to the same dedup key.
+    if (result.kind !== "trade_projection") return;
+    const stored = tx
+      .select({
+        id: intelligenceObservations.id,
+        subjectId: intelligenceObservations.subjectId,
+        accountId: intelligenceObservations.accountId,
+        status: intelligenceObservations.status,
+      })
+      .from(intelligenceObservations)
+      .where(
+        and(
+          eq(intelligenceObservations.subjectId, event.aggregate.id),
+          eq(intelligenceObservations.sourceRevision, result.evidence.revisionId),
+          eq(intelligenceObservations.evaluatorId, OBSERVATION_EVALUATOR_ID),
+          eq(intelligenceObservations.evaluatorVersion, OBSERVATION_EVALUATOR_VERSION),
+          eq(intelligenceObservations.type, OBSERVATION_TYPE),
+        ),
+      )
+      .get();
+    if (!stored) return;
+    const evidenceRevisions = tx
+      .select({ revisionId: observationEvidence.revisionId })
+      .from(observationEvidence)
+      .where(eq(observationEvidence.observationId, stored.id))
+      .all()
+      .map((link) => link.revisionId);
+    produceOpportunityInTx(
+      tx,
+      {
+        id: stored.id,
+        subjectId: stored.subjectId,
+        accountId: stored.accountId,
+        status: stored.status,
+        evidenceRevisions,
+      },
+      getIntelligenceControlsInTx(tx),
+      now,
+    );
   },
 });
 
@@ -616,6 +676,117 @@ export const engagementCoordinator = createEngagementCoordinator({
   runInTransaction: withJournalTransaction,
   store: experienceStore,
 });
+
+/**
+ * Raises the opportunity of one persisted observation, in the caller's transaction.
+ *
+ * The engagement runs on the transaction the caller already owns: the worker
+ * holds the write lock on its own connection, so a second connection would
+ * deadlock the journal instead of committing the observation and its
+ * opportunity together.
+ */
+export const produceOpportunityInTx = (
+  tx: JournalTx,
+  observation: ProducerObservation,
+  controls: ProducerControls,
+  now: number,
+): void => {
+  const outcome = buildOpportunityRequest({ observation, controls, now });
+  if (outcome.kind !== "produced") return;
+  const runOnAmbientTransaction: RunInTransaction = <T>(
+    fn: (tx: JournalTx) => T extends PromiseLike<unknown> ? never : T,
+  ): T => {
+    const result: unknown = fn(tx);
+    return result as T;
+  };
+  const coordinator = createEngagementCoordinator({
+    runInTransaction: runOnAmbientTransaction,
+    store: experienceStore,
+    clock: () => now,
+  });
+  coordinator.engage(outcome.request);
+};
+
+/**
+ * Raises the opportunities of the observations the journal already holds.
+ *
+ * The consent path: when the operator grants the opt-in or resumes the
+ * journal, the insights it noticed become visible at once. Every engagement
+ * runs in its own transaction, so one refused opportunity never holds the
+ * rest back.
+ *
+ * Answers how many opportunities this raised: a re-engagement of an
+ * opportunity the journal already holds raises nothing new, so it is not
+ * counted again.
+ */
+export const produceOpportunitiesForActiveObservations = (): number => {
+  const controls = getIntelligenceControls();
+  const now = Date.now();
+  const observations = db
+    .select({
+      id: intelligenceObservations.id,
+      subjectId: intelligenceObservations.subjectId,
+      accountId: intelligenceObservations.accountId,
+      status: intelligenceObservations.status,
+    })
+    .from(intelligenceObservations)
+    .where(eq(intelligenceObservations.status, "active"))
+    .all();
+  if (observations.length === 0) return 0;
+  const scope = observations.map((observation) => observation.id);
+  // Only the links of the observations in scope are read: the whole
+  // evidence table would be loaded and filtered here for nothing.
+  const links = db
+    .select({
+      observationId: observationEvidence.observationId,
+      revisionId: observationEvidence.revisionId,
+    })
+    .from(observationEvidence)
+    .where(inArray(observationEvidence.observationId, scope))
+    .all();
+  const evidenceByObservation = new Map<string, string[]>();
+  for (const link of links) {
+    const revisions = evidenceByObservation.get(link.observationId) ?? [];
+    revisions.push(link.revisionId);
+    evidenceByObservation.set(link.observationId, revisions);
+  }
+  // The opportunities the journal already holds for these observations: an
+  // engagement of one of them raises nothing new.
+  const known = new Set(
+    db
+      .select({ id: intelligenceOpportunities.id })
+      .from(intelligenceOpportunities)
+      .where(
+        and(
+          inArray(intelligenceOpportunities.subjectId, scope),
+          like(intelligenceOpportunities.dedupKey, "opportunity/%"),
+        ),
+      )
+      .all()
+      .map((row) => row.id),
+  );
+  let raised = 0;
+  for (const observation of observations) {
+    const outcome = buildOpportunityRequest({
+      observation: {
+        ...observation,
+        evidenceRevisions: evidenceByObservation.get(observation.id) ?? [],
+      },
+      controls,
+      now,
+    });
+    if (outcome.kind !== "produced") continue;
+    const engagement = engagementCoordinator.engage(outcome.request);
+    // A suppressed engagement raised nothing: the operator dismissed it.
+    if (engagement.decision.outcome === "suppress") continue;
+    // A re-engagement raised nothing new either: the journal already holds
+    // this opportunity.
+    if (known.has(engagement.opportunity.id)) continue;
+    known.add(engagement.opportunity.id);
+    raised += 1;
+  }
+  return raised;
+};
 
 /**
  * The execution context of one interactive request.
