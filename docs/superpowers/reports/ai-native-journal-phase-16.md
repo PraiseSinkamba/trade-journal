@@ -153,13 +153,16 @@ real one from `infrastructure/jobs.ts`, so the effect jobs are real durable jobs
 Base SHA: `96b39b3062ec381f15b2ba00fee143ee8e8d4dce` (the verified feature HEAD this phase started
 from).
 
-| Commit     | Subject                                                 |
-| ---------- | ------------------------------------------------------- |
-| `cee2009d` | `docs: plan the workflow command and transition engine` |
-| (this)     | `feat: persist workflows and coordinate engagement`     |
-| (this)     | `docs: record the Phase 16 workflow engine evidence`    |
+| Commit    | Subject                                                   |
+| --------- | --------------------------------------------------------- |
+| `cee2009d` | `docs: plan the workflow command and transition engine`     |
+| `6f0dd324` | `feat: persist workflows and coordinate engagement`         |
+| (this)    | `docs: record the Phase 16 workflow engine evidence`        |
 
 The plan commit is the first commit of this phase; the implementation and the report follow it.
+The implementation tip — the tree every command above was run against — is
+`6f0dd3240db539c868032141068b235d8aae532e`. The source SHA of the phase is that commit and the
+base SHA is `96b39b3062ec381f15b2ba00fee143ee8e8d4dce`.
 
 `feat: persist workflows and coordinate engagement` is the detailed plan's Task 11 subject. **This
 phase implements the workflow half of Task 11 only** — Phase 17 implements the engagement half
@@ -256,6 +259,10 @@ workflow that never releases its jobs holds one forever.
    path is `running → waiting_for_user → completed | cancelled`, and a re-evaluation of a corrected
    observation is not part of the workflow engine's contract. The recorded self-report is the
    handoff for the phase that consumes it.
+5. **The commit split.** The phase report's first version landed inside the implementation commit
+   (the commit tool builds a commit from the journal of the writes and cannot un-select a file it
+   already wrote). This commit carries the final report, with the implementation tip SHA filled in;
+   the report therefore appears in both commits.
 
 ## Next-phase handoff inputs
 
