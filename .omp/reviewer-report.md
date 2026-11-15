@@ -1,216 +1,251 @@
 ## Verdict: PASS
 
-## Reviewer Report — Phase 17: engagement and opportunity coordination
+## Reviewer Report — Phase 17 repair: the two claim findings
 
 ### PASS
 
-Slice reviewed: Phase 17 implementation plus the amended phase plan, uncommitted working tree against
-base `7120d77ad9` ("docs: plan the engagement and opportunity coordination"). Run 2 of 2; the two
-defects reported by the previous implementation-diff review were re-checked by mutation.
+Slice reviewed: the Phase 17 repair diff, uncommitted working tree against `HEAD` = `9fb76c7`
+("docs: record the Phase 17 engagement evidence"). The coordinator's implementation-diff review
+returned FAIL on two false claims in the phase plan and phase report (Finding 1 BLOCK, Finding 2
+FAIL). The production policy was not wrong. This run judges whether the repair is honest and
+correct.
 
-Files in scope and actually touched (`git status --porcelain`, nothing else is modified or added):
+Both findings are closed, honestly, in **both** documents. The policy is unchanged, the counted set
+is unchanged, the `EXPLAIN QUERY PLAN` output quoted in the report is real and byte-for-byte
+reproducible, and the two new test cases are load-bearing for the counted set. The phase owns no
+migration and none was added. Three non-blocking notes follow (two P3 in the patch, one pre-existing).
 
-- `apps/web/src/server/intelligence/contracts/experience.ts` (extended)
-- `apps/web/src/server/intelligence/experience/engagement.ts` (new)
-- `apps/web/src/server/intelligence/experience/interactions.ts` (new)
-- `apps/web/src/server/intelligence/infrastructure/experience-store.ts` (extended)
-- `apps/web/tests/intelligence-engagement.test.ts` (new)
-- `docs/superpowers/plans/ai-native-journal/phase-17.md` (amended)
+Files in scope and actually touched (`git status --porcelain`, nothing else modified or added):
+
+- `apps/web/src/server/intelligence/infrastructure/experience-store.ts` (modified)
+- `apps/web/tests/intelligence-engagement.test.ts` (modified)
+- `docs/superpowers/plans/ai-native-journal/phase-17.md` (modified)
+- `docs/superpowers/reports/ai-native-journal-phase-17.md` (modified)
 - `.omp/reviewer-report.md` (the review artifact the commit gate reads)
 
-Bound against `docs/orchestration/ai-native-journal/tasks/T-017.md`,
-`docs/superpowers/plans/2026-10-23-ai-native-journal-phases.md:77`,
-`docs/superpowers/plans/2026-10-22-ai-native-journal-modernization.md:484-517`,
-`docs/superpowers/specs/2026-10-22-ai-native-journal-architecture-design.md:807-860`,
-`docs/superpowers/plans/ai-native-journal/phase-17.md`.
+No schema, migration, migration registry, migration checksum, composition, package manifest or
+lockfile change — `git status --porcelain` shows only the four files above, and
+`git diff --stat` is `4 files changed, 235 insertions(+), 40 deletions(-)`.
 
-Checks run by the reviewer (evidence, not claims):
+### Checks run by the reviewer (evidence, not claims)
 
-- `pnpm exec vitest run apps/web/tests/intelligence-engagement.test.ts` — 34 passed, 0 failed.
-- `pnpm exec vitest run apps/web/tests/intelligence-workflows.test.ts apps/web/tests/intelligence-boundaries.test.ts apps/web/tests/intelligence-engagement.test.ts apps/web/tests/intelligence-migrations.test.ts apps/web/tests/intelligence-observations.test.ts` — 99 passed, 0 failed.
-- `pnpm --filter web typecheck` — clean. Root `pnpm typecheck` fails only in `packages/desktop` (Tauri cargo build cannot find `binaries/node-x86_64-pc-windows-msvc.exe`) — a missing local build artifact, unrelated to this slice.
-- `pnpm exec prettier --check` on the six slice files — 2 fail (see Notes). Repo-wide, 78 files already fail at base (e.g. `packages/importers/src/formats/ibkr.ts`, `PRODUCT.md`), so the format gate was already red independently of this slice.
-- `git status --porcelain` / `git diff --stat 7120d77ad9` — no schema, migration, registry, checksum, composition, manifest or lockfile change.
-- Mutation experiments (temporary copies of the coordinator and of the test file, both deleted afterwards; tree verified clean): three deliberate reversions, each re-run against the suite — results below.
+- `git status --porcelain` — exactly the four in-scope files modified. Exit 0.
+- `pnpm exec vitest run apps/web/tests/intelligence-engagement.test.ts` — **38 passed (38)**,
+  1 file, 3.56s. Exit 0.
+- `pnpm exec vitest run apps/web/tests/intelligence-*.test.ts` — **17 files, 293 passed** (291 at
+  HEAD + the 2 new cases). Exit 0.
+- `pnpm --filter web typecheck` — `next typegen` ok, `tsc --noEmit` clean. Exit 0. (The
+  repo-wide `pnpm typecheck` fails in `packages/desktop` on the missing local Tauri binary
+  `binaries/node-x86_64-pc-windows-msvc.exe` — pre-existing, out of scope, not reported as a
+  finding.)
+- `pnpm exec prettier --check` on the four changed files — "All matched files use Prettier code
+  style!". Exit 0.
+- `EXPLAIN QUERY PLAN` reproduced against the journal's own schema with a throwaway vitest file
+  under `apps/web/tests/` (journal module imported after `JOURNAL_DATA_DIR` pointed at an
+  `mkdtempSync` directory, exactly as the engagement suite does). **All six plan blocks in the
+  report reproduce character-for-character.** The throwaway file was deleted; the tree was
+  verified clean afterwards.
+- Mutation experiments on `experience-store.ts` (file backed up outside the repo, mutated, suite
+  re-run, restored; md5 `207ddebf13b08fcc918fe3e2ace2d97e` matches the pre-mutation file and
+  `git diff --stat` is unchanged).
 
 ### Findings
 
-#### Defect 1 — "dismissal does not hold for a consolidated opportunity": fixed
+#### Finding 1 (BLOCK in the coordinator's review) — "a proactive push needs a matching context": CLOSED
 
-- [PASS] `apps/web/src/server/intelligence/experience/interactions.ts:164-166` + `:198-211` — the
-  consolidation candidate set is no longer filtered by a live-status list. The store query
-  (`experience-store.ts:164-180`) filters only on the `opportunity/` namespace, and the coordinator
-  picks between matching rows with `CONSOLIDATION_PRIORITY` (`interactions.ts:159-166`), where
-  `dismissed` and `delivered` outrank the open rows and `expired` comes last. A dismissed row is
-  therefore reused, not duplicated.
-- [PASS] `apps/web/src/server/intelligence/experience/interactions.ts:230-233` — the dismissal lookup
-  resolves the marker under the *reused* row's producer key
-  (`producerKeyOf`, `interactions.ts:136-139`) as well as under the request's own dedup key, so a
-  dismissal recorded for one producer key suppresses the same interaction when a second producer
-  offers it.
-- [PASS] `apps/web/src/server/intelligence/experience/interactions.ts:298-309` + `:237` — the delivery
-  reservation is keyed by the opportunity row id
-  (`deliveryKey`, `contracts/experience.ts:397`), and `alreadyDelivered` checks that same key, so a
-  previously pushed interaction cannot be pushed again through another producer key.
-- [PASS] `apps/web/tests/intelligence-engagement.test.ts:339-357` — the case that pins the behaviour
-  ("holds a dismissal across a capability that offers the same interaction later"): the dismissal
-  suppresses the second producer and writes no delivery row.
-- [PASS] Mutation evidence: reverting the consolidation filter *and* the cross-producer dismissal
-  lookup (status filter re-added, marker lookups reduced to the request's own dedup key) makes
-  `intelligence-engagement.test.ts:329-337` and `:339-357` fail, the second with
-  `expected 'proactive' to be 'suppress'` — the exact reported symptom. The fix is load-bearing and
-  test-pinned.
+- [PASS] `apps/web/src/server/intelligence/experience/engagement.ts:76` — `decideEngagement`
+  returns `contextual` **only** when `input.context` is non-null and its subject matches. With no
+  matching context the function falls through to `:79` (`not_opted_in`), `:82` (`daily_limit`),
+  `:87-92` (`cooldown`) and finally `:94` (`proactive_allowed`). The code does exactly what the
+  contract says: a matching context makes the offer _contextual_ instead; it is not a
+  precondition of a proactive push.
+- [PASS] `apps/web/src/server/intelligence/experience/engagement.ts` is **not in the diff** — the
+  policy's behaviour is untouched. `git status` confirms it is unmodified.
+- [PASS] `docs/superpowers/plans/ai-native-journal/phase-17.md:366-370` — "Proactive delivery needs
+  the opt-in (rule 12), a _known_ idle operator (rules 9–10) and both interruption limits (rules
+  13–14). A matching UI context is **not** one of the requirements: rule 11 decides only that a
+  matching context is served _contextual_. Without a matching context the offer falls through to
+  the opt-in, the daily allowance and the cooldown checks, and can still be delivered
+  proactively." This matches `engagement.ts` line for line.
+- [PASS] `docs/superpowers/reports/ai-native-journal-phase-17.md:25-27` — the Outcome section now
+  reads "a proactive push needs the opt-in, a known idle operator and an unspent day — a matching
+  UI context is not a precondition of a push, it makes the offer contextual instead".
+- [PASS] The plan's rule table (`phase-17.md:344-357`) is unchanged and was re-checked against
+  `engagement.ts`: rules 1–15 in the table are in exactly the order the function evaluates them,
+  with rule 11 (`contextual`) before rules 12–14 (`inbox`) and rule 15 (`proactive`). No
+  contradiction remains between the table and the prose.
+- [PASS] `docs/superpowers/reports/ai-native-journal-phase-17.md:230` quotes the umbrella detailed
+  plan correctly. Verified at
+  `docs/superpowers/plans/2026-10-22-ai-native-journal-modernization.md:515` — "Contextual
+  requires matching UI context; unknown activity uses inbox" — which constrains the _contextual_
+  outcome only and never claimed proactive needs a context. That file is outside the repair's
+  four-file scope and correctly left alone.
+- [PASS] Repo-wide grep of both documents for `context` / `matching context`: every occurrence is
+  either the corrected statement, the rule-11 table row, or a correct description of the
+  `contextual` outcome. **No remaining instance of the false claim.**
 
-#### Defect 2 — "`advance` reports a status it never persisted": fixed
+#### Finding 2 (FAIL in the coordinator's review) — "the scan was bounded by a handful of rows": CLOSED
 
-- [PASS] `apps/web/src/server/intelligence/experience/interactions.ts:271-280` — `advance` uses the
-  boolean returned by the store
-  (`experience-store.ts:144-162`, `result.changes > 0`) and returns the *unchanged* row when the move
-  did not happen, so the reported status is the persisted one.
-- [PASS] `apps/web/src/server/intelligence/experience/interactions.ts:148` — `ENGAGEABLE_STATUSES` is
-  `["pending", "eligible", "suppressed"]`, so `dismissed`, `expired` and `delivered` are terminal and
-  nothing moves a row out of them; the suppress branch (`interactions.ts:324-340`) advances only to
-  `dismissed`/`expired` and otherwise hands back the stored row.
-- [PASS] `apps/web/tests/intelligence-engagement.test.ts:359-370` and `:372-384` — the cases that pin
-  it: the reported status of a terminal opportunity is the stored one, and a delivered opportunity
-  keeps `delivered` when it expires.
-- [PASS] Mutation evidence: (a) reverting `advance` to fabricate the requested status fails
-  `intelligence-engagement.test.ts:372-384` with `expected 'expired' to be 'delivered'`;
-  (b) adding `dismissed`/`expired`/`delivered` to `ENGAGEABLE_STATUSES` fails the same case with the
-  same message. Both reverting experiments confirm the terminal-status rule and the persisted-status
-  rule are genuinely enforced by the suite.
+- [PASS] The claim is corrected in the plan (`phase-17.md:90-101`) and in the report
+  (`ai-native-journal-phase-17.md:55-80`, `:237-258`), both stating the real bound: the table
+  grows by a row per opportunity, per dismissal and per delivery, forever; the namespace prefix
+  `like 'delivery/proactive/%'` cannot seek the `dedup_key` index; the cost of those queries grows
+  with the table.
+- [PASS] The premise is verified, not asserted. `apps/web/src/db/bootstrap.ts:251-252` sets only
+  `journal_mode = WAL` and `foreign_keys = ON`; a repo-wide grep finds `case_sensitive_like` in
+  exactly one place — the new comment in `experience-store.ts` — so it is never set. The journal's
+  pragmas read back at runtime: `journal_mode = wal`, `foreign_keys = 1`,
+  `case_sensitive_like = undefined` (off), SQLite 3.53.2.
+- [PASS] `apps/web/src/db/schema.ts:1120-1123` — the four indexes are
+  `intelligence_opportunities_dedup_unique (dedup_key)`,
+  `intelligence_opportunities_eligibility_idx (status, eligible_at)`,
+  `intelligence_opportunities_expiry_idx (expires_at)` and
+  `intelligence_opportunities_account_idx (account_id)`. The eligibility index the repair relies
+  on **already exists** — no migration, no schema change.
+- [PASS] The report states plainly what it could **not** fix and hands it on: `findOpportunitiesBySubject`
+  still scans the table (no index covers `subject_type`/`subject_id`), and the cooldown read still
+  walks the delivered rows (`ai-native-journal-phase-17.md:73-79`). The next-phase handoff
+  (`:365-370`) carries both to the next migration, which owns the schema. The phase adds no
+  migration, index or schema change — confirmed by `git status`.
 
-#### Contract, policy and defaults
+##### The `EXPLAIN QUERY PLAN` output is real
 
-- [PASS] `apps/web/src/server/intelligence/experience/engagement.ts:1-5`, `:39-95` — the policy is pure:
-  its only import is the contract module, and it reads `EngagementInput` and nothing else (no
-  `Date.now()`, no `Math.random`, no `fetch`, no `process.env`, no database). The same input always
-  yields the same decision.
-- [PASS] `apps/web/src/server/intelligence/experience/engagement.ts:41-94` — the rule order matches
-  the plan's authoritative table (`phase-17.md:330-344`) exactly: dismissed opportunity → dismissed
-  evidence → expired → already delivered → historical → baseline → not actionable → defer → unknown
-  activity → busy → contextual → opt-in → daily limit → cooldown → proactive. The packet's outcomes
-  (`observe | inbox | contextual | proactive | defer | suppress`) are all reachable.
-- [PASS] `apps/web/src/server/intelligence/contracts/experience.ts:382-391` — the defaults are the
-  contract's: 24-hour per-subject cooldown, one proactive delivery per day, seven-day expiry,
-  `neverExpires` for records that do not expire.
-- [PASS] `apps/web/src/server/intelligence/experience/engagement.ts:30`, `:81-92` — the daily-limit
-  and cooldown branches report the next eligibility the plan's table names (start of the next UTC
-  day; end of the cooldown).
-- [PASS] `apps/web/src/server/intelligence/experience/interactions.ts:238-244`,
-  `apps/web/src/server/intelligence/infrastructure/experience-store.ts:182-208` — the daily allowance
-  and the per-subject cooldown read the delivery rows by namespace, and delivery rows are written once
-  and never rewritten, so both counters read immutable history.
+Reproduced against the journal's own schema (real journal database, real drizzle-built SQL from
+the same schema object and the same operators the store uses). Every line of every block in the
+report's "Query plans" section (`ai-native-journal-phase-17.md:260-291`) matches exactly:
 
-#### Domain boundary, storage and scope
+```
+### countProactiveDeliveriesSince — before
+select count(*) from "intelligence_opportunities" where ("intelligence_opportunities"."dedup_key" like ? and "intelligence_opportunities"."eligible_at" >= ?)
+SCAN intelligence_opportunities
 
-- [PASS] `apps/web/src/server/intelligence/contracts/experience.ts:1-8`,
-  `apps/web/src/server/intelligence/experience/engagement.ts:1-5`,
-  `apps/web/src/server/intelligence/experience/interactions.ts:1-15` — the domain layer imports
-  nothing that opens the journal: the only runtime imports are `zod` and `@/server/ids`
-  (`node:crypto`); the `@/db/schema` and `@/db/transaction` imports are type-only.
-- [PASS] `apps/web/tests/intelligence-engagement.test.ts:471-495` — the domain-boundary case is real,
-  not vacuous: it re-imports the domain modules against an empty `JOURNAL_DATA_DIR` and asserts no
-  file was written, which is what a runtime `@/db` import would do.
-- [PASS] `apps/web/src/server/intelligence/experience/interactions.ts:104-111`, `:190` — the
-  transaction seam is injected (`deps.runInTransaction`); the coordinator opens no connection.
-  `intelligence-engagement.test.ts:497-514` pins it.
-- [PASS] `apps/web/src/server/intelligence/infrastructure/experience-store.ts:122-142` — the opportunity
-  reservation keeps the first row: `onConflictDoNothing` on the unique `dedup_key`, then the stored
-  row is read back and `created` is false when the key already existed.
-- [PASS] `git status --porcelain` — no schema, migration, registry, checksum, composition, manifest
-  or lockfile change; the phase adds no migration, exactly as the phase guide allocates it
-  (`2026-10-23-ai-native-journal-phases.md:77`, "Uses opportunities in 0007"). The six opportunity
-  statuses in `apps/web/src/db/schema.ts:1108` already cover everything the phase writes.
-- [PASS] `apps/web/src/server/intelligence/experience/interactions.ts:387-399` — the coordinator writes
-  engagement rows only; `intelligence-engagement.test.ts:452-468` asserts accounts, notes, trades and
-  executions are byte-identical after an engagement and a dismissal.
+### countProactiveDeliveriesSince — after
+select count(*) from "intelligence_opportunities" where ("intelligence_opportunities"."status" = ? and "intelligence_opportunities"."dedup_key" like ? and "intelligence_opportunities"."eligible_at" >= ?)
+SEARCH intelligence_opportunities USING INDEX intelligence_opportunities_eligibility_idx (status=? AND eligible_at>?)
 
-#### Plan ↔ implementation agreement
+### lastProactiveDeliveryAt — before
+select max("eligible_at") from "intelligence_opportunities" where ("intelligence_opportunities"."dedup_key" like ? and "intelligence_opportunities"."subject_type" = ? and "intelligence_opportunities"."subject_id" = ?)
+SEARCH intelligence_opportunities
 
-- [PASS] `docs/superpowers/plans/ai-native-journal/phase-17.md:64-68` (status table) —
-  `apps/web/src/db/schema.ts:1108` and the code agree: opportunity rows use
-  `pending | eligible | delivered | dismissed | expired | suppressed`, delivery rows `delivered`
-  (`interactions.ts:291`), dismissal rows `dismissed` (`interactions.ts:393`).
-- [PASS] `docs/superpowers/plans/ai-native-journal/phase-17.md:376-383` (consolidation rule) ==
-  `interactions.ts:150-166` + `:198-211`: same subject and same evidence set resolve to one row, a
-  dismissed or delivered row is reused, and an expired row comes last.
-- [PASS] `docs/superpowers/plans/ai-native-journal/phase-17.md:384-386` (terminal-status rule) ==
-  `interactions.ts:141-148` + `:271-280`: `dismissed`, `expired` and `delivered` never move, and the
-  coordinator reports the status the store holds.
-- [PASS] `docs/superpowers/plans/ai-native-journal/phase-17.md:419-450` (test table) — every one of the
-  31 planned cases has a case in `apps/web/tests/intelligence-engagement.test.ts` (policy cases at
-  `:130-236`, coordinator cases at `:239-468`, boundary/seam cases at `:471-514`, row-kind cases at
-  `:517-589`), and the file adds two more (`:329-338`, `:530-561`). The plan's demand that each case
-  "must be seen to fail when the production behaviour is deliberately broken"
-  (`phase-17.md:419-421`) is met for the three behaviours this review mutates — the three
-  reverting experiments above each produced a failing case.
+### lastProactiveDeliveryAt — after
+select max("eligible_at") from "intelligence_opportunities" where ("intelligence_opportunities"."status" = ? and "intelligence_opportunities"."dedup_key" like ? and "intelligence_opportunities"."subject_type" = ? and "intelligence_opportunities"."subject_id" = ?)
+SEARCH intelligence_opportunities USING INDEX intelligence_opportunities_eligibility_idx (status=?)
 
-### Notes (non-blocking)
+### findOpportunitiesBySubject — unchanged, handed to the next migration
+select "id", "dedup_key", ... from "intelligence_opportunities" where ("intelligence_opportunities"."subject_type" = ? and "intelligence_opportunities"."subject_id" = ? and "intelligence_opportunities"."dedup_key" like ?)
+SCAN intelligence_opportunities
 
-- [NOTE] `apps/web/src/server/intelligence/experience/interactions.ts:193`, `:202-206`, `:229`,
-  `:234-236` — when the dedup key already has a row, the request's evidence revisions are dropped and
-  the row keeps the evidence it was first recorded with, so a dismissed revision the request *newly*
-  cites is not honoured. Reproduction: engage `producer-1` with evidence `["e1"]` →
-  `dismiss("evidence", "e2")` → engage `producer-1` with evidence `["e1","e2"]` → decision `proactive`,
-  `delivered: true`, and the intent reports `["e1"]`. This is the one place where the plan's wording
-  admits two readings (`phase-17.md:373-375` "a repeated producer key returns the original row"
-  versus `:397-398` "a dismissal of an evidence revision suppresses every opportunity that rests on
-  it"), so it is reported as a clarification for the author rather than a contract breach: the fix is
-  to refresh the row's evidence list (or evaluate the dismissal against the union of stored and
-  requested revisions) when a repeated key is re-engaged.
-- [NOTE] `apps/web/src/server/intelligence/experience/interactions.ts:377-399` — `dismiss` resolves a
-  target to a producer key only through `loadEngagement(target)` (the dedup key) or
-  `opportunityKey(target)`; a target that is the opportunity row id (exposed as `opportunity.id` on
-  `EngagementOutcome.opportunity`, `contracts/experience.ts:275`) or a stored key with no recorded row
-  is recorded under an unreachable marker key and moves nothing, so the dismissal is silently
-  ignored: engage `producer-a` → `dismiss("opportunity", <row id>)` → engage `producer-a` → outcome
-  `proactive`, `delivered: true`. Both forms are outside the documented target vocabulary
-  (`interactions.ts:380-381`), so this is a robustness trap for Phase 18 rather than a breach — worth
-  resolving by normalising the target (or rejecting an unresolvable target) before the API lands.
-- [NOTE] `apps/web/tests/intelligence-engagement.test.ts:367-369` and
-  `docs/superpowers/plans/ai-native-journal/phase-17.md:422-450` — these two slice files fail
-  `prettier --check` (a hand-wrapped `expect` chain and a misaligned markdown table). The repository
-  already fails `pnpm format:check` on 78 files at base, so the gate was red before this slice and
-  this slice does not change that; the two touched files should still be normalised
-  (`pnpm exec prettier --write` on those two paths).
-- [NOTE] `docs/superpowers/reports/ai-native-journal-phase-17.md` still does not exist. The packet
-  requires it for delivery (`T-017.md:73`: changed files, migrations, tests, review findings and
-  resolutions, deviations, next inputs, source/base/tip SHAs), and it is where the plan's
-  deliberate-break evidence (`phase-17.md:419-421`) belongs. The three reversals performed in this
-  review are recorded above and can be transferred into that report.
-- [NOTE] Nothing is committed yet, so the commit-message audit does not apply; the phase plan's
-  conventional subject is the Task 11 suggestion in
-  `2026-10-22-ai-native-journal-modernization.md:515`.
+### the namespace prefix on its own — why the dedup_key index cannot seek it
+select count(*) from "intelligence_opportunities" where "intelligence_opportunities"."dedup_key" like ?
+SCAN intelligence_opportunities USING COVERING INDEX intelligence_opportunities_dedup_unique
+```
+
+The index list read back from `sqlite_master` matches the report's "its four indexes" exactly.
+The report's honest caveats are also accurate: the cooldown read's plan constrains only
+`status=?` (so it walks the delivered rows), and the subject lookup is a plain `SCAN`.
+
+##### The counted set is unchanged by the status filter
+
+- [PASS] Code path. `apps/web/src/server/intelligence/experience/interactions.ts:288-298` — a
+  delivery row is inserted with `dedupKey: deliveryKey(opportunity.id)` and `status: "delivered"`.
+  `contracts/experience.ts:397` — `deliveryKey` is the **only** producer of the
+  `delivery/proactive/` namespace; opportunity rows use `opportunityKey` and dismissal rows use
+  `dismissalKey`. `interactions.ts:148` — `ENGAGEABLE_STATUSES = ["pending", "eligible",
+  "suppressed"]`, and every status move goes through `advanceOpportunity(..., ENGAGEABLE_STATUSES,
+  to, ...)` (`:278` and `:408`), so `delivered` is terminal and no row ever leaves it. The filter
+  therefore adds no row and removes none.
+- [PASS] Empirically, on a journal populated with every row kind the journal writes — opportunity
+  rows in all six statuses (`pending`, `eligible`, `delivered`, `dismissed`, `expired`,
+  `suppressed`), two `delivery/proactive/` rows and one `dismissal/` row — the counted set is
+  identical with and without the filter: `count with status filter = 2`,
+  `count without status filter = 2`; `cooldown with filter ids = ["r7"]`,
+  `cooldown without filter ids = ["r7"]`.
+
+#### The two new test cases are load-bearing for the counted set
+
+- [PASS] `apps/web/tests/intelligence-engagement.test.ts:275-288` — "counts a proactive delivery
+  once and never counts the opportunity it came from". Mutation: drop the namespace predicate
+  `like(dedupKey, "delivery/proactive/%")` from `countProactiveDeliveriesSince` →
+  **1 failed, 37 passed** — `AssertionError: expected 2 to be 1` at
+  `intelligence-engagement.test.ts:285`. This is exactly what the report claims at
+  `ai-native-journal-phase-17.md:303-305` ("Dropping the namespace predicate from the count makes
+  this case fail with 2 instead of 1") — reproduced.
+- [PASS] `apps/web/tests/intelligence-engagement.test.ts:290-303` — "reads the last proactive
+  delivery of a subject and of no other". Mutation: drop the subject filters from
+  `lastProactiveDeliveryAt` → **2 failed, 36 passed**, including this case (it fails because
+  `other` is no longer `null`) and the pre-existing "keeps a subject inside its cooldown and lets
+  another subject through".
+- [PASS] Restored after each mutation; the full suite is green again (38 passed) and the store file
+  is byte-identical to the pre-review state (md5 `207ddebf13b08fcc918fe3e2ace2d97e`).
+- [PASS] No existing case was weakened. The diff adds 30 lines to the test file and changes no
+  existing assertion.
+
+### Notes (non-blocking, none of them a defect)
+
+- [NOTE] `apps/web/src/server/intelligence/infrastructure/experience-store.ts:205-207` — the new
+  comment says "only delivery rows carry the `delivery/proactive/` namespace, **and only delivery
+  rows carry the status**". The second clause is false: an opportunity row also carries the status
+  `delivered` after a proactive delivery (`interactions.ts:315`, `advance("delivered")`), and the
+  patch's own new test asserts exactly that
+  (`intelligence-engagement.test.ts:287`, `expect(opportunityRows()[0]?.status).toBe("delivered")`),
+  as does the report at `ai-native-journal-phase-17.md:302-303`. The conclusion the comment draws
+  is still correct — it rests on the namespace, not on the status — and the report states it
+  correctly, so the code is right and only the comment's supporting clause is imprecise.
+  Priority: P3. Actionable: drop the clause; the namespace sentence already carries the reason.
+- [NOTE] The two new tests do **not** detect removal of the status filter. Mutation: drop
+  `eq(status, "delivered")` from `countProactiveDeliveriesSince` → 38 passed; drop it from
+  `lastProactiveDeliveryAt` → 38 passed. This is expected and correct: the filter is
+  set-preserving by design, so no behavioural test can fail on it, and the new cases pin the
+  counted set, which is what the contract asked for ("two added cases pinning the counted set").
+  The report does not claim otherwise. The consequence is that the only reason the filter exists —
+  making the eligibility index serve the query — is pinned solely by the `EXPLAIN QUERY PLAN`
+  output quoted in the report, which no test asserts. Coverage gap for the orchestrator's
+  decision, not a defect in this patch. Priority: P3.
+- [NOTE] Pre-existing, not introduced by this patch, recorded for completeness:
+  `ai-native-journal-phase-17.md:121` says "The `ExperienceStore` port gained six methods" and then
+  lists seven (`loadEngagement`, `loadOpportunityById`, `insertEngagement`, `advanceOpportunity`,
+  `findOpportunitiesBySubject`, `countProactiveDeliveriesSince`, `lastProactiveDeliveryAt`). The
+  same text is present at `HEAD` (`git show HEAD:docs/superpowers/reports/ai-native-journal-phase-17.md`,
+  line 98), so the repair did not introduce it.
 
 ### Summary
 
-30 PASS, 0 FAIL, 0 BLOCK, 5 notes. Both defects reported by the previous implementation-diff review
-are genuinely fixed and each fix is pinned by a test that fails when the fix is reverted: a dismissal
-now holds across producer keys for the same interaction
-(`interactions.ts:164-211`, `:230-233`) and the coordinator reports the persisted status while
-`dismissed`, `expired` and `delivered` stay terminal (`interactions.ts:148`, `:271-280`). The pure
-policy reproduces the plan's rule order and every contract default, the domain layer opens no
-journal, the transaction seam is injected, the phase adds no schema or migration, the storage
-namespaces keep the three row kinds apart, and every planned acceptance-evidence case has a test. The
-remaining items are a clarification of the evidence-list semantics on a repeated producer key, a
-robustness trap in `dismiss`'s target resolution, two prettier deviations, and the phase report that
-the packet requires at delivery.
+N PASS, 0 FAIL, 0 BLOCK (hard blocks prevent further review)
+
+- Finding 1 (BLOCK) — closed honestly in the plan and the report; the policy is unchanged and the
+  documents now say what `decideEngagement` actually does.
+- Finding 2 (FAIL) — closed honestly: the real bound is stated in both documents, the daily count
+  is served by the **existing** `intelligence_opportunities_eligibility_idx` with no migration, the
+  remaining scans are stated plainly and handed to the next migration, and the quoted query plans
+  reproduce byte-for-byte against the journal's own schema.
+- The counted set is provably unchanged; the two new cases are load-bearing for it; the tree is
+  clean apart from `.omp/reviewer-report.md`.
 
 ### Addendum — post-review amendments
 
-The two robustness notes above were fixed after this PASS, together with the two prettier deviations
-and the missing phase report. Each fix is pinned by a case that fails when the fix is reverted:
+The review's notes were closed after this PASS. The review budget for this repair was one run, so
+no second run was spent; the amendments below were re-verified by the commands listed.
 
-- **Evidence-list semantics.** `dismissedEvidence` now evaluates the dismissal against the union of
-  the row's recorded revisions and the revisions the request cites
-  (`apps/web/src/server/intelligence/experience/interactions.ts:234-241`). Reverting the union fails
-  "honours a dismissal of a revision a later request cites" (1 failed, 35 passed).
-- **`dismiss` target resolution.** An opportunity is now resolved by its stored key, its producer key
-  or its row id (`interactions.ts:383-395`); the row-id form reads through the new
-  `loadOpportunityById` store method. Reverting it fails "honours a dismissal made against the
-  opportunity's row id" (1 failed, 35 passed).
-- The suite is now 36 cases, and `docs/superpowers/reports/ai-native-journal-phase-17.md` exists.
+- **NOTE — the store comment claimed "only delivery rows carry the status".** False: an opportunity
+  row that was delivered also carries `delivered`
+  (`apps/web/src/server/intelligence/infrastructure/experience-store.ts:203-211`). The conclusion
+  the comment supports is still correct — the counted set is decided by the namespace, and every row
+  that carries the `delivery/proactive/` namespace carries the status — so the clause was rewritten
+  to say exactly that. No behaviour changed.
+- **NOTE — the phase report said the port gained "six methods" and listed seven.** Corrected to
+  "seven methods" (`docs/superpowers/reports/ai-native-journal-phase-17.md:121`). The text was
+  pre-existing at `HEAD`; the repair corrects it because it rewrites that report anyway.
+- **NOTE — the new cases cannot detect the removal of the status filter.** By design: the filter is
+  set-preserving, so no behavioural case can fail on it, and the two new cases pin the counted set,
+  which is what the contract asked for. The reason the filter exists — the `EXPLAIN QUERY PLAN`
+  output quoted in the report — is pinned by those plans, not by a test. The report does not claim
+  otherwise and no test was weakened to hide the gap.
 
-These amendments were made after the review budget was spent, so the final diff carries no fresh
-review verdict beyond this PASS.
+Re-verified after the amendments:
+
+| Command                                                               | Exit | Result             |
+| --------------------------------------------------------------------- | ---- | ------------------ |
+| `pnpm exec vitest run apps/web/tests/intelligence-engagement.test.ts` | 0    | 38 passed (38)     |
+| `pnpm --filter web typecheck`                                         | 0    | clean              |
+| `pnpm exec prettier --check <the four changed files and this report>` | 0    | clean              |
+

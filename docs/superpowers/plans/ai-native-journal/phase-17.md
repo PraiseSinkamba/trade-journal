@@ -87,10 +87,20 @@ Every column of every kind, and the rules that keep them apart:
 - **Dismissal rows** name their scope in `subject_type` (`opportunity` or `evidence`) and the target
   in `subject_id`; `expires_at` is `neverExpires`, because a dismissal does not expire — it holds
   until the journal is reset. A dismissal therefore suppresses opportunities that do not exist yet.
-- **The counters scan.** The phase may not add an index, so the daily count and the cooldown read
-  the engagement rows by namespace. The table is journal-local and holds one delivery row per
-  proactive push — at most one per day by the daily rule itself — so the scan is bounded by a
-  handful of rows. A future index belongs to a later migration.
+- **The counters read the delivery rows through the eligibility index, and the table still grows.**
+  The table gains a row per opportunity, per dismissal and per delivery, forever, so the cost of the
+  engagement reads grows with the table. The namespace prefix alone cannot be indexed: SQLite
+  applies its LIKE optimisation to an indexed column only when `case_sensitive_like` is on, and the
+  journal sets only `journal_mode = WAL` and `foreign_keys = ON`, so the `like` on `dedup_key`
+  cannot seek the `dedup_key` index. The two proactive queries therefore also filter on
+  `status = 'delivered'`: a delivery row is written with that status and no move ever takes a row
+  out of it, so the filter does not change what is counted and it lets the existing
+  `intelligence_opportunities_eligibility_idx` on `(status, eligible_at)` serve them. The daily
+  count is then an index range over the day's rows. What remains: the cooldown read still walks the
+  delivered rows, and the subject lookup (`findOpportunitiesBySubject`) still scans the table,
+  because no index covers `subject_type` and `subject_id`. Both costs grow with the table; the
+  index that removes them belongs to the next migration, because this phase owns no migration. The
+  `EXPLAIN QUERY PLAN` output is recorded in the phase report.
 
 ## Contracts
 
@@ -353,7 +363,11 @@ Reading of the contract, stated so the reviewer can check it:
   baseline is a seed, not a live closure, and a historical replay must not flood the operator.
 - **An actionable current observation goes to the inbox** (rules 9–10 and 12–14 are the inbox
   fallback).
-- **Proactive delivery needs the opt-in** (rule 12) and both interruption limits (rules 13–14).
+- **Proactive delivery needs the opt-in** (rule 12), a _known_ idle operator (rules 9–10) and both
+  interruption limits (rules 13–14). A matching UI context is **not** one of the requirements: rule
+  11 decides only that a matching context is served _contextually_. Without a matching context the
+  offer falls through to the opt-in, the daily allowance and the cooldown checks, and can still be
+  delivered proactively.
 - **Unknown activity uses the inbox** (rule 9) and never invents an idle state: a proactive push
   needs a _known_ idle operator, so `busy` and `unknown` both fall back to the inbox. Rules 9–10
   precede rule 11 deliberately: an unknown activity yields the inbox even when the UI context
@@ -456,6 +470,8 @@ phase report records both results.
 | 31  | unknown activity reaches the inbox even when the context matches                    | the precedence of the activity rules                     |
 | 32  | a dismissal made against the opportunity's row id is honoured                       | every handle on an opportunity names the same one        |
 | 33  | a dismissal of a revision a later request cites is honoured                         | a dismissal cannot be slipped past the recorded row      |
+| 34  | the daily allowance counts a proactive delivery once and never the opportunity row  | the counted set of the daily counter                     |
+| 35  | the cooldown read finds the last proactive delivery of a subject and of no other    | the cooldown read still reads the delivery rows          |
 
 ## Checks and stop condition
 

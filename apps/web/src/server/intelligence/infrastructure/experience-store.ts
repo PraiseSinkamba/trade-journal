@@ -200,6 +200,16 @@ export const createExperienceStore = (): ExperienceStore => ({
       .from(intelligenceOpportunities)
       .where(
         and(
+          // A delivery row is written with the status "delivered" and no move
+          // ever takes a row out of that status, so this filter does not
+          // change what is counted: every row that carries the
+          // "delivery/proactive/" namespace carries that status, and the
+          // namespace alone already decides the set. It lets the existing
+          // (status, eligible_at) index serve the query, which the namespace
+          // prefix alone cannot: SQLite only applies its LIKE optimisation
+          // to an indexed column when `case_sensitive_like` is on, and this
+          // journal never sets it.
+          eq(intelligenceOpportunities.status, "delivered"),
           like(intelligenceOpportunities.dedupKey, "delivery/proactive/%"),
           gte(intelligenceOpportunities.eligibleAt, since),
         ),
@@ -214,6 +224,10 @@ export const createExperienceStore = (): ExperienceStore => ({
       .from(intelligenceOpportunities)
       .where(
         and(
+          // The same status filter as the daily count: it does not change
+          // which rows qualify, and it routes the read through the
+          // eligibility index instead of the whole table.
+          eq(intelligenceOpportunities.status, "delivered"),
           like(intelligenceOpportunities.dedupKey, "delivery/proactive/%"),
           eq(intelligenceOpportunities.subjectType, subjectType),
           eq(intelligenceOpportunities.subjectId, subjectId),

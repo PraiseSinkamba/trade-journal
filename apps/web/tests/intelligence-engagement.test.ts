@@ -272,6 +272,36 @@ describe("Phase 17 engagement", () => {
       expect(deliveryRows()).toHaveLength(1);
     });
 
+    it("counts a proactive delivery once and never counts the opportunity it came from", () => {
+      // The delivery row and the opportunity row both carry the status
+      // "delivered", so the daily allowance must count the delivery row only.
+      coordinator.engage(proactiveRequest());
+
+      const store = createExperienceStore();
+      const counted = runInTransaction((tx) =>
+        store.countProactiveDeliveriesSince(tx, Math.floor(NOW / DAY) * DAY),
+      );
+
+      expect(counted).toBe(1);
+      expect(deliveryRows()).toHaveLength(1);
+      expect(opportunityRows()[0]?.status).toBe("delivered");
+    });
+
+    it("reads the last proactive delivery of a subject and of no other", () => {
+      coordinator.engage(proactiveRequest({ dedupKey: "producer-a" }));
+
+      const store = createExperienceStore();
+      const last = runInTransaction((tx) =>
+        store.lastProactiveDeliveryAt(tx, "observation", "observation-1"),
+      );
+      const other = runInTransaction((tx) =>
+        store.lastProactiveDeliveryAt(tx, "observation", "observation-2"),
+      );
+
+      expect(last).toBe(NOW);
+      expect(other).toBeNull();
+    });
+
     it("allows one proactive delivery per day", () => {
       coordinator.engage(proactiveRequest({ dedupKey: "producer-a" }));
       const second = coordinator.engage(
