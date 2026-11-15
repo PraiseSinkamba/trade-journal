@@ -1,6 +1,7 @@
-import { and, eq, inArray, like } from "drizzle-orm";
+import { and, count, eq, gte, inArray, like, max } from "drizzle-orm";
 import {
   intelligenceJobs,
+  intelligenceOpportunities,
   intelligenceWorkflows,
   interactionCommands,
   workflowTransitions,
@@ -12,8 +13,11 @@ import {
   type CommandRow,
   type ExperienceStore,
   type NewCommandRow,
+  type NewOpportunityRow,
   type NewTransitionRow,
   type NewWorkflowRow,
+  type OpportunityRow,
+  type OpportunityStatus,
   type WorkflowRow,
   type WorkflowUpdate,
 } from "../contracts/experience";
@@ -103,5 +107,133 @@ export const createExperienceStore = (): ExperienceStore => ({
 
   releaseWorkflowJobs(tx: JournalTx, workflowId: string, now: number): void {
     releaseJobs(tx, workflowId, now);
+  },
+
+  loadEngagement(tx: JournalTx, dedupKey: string): OpportunityRow | null {
+    return (
+      tx
+        .select()
+        .from(intelligenceOpportunities)
+        .where(eq(intelligenceOpportunities.dedupKey, dedupKey))
+        .get() ?? null
+    );
+  },
+
+  loadOpportunityById(tx: JournalTx, id: string): OpportunityRow | null {
+    return (
+      tx
+        .select()
+        .from(intelligenceOpportunities)
+        .where(
+          and(
+            eq(intelligenceOpportunities.id, id),
+            like(intelligenceOpportunities.dedupKey, "opportunity/%"),
+          ),
+        )
+        .get() ?? null
+    );
+  },
+
+  insertEngagement(
+    tx: JournalTx,
+    row: NewOpportunityRow,
+  ): { row: OpportunityRow; created: boolean } {
+    // The unique dedup key keeps the first row: the same dedup key can never
+    // produce two opportunities.
+    tx.insert(intelligenceOpportunities)
+      .values(row)
+      .onConflictDoNothing({ target: intelligenceOpportunities.dedupKey })
+      .run();
+    const stored =
+      tx
+        .select()
+        .from(intelligenceOpportunities)
+        .where(eq(intelligenceOpportunities.dedupKey, row.dedupKey))
+        .get() ?? null;
+    if (!stored) {
+      throw new Error("An engagement row must be readable after it was stored.");
+    }
+    return { row: stored, created: stored.id === row.id };
+  },
+
+  advanceOpportunity(
+    tx: JournalTx,
+    dedupKey: string,
+    from: readonly OpportunityStatus[],
+    to: OpportunityStatus,
+    now: number,
+  ): boolean {
+    const result = tx
+      .update(intelligenceOpportunities)
+      .set({ status: to, updatedAt: now })
+      .where(
+        and(
+          eq(intelligenceOpportunities.dedupKey, dedupKey),
+          inArray(intelligenceOpportunities.status, [...from]),
+        ),
+      )
+      .run();
+    return result.changes > 0;
+  },
+
+  findOpportunitiesBySubject(
+    tx: JournalTx,
+    subjectType: string,
+    subjectId: string,
+  ): OpportunityRow[] {
+    return tx
+      .select()
+      .from(intelligenceOpportunities)
+      .where(
+        and(
+          eq(intelligenceOpportunities.subjectType, subjectType),
+          eq(intelligenceOpportunities.subjectId, subjectId),
+          like(intelligenceOpportunities.dedupKey, "opportunity/%"),
+        ),
+      )
+      .all();
+  },
+
+  countProactiveDeliveriesSince(tx: JournalTx, since: number): number {
+    const counted = tx
+      .select({ value: count() })
+      .from(intelligenceOpportunities)
+      .where(
+        and(
+          // A delivery row is written with the status "delivered" and no move
+          // ever takes a row out of that status, so this filter does not
+          // change what is counted: every row that carries the
+          // "delivery/proactive/" namespace carries that status, and the
+          // namespace alone already decides the set. It lets the existing
+          // (status, eligible_at) index serve the query, which the namespace
+          // prefix alone cannot: SQLite only applies its LIKE optimisation
+          // to an indexed column when `case_sensitive_like` is on, and this
+          // journal never sets it.
+          eq(intelligenceOpportunities.status, "delivered"),
+          like(intelligenceOpportunities.dedupKey, "delivery/proactive/%"),
+          gte(intelligenceOpportunities.eligibleAt, since),
+        ),
+      )
+      .get();
+    return counted?.value ?? 0;
+  },
+
+  lastProactiveDeliveryAt(tx: JournalTx, subjectType: string, subjectId: string): number | null {
+    const latest = tx
+      .select({ at: max(intelligenceOpportunities.eligibleAt) })
+      .from(intelligenceOpportunities)
+      .where(
+        and(
+          // The same status filter as the daily count: it does not change
+          // which rows qualify, and it routes the read through the
+          // eligibility index instead of the whole table.
+          eq(intelligenceOpportunities.status, "delivered"),
+          like(intelligenceOpportunities.dedupKey, "delivery/proactive/%"),
+          eq(intelligenceOpportunities.subjectType, subjectType),
+          eq(intelligenceOpportunities.subjectId, subjectId),
+        ),
+      )
+      .get();
+    return latest?.at ?? null;
   },
 });
