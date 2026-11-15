@@ -1,7 +1,7 @@
 {
   "schemaVersion": 1,
   "feature": "ai-native-journal",
-  "updatedAt": "2026-11-15T08:34:38Z",
+  "updatedAt": "2026-11-15T08:37:31Z",
   "owner": "parent OMP coordinator (exclusive owner of this record)",
   "repository": {
     "name": "trade-journal",
@@ -35,8 +35,8 @@
     },
     "featureBranch": "codex/ai-native-journal",
     "featureBootstrapSha": "0a278503fd67c0f9e82138dfecb744f4bfd307ad",
-    "featureHeadSha": "1a7c6ba57d7767d74765a5e89ba86c3739e90c39",
-    "featureHeadShaNote": "feature branch HEAD at the Phase 17 integration and the exact base of the Phase 18 worktree; the coordinator record commit advances the branch by one commit",
+    "featureHeadSha": "a616a67cf340144e294a607ef048a0c6bcc77a49",
+    "featureHeadShaNote": "feature branch HEAD at the Phase 18 dispatch and the exact base of the Phase 18 worktree; the coordinator record commit advances the branch by one commit",
     "featureCheckpointCommits": [
       "0a278503fd67c0f9e82138dfecb744f4bfd307ad",
       "80d53ccb62fda801897852a6f4e5d2aab8b0d58b",
@@ -73,7 +73,8 @@
       "e62fcf0841660e3b52b830c761330a70222dcaa6",
       "c4abdfbde237f6bea42fe6fea83c67d3b1c8924b",
       "f4b3eac45e413c5b293baccd6af61edcd3f28e20",
-      "1a7c6ba57d7767d74765a5e89ba86c3739e90c39"
+      "1a7c6ba57d7767d74765a5e89ba86c3739e90c39",
+      "a616a67cf340144e294a607ef048a0c6bcc77a49"
     ],
     "featureBranchNote": "Orca slugified the requested name to codex-ai-native-journal at creation; the coordinator renamed the newly created, exclusively owned branch to the contract-required codex/ai-native-journal. Orca reads the renamed ref live (refs/heads/codex/ai-native-journal). No pre-existing branch was overwritten."
   },
@@ -317,6 +318,18 @@
         "setup": "pnpm install --frozen-lockfile completed in the worker checkout; working tree clean; Node v24.20.0, pnpm 11.0.8; own node_modules and own pnpm virtual store",
         "state": "integrated into codex/ai-native-journal at ca1db69 and verified on the destination branch (destination gate green on the destination branch after the merge: pnpm install --frozen-lockfile, pnpm --filter web typecheck, the core and importers typecheck, pnpm --filter web migrations:check, node scripts/check-licenses.mjs, prettier --check on every merged file and pnpm build all exit 0; pnpm test 110 test files, 1250 tests passed, 144.23s). The worktree, the git worktree registration, the branch and the leftover directory remain until the user requests cleanup.",
         "note": "Phase 17 is the engagement half of detailed plan Task 11: engagement and opportunity coordination, with schema allocation \"Uses opportunities in 0007\". It owns NO migration - the intelligence_opportunities table already exists from Phase 16. The brief pins the policy - observe historical and baseline material, inbox for an actionable current observation, proactive only when opted in with at most one proactive delivery per day and a 24 hour per-subject cooldown, dismissal suppressing that opportunity or evidence revision, a default seven day expiry, contextual requiring matching UI context, unknown activity using the inbox rather than an invented idle state, and persisted delivery reservations so a retry cannot double-notify - and requires decideEngagement to be PURE. The independent implementation-diff review raised 2 findings, both about FALSE CLAIMS rather than production defects. The phase report and the phase plan claimed a proactive push needs a matching UI context, which is false: the policy returns contextual when the context matches and otherwise falls through to the opt-in, the daily allowance and the cooldown checks and can return proactive, and the suite default request carries a null context and is delivered proactively. The detailed plan Task 9 constrains CONTEXTUAL, not PROACTIVE, so the policy is correct and the documents are wrong. The second finding was the claim that the opportunity scan is bounded by a handful of rows: intelligence_opportunities grows by a row per opportunity, dismissal and delivery forever, and the LIKE delivery/proactive/% predicate cannot use the dedup_key index on this journal because SQLite LIKE optimisation on a BINARY column needs case_sensitive_like=ON, which the journal never sets. The coordinator confirmed both against the code, confirmed the policy matches the detailed plan, and found no support in the committed Phase 18 packet or the design for the reviewer forward concern that a push might later require an open UI context."
+      },
+      {
+        "phase": "18",
+        "stableTask": "T-018",
+        "orcaWorktreeId": "aa54a522-a9af-4cb4-9de7-f1d9a349c0fd::E:/4004/orca/workspaces/trade-journal/codex-ai-native-journal-p18",
+        "path": "E:/4004/orca/workspaces/trade-journal/codex-ai-native-journal-p18",
+        "branch": "codex/ai-native-journal-p18",
+        "startSha": "a616a67cf340144e294a607ef048a0c6bcc77a49",
+        "orcaParentWorktreeId": "aa54a522-a9af-4cb4-9de7-f1d9a349c0fd::E:/4004/orca/workspaces/trade-journal/codex-ai-native-journal",
+        "setup": "pnpm install --frozen-lockfile completed in the worker checkout; working tree clean; Node v24.20.0, pnpm 11.0.8; own node_modules and own pnpm virtual store",
+        "state": "dispatched: ctx_a5839c0017ea, worker handle term_d6a75e9d-a2cb-4ade-8fd8-cc9d5bb27b9e",
+        "note": "Phase 18 is the authenticated interaction and control API half of detailed plan Task 12, with schema allocation None. The brief pins the backend only - the React components, shell.tsx and the settings page belong to Phase 19 - and the security rules: mutating routes require same-origin validation, a missing Origin follows an explicit trusted nonbrowser policy rather than accepting arbitrary cross-site requests, no UI command is authorized by its presence in a generated payload alone, and the status codes are fixed at 409 stale revision, 400 invalid input, 401 auth and 403 denied origin or scope. The Ask, Reports, Recap, Critique and Import JSON contracts must stay unchanged."
       }
     ]
   },
@@ -634,8 +647,11 @@
       "wave": 18,
       "branch": "codex/ai-native-journal-p18",
       "deps": ["task_00be9f35e203"],
-      "status": "pending",
-      "state": "created"
+      "status": "dispatched",
+      "state": "dispatched",
+      "outcome": null,
+      "nativeDispatch": "ctx_a5839c0017ea",
+      "note": "the backend route and origin half of detailed plan Task 12; the brief pins the origin policy for mutating routes including the missing-Origin case, the refusal that no payload alone authorizes a command, the fixed status codes, the exclusion of the React components that Phase 19 owns, and the teeth bar for every claimed behaviour."
     },
     {
       "stable": "T-019",
@@ -1108,6 +1124,22 @@
       "verified": true,
       "outcome": "verified by the coordinator with a six-mutation teeth proof and an independent EXPLAIN QUERY PLAN, merged and verified on the destination branch",
       "tip": "35e34cb"
+    },
+    {
+      "task": "T-018",
+      "native": "task_ed0e380a3fa9",
+      "dispatch": "ctx_a5839c0017ea",
+      "agent": "omp",
+      "provider": "omp",
+      "worktree": "aa54a522-a9af-4cb4-9de7-f1d9a349c0fd::E:/4004/orca/workspaces/trade-journal/codex-ai-native-journal-p18",
+      "base": "a616a67cf340144e294a607ef048a0c6bcc77a49",
+      "purpose": "Phase 18 - authenticated interaction and control APIs; the backend route and origin half of Task 12, with no schema allocation",
+      "state": "dispatched",
+      "candidate": [],
+      "reviewed": false,
+      "integrated": false,
+      "verified": false,
+      "outcome": null
     }
   ],
   "integration": {
