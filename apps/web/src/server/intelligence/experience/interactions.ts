@@ -64,7 +64,7 @@ export interface EngageRequest {
 }
 
 /** A structured interaction intent (design §15). */
-export interface InteractionIntent {
+export interface EngagementIntent {
   /** The surface the interaction is offered on. */
   readonly kind: "inbox" | "contextual" | "proactive";
   /** The subject the interaction is about. */
@@ -89,7 +89,7 @@ export interface EngagementOutcome {
    */
   readonly delivered: boolean;
   /** The interaction the operator is offered, or null when none is. */
-  readonly intent: InteractionIntent | null;
+  readonly intent: EngagementIntent | null;
 }
 
 /** The engagement coordinator. */
