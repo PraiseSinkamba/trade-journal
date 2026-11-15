@@ -133,13 +133,15 @@ from).
 | Commit    | Subject                                                  |
 | --------- | -------------------------------------------------------- |
 | `7120d77` | `docs: plan the engagement and opportunity coordination` |
-| (this)    | `feat: persist workflows and coordinate engagement`      |
+| `e2b5e68` | `feat: persist workflows and coordinate engagement`      |
 | (this)    | `docs: record the Phase 17 engagement evidence`          |
 
 The plan commit is the first commit of this phase; the implementation and the report follow it.
 `feat: persist workflows and coordinate engagement` is the detailed plan's Task 11 subject, the same
 subject Phase 16 used; **this phase implements the engagement half of Task 11**, Phase 16 the
-workflow half.
+workflow half. The implementation tip — the tree every command above was run against — is
+`e2b5e6822126e06dd885fd2a2fe9c6517778a712`, and the base SHA is
+`c4abdfbde237f6bea42fe6fea83c67d3b1c8924b`.
 
 ### Acceptance evidence
 
