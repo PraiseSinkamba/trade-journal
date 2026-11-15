@@ -1,9 +1,16 @@
-import { afterAll, beforeEach, describe, expect, it } from "vitest";
-import { mkdtempSync, readFileSync, rmSync } from "node:fs";
+import { afterAll, beforeEach, describe, expect, it, vi } from "vitest";
+import { mkdtempSync, readdirSync, readFileSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { createHash } from "node:crypto";
 import { eq, like } from "drizzle-orm";
+import type { JournalTx } from "../src/db/transaction";
+// The contracts open nothing: they are safe to import statically, before the
+// scratch journal is pointed at.
+import {
+  REVIEW_OBSERVATION_DEFINITION,
+  REVIEW_OBSERVATION_VERSION,
+} from "../src/server/intelligence/contracts/experience";
 
 /**
  * The workflow engine suite (Phase 16).
@@ -98,9 +105,19 @@ const context = (accountIds: readonly string[] = [ACCOUNT]) =>
   });
 
 const jobs = createJobStore(db);
-/** The engine under test. The store is the injected port, not an import. */
+/**
+ * The transaction seam.
+ *
+ * The engine never opens the journal: the caller runs its work in the
+ * caller's transaction, and this seam is the caller's side of it.
+ */
+const runInTransaction = <T>(
+  fn: (tx: JournalTx) => T extends PromiseLike<unknown> ? never : T,
+): T => withJournalTransaction(fn);
+
+/** The engine under test. The store and the transaction are injected ports. */
 const engine = createWorkflowEngine({
-  db,
+  runInTransaction,
   jobs,
   store: createExperienceStore(),
   clock: () => NOW,
@@ -519,7 +536,7 @@ describe("Phase 16 workflow commands", () => {
         },
       };
       const broken = createWorkflowEngine({
-        db,
+        runInTransaction,
         jobs: failing,
         store: createExperienceStore(),
         clock: () => NOW,
@@ -695,6 +712,154 @@ describe("Phase 16 workflow commands", () => {
 
       expect(result).toEqual({ kind: "conflict", currentRevision: 3 });
       expect(transitions(started.workflowId)).toHaveLength(3);
+    });
+  });
+
+  describe("the domain boundary", () => {
+    it("performs no database side effect when the domain layer is imported", async () => {
+      // The journal opens — and migrates — when its module is evaluated, so
+      // the domain layer must not reach it at all. The import runs against
+      // an empty data directory: a journal that opens leaves its files
+      // behind.
+      const isolated = mkdtempSync(join(tmpdir(), "journal-domain-"));
+      const previous = process.env.JOURNAL_DATA_DIR;
+      process.env.JOURNAL_DATA_DIR = isolated;
+      vi.resetModules();
+      try {
+        const domain = await import("../src/server/intelligence/experience/workflows");
+        expect(domain.createWorkflowEngine).toBeTypeOf("function");
+        expect(readdirSync(isolated)).toEqual([]);
+      } finally {
+        process.env.JOURNAL_DATA_DIR = previous;
+        vi.resetModules();
+        try {
+          rmSync(isolated, { recursive: true, force: true });
+        } catch {
+          // The journal file is still held by the open handle.
+        }
+      }
+    });
+
+    it("runs its work through the injected transaction seam", () => {
+      let calls = 0;
+      const seam = <T>(fn: (tx: JournalTx) => T extends PromiseLike<unknown> ? never : T): T => {
+        calls += 1;
+        return withJournalTransaction(fn);
+      };
+      const seamEngine = createWorkflowEngine({
+        runInTransaction: seam,
+        jobs,
+        store: createExperienceStore(),
+        clock: () => NOW,
+      });
+
+      const started = seamEngine.startWorkflow(
+        { subjectType: "observation", subjectId: "observation-1", accountId: ACCOUNT },
+        context(),
+      );
+      expect(calls).toBe(1);
+      expect(pendingEffectJobs(started.workflowId)).toHaveLength(1);
+
+      seamEngine.applyWorkflowEffect(started.workflowId, started.revision);
+      expect(calls).toBe(2);
+      expect(workflow(started.workflowId)?.status).toBe("waiting_for_user");
+    });
+  });
+
+  describe("the definition version", () => {
+    /** Stores a workflow the engine was never written for. */
+    const storeWorkflow = (values: {
+      id: string;
+      definitionKey: string;
+      definitionVersion: number;
+      status: "running" | "waiting_for_user";
+      revision: number;
+    }): void => {
+      db.insert(intelligenceWorkflows)
+        .values({
+          id: values.id,
+          definitionKey: values.definitionKey,
+          definitionVersion: values.definitionVersion,
+          revision: values.revision,
+          status: values.status,
+          subjectType: "observation",
+          subjectId: "observation-1",
+          accountId: ACCOUNT,
+          evidenceIdsJson: "[]",
+          selfReportJson: null,
+          deferUntil: null,
+          effectRevision: 0,
+          createdAt: NOW,
+          updatedAt: NOW,
+        })
+        .run();
+    };
+
+    it("refuses a command for a workflow under a definition it does not support", () => {
+      storeWorkflow({
+        id: "workflow-foreign",
+        definitionKey: "foreign_definition",
+        definitionVersion: 1,
+        status: "waiting_for_user",
+        revision: 2,
+      });
+
+      const result = engine.transitionWorkflow(
+        {
+          commandId: "cmd-foreign",
+          workflowId: "workflow-foreign",
+          expectedRevision: 2,
+          action: "acknowledge",
+        },
+        context(),
+      );
+
+      expect(result).toEqual({ kind: "conflict", currentRevision: 2 });
+      expect(workflow("workflow-foreign")?.status).toBe("waiting_for_user");
+      expect(workflow("workflow-foreign")?.revision).toBe(2);
+      expect(transitions("workflow-foreign")).toHaveLength(0);
+      expect(commands()).toHaveLength(0);
+    });
+
+    it("refuses a command for a workflow under a version it does not support", () => {
+      storeWorkflow({
+        id: "workflow-old-version",
+        definitionKey: REVIEW_OBSERVATION_DEFINITION,
+        definitionVersion: REVIEW_OBSERVATION_VERSION + 1,
+        status: "waiting_for_user",
+        revision: 2,
+      });
+
+      const result = engine.transitionWorkflow(
+        {
+          commandId: "cmd-old-version",
+          workflowId: "workflow-old-version",
+          expectedRevision: 2,
+          action: "acknowledge",
+        },
+        context(),
+      );
+
+      expect(result).toEqual({ kind: "conflict", currentRevision: 2 });
+      expect(workflow("workflow-old-version")?.revision).toBe(2);
+      expect(transitions("workflow-old-version")).toHaveLength(0);
+      expect(commands()).toHaveLength(0);
+    });
+
+    it("does not advance a workflow it does not support when its effect runs", () => {
+      storeWorkflow({
+        id: "workflow-foreign-running",
+        definitionKey: "foreign_definition",
+        definitionVersion: 1,
+        status: "running",
+        revision: 1,
+      });
+
+      engine.applyWorkflowEffect("workflow-foreign-running", 1);
+
+      expect(workflow("workflow-foreign-running")?.status).toBe("running");
+      expect(workflow("workflow-foreign-running")?.revision).toBe(1);
+      expect(transitions("workflow-foreign-running")).toHaveLength(0);
     });
   });
 });

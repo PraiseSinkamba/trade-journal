@@ -1,6 +1,5 @@
 import { createHash } from "node:crypto";
-import type { JournalDb } from "@/db/connection";
-import { withConnectionTransaction, type JournalTx } from "@/db/transaction";
+import type { JournalTx } from "@/db/transaction";
 import { newUuid } from "@/server/ids";
 import type { ExecutionContext } from "../contracts/execution";
 import {
@@ -9,9 +8,11 @@ import {
   nextSystemStatus,
   nextWorkflowStatus,
   workflowCommandSchema,
+  workflowDefinition,
   workflowEffectJobKey,
   workflowResultSchema,
   type ExperienceStore,
+  type RunInTransaction,
   type WorkflowCommand,
   type WorkflowResult,
   type WorkflowStatus,
@@ -100,13 +101,14 @@ const commandDigest = (command: WorkflowCommand): string =>
 /**
  * Creates the workflow engine.
  *
- * The engine is bound to the journal, the job store and the experience store
- * it is given, so the transition and the effect it enqueues commit together.
- * The store is injected as a port: the engine never reaches a concrete
- * adapter, and composition wires the SQLite one.
+ * The engine is bound to the transaction seam, the job store and the
+ * experience store it is given, so the transition and the effect it enqueues
+ * commit together. Every one of those is an injected port: the engine never
+ * reaches the database, a concrete adapter or a connection of its own, and
+ * composition wires the SQLite ones.
  */
 export const createWorkflowEngine = (deps: {
-  db: JournalDb;
+  runInTransaction: RunInTransaction;
   jobs: JobStore;
   store: ExperienceStore;
   clock?: () => number;
@@ -133,7 +135,16 @@ export const createWorkflowEngine = (deps: {
     if (!workflow) return;
     if (workflow.revision !== transitionRevision) return;
 
-    const target: WorkflowStatus | null = nextSystemStatus(workflow.status);
+    // The workflow's own definition decides its transitions. A workflow whose
+    // definition or version this engine does not support is never advanced
+    // by the rules of another version: its effect is released, not applied.
+    const definition = workflowDefinition(workflow.definitionKey, workflow.definitionVersion);
+    if (!definition) {
+      store.releaseWorkflowJobs(tx, workflowId, now);
+      return;
+    }
+
+    const target: WorkflowStatus | null = nextSystemStatus(definition, workflow.status);
     if (target) {
       const newRevision = workflow.revision + 1;
       store.insertTransition(tx, {
@@ -169,7 +180,7 @@ export const createWorkflowEngine = (deps: {
 
       const now = clock();
       const workflowId = newUuid();
-      return withConnectionTransaction(deps.db, (tx) => {
+      return deps.runInTransaction((tx) => {
         store.insertWorkflow(tx, {
           id: workflowId,
           definitionKey: REVIEW_OBSERVATION_DEFINITION,
@@ -213,7 +224,7 @@ export const createWorkflowEngine = (deps: {
       const parsed = workflowCommandSchema.parse(command);
       const digest = commandDigest(parsed);
 
-      return withConnectionTransaction(deps.db, (tx): WorkflowResult => {
+      return deps.runInTransaction((tx): WorkflowResult => {
         const workflow = store.loadWorkflow(tx, parsed.workflowId);
         if (!workflow) return { kind: "conflict", currentRevision: 0 };
 
@@ -226,6 +237,14 @@ export const createWorkflowEngine = (deps: {
           scope.length > 0 &&
           !scope.includes(workflow.accountId)
         ) {
+          return { kind: "conflict", currentRevision: workflow.revision };
+        }
+
+        // The workflow's own definition decides which transitions are legal.
+        // A workflow stored under a definition or a version this engine does
+        // not support is refused, never advanced.
+        const definition = workflowDefinition(workflow.definitionKey, workflow.definitionVersion);
+        if (!definition) {
           return { kind: "conflict", currentRevision: workflow.revision };
         }
 
@@ -246,7 +265,7 @@ export const createWorkflowEngine = (deps: {
           return { kind: "conflict", currentRevision: workflow.revision };
         }
 
-        const target = nextWorkflowStatus(workflow.status, parsed.action);
+        const target = nextWorkflowStatus(definition, workflow.status, parsed.action);
         if (target === null) {
           return { kind: "conflict", currentRevision: workflow.revision };
         }
@@ -308,7 +327,7 @@ export const createWorkflowEngine = (deps: {
 
     applyWorkflowEffect(workflowId: string, transitionRevision: number): void {
       const now = clock();
-      withConnectionTransaction(deps.db, (tx) => {
+      deps.runInTransaction((tx) => {
         applyEffect(tx, workflowId, transitionRevision, now);
       });
     },

@@ -169,15 +169,6 @@ export const WORKFLOW_TRANSITIONS: Readonly<
 });
 
 /**
- * The status an action reaches from a status, or null when the action is not
- * legal there.
- */
-export const nextWorkflowStatus = (
-  from: WorkflowStatus,
-  action: WorkflowAction,
-): WorkflowStatus | null => WORKFLOW_TRANSITIONS[from][action] ?? null;
-
-/**
  * The status the workflow reaches on its own, without a command.
  *
  * A running or scheduled workflow hands itself to the user once its effect
@@ -191,11 +182,63 @@ export const WORKFLOW_SYSTEM_TRANSITIONS: Readonly<
 });
 
 /**
+ * The rules of one workflow definition version.
+ *
+ * A definition version owns its legal transitions, so a version bump cannot
+ * silently inherit the rules of the version it replaces.
+ */
+export interface WorkflowDefinition {
+  /** The legal user transitions, per status. */
+  readonly transitions: Readonly<
+    Record<WorkflowStatus, Readonly<Partial<Record<WorkflowAction, WorkflowStatus>>>>
+  >;
+  /** The transitions the workflow makes on its own, per status. */
+  readonly systemTransitions: Readonly<Partial<Record<WorkflowStatus, WorkflowStatus>>>;
+}
+
+/**
+ * The workflow definitions the domain knows, keyed by definition and version.
+ *
+ * The engine refuses a workflow whose definition and version are not in this
+ * table: it never decides a transition with the rules of another version.
+ */
+export const WORKFLOW_DEFINITIONS: Readonly<
+  Record<string, Readonly<Record<number, WorkflowDefinition>>>
+> = Object.freeze({
+  [REVIEW_OBSERVATION_DEFINITION]: Object.freeze({
+    [REVIEW_OBSERVATION_VERSION]: Object.freeze({
+      transitions: WORKFLOW_TRANSITIONS,
+      systemTransitions: WORKFLOW_SYSTEM_TRANSITIONS,
+    }),
+  }),
+});
+
+/**
+ * The rules of a definition version, or null when the domain does not know it.
+ */
+export const workflowDefinition = (
+  definitionKey: string,
+  definitionVersion: number,
+): WorkflowDefinition | null => WORKFLOW_DEFINITIONS[definitionKey]?.[definitionVersion] ?? null;
+
+/**
+ * The status an action reaches from a status, or null when the action is not
+ * legal there.
+ */
+export const nextWorkflowStatus = (
+  definition: WorkflowDefinition,
+  from: WorkflowStatus,
+  action: WorkflowAction,
+): WorkflowStatus | null => definition.transitions[from][action] ?? null;
+
+/**
  * The status a workflow reaches on its own, or null when it waits for
  * something else.
  */
-export const nextSystemStatus = (from: WorkflowStatus): WorkflowStatus | null =>
-  WORKFLOW_SYSTEM_TRANSITIONS[from] ?? null;
+export const nextSystemStatus = (
+  definition: WorkflowDefinition,
+  from: WorkflowStatus,
+): WorkflowStatus | null => definition.systemTransitions[from] ?? null;
 
 /** A stored workflow. */
 export type WorkflowRow = typeof intelligenceWorkflows.$inferSelect;
@@ -219,6 +262,18 @@ export type WorkflowUpdate = Partial<
     "revision" | "status" | "selfReportJson" | "deferUntil" | "effectRevision" | "updatedAt"
   >
 >;
+
+/**
+ * Runs work inside one journal transaction.
+ *
+ * The seam is injected: the domain never opens the journal itself, so the
+ * caller that owns the connection decides where the transaction runs. The
+ * callback is synchronous by contract — a promise-returning callback is a
+ * bug, not a supported shape.
+ */
+export type RunInTransaction = <T>(
+  fn: (tx: JournalTx) => T extends PromiseLike<unknown> ? never : T,
+) => T;
 
 /**
  * The experience store.

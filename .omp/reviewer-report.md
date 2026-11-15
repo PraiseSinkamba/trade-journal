@@ -1,77 +1,55 @@
 ## Verdict: PASS
 
-## Reviewer Report — Phase 16 workflow command/transition engine (uncommitted working tree)
+## Reviewer Report — Phase 16 repair: the workflow domain layer and its definition version
 
 ### PASS / FAIL
 
-PASS — the phase implements the committed plan (`docs/superpowers/plans/ai-native-journal/phase-16.md`)
-and the packet (`docs/orchestration/ai-native-journal/tasks/T-016.md`): a persistent, versioned
-workflow with recorded transition history, compare-and-swap on the expected revision, exact-retry
-replay from the command ledger, a digest-bound command id, a conflict that mutates nothing, the
-transition and its durable effect enqueued in one transaction, an idempotent effect, a job release
-on every transition, a self-report correction, the scope rule, and migration `0007` with the whole
-workflow/experience table set.
+PASS — this report covers **only the repair diff** on top of `d84150b` (the Phase 16 implementation
+and its report). It closes the two findings of the Phase 16 implementation-diff review and changes
+nothing else: no behaviour outside the two findings moved, no migration, dependency, schema,
+provider, financial, hash, key or annotation change is present, and migrations `0001`–`0007` are
+byte-unchanged.
 
-Two reviewer runs were spent, both inside the coordinator's budget of two: one on the implementation
-diff before the fixes, one on the fixed diff. The first run returned FAIL with six findings; every
-finding is fixed, verified by a test, and listed below. The second run confirmed all six fixes and
-raised two mechanical nits (a type error and a Prettier violation) that the implementer introduced
-with the fixes; both are fixed and re-verified below. No finding is open.
+### Findings and their resolutions
 
-### Findings from run 1 and their resolutions
-
-| # | Location | Sev | Issue | Resolution |
-| - | -------- | --- | ----- | ---------- |
-| 1 | `experience/workflows.ts:143` | P2 | The scope rule was applied after the command-ledger lookup, so an out-of-scope caller replaying a known command id learned the workflow's revision from the `duplicate`/`conflict` answer | The engine now loads the workflow and applies the scope check **before** the ledger lookup. Covered by "refuses an out-of-scope replay of a command it already knows" |
-| 2 | `contracts/experience.ts:34` | P2 | `WORKFLOW_ACTIONS` carried six entries, so `start` and `present` parsed as commands and became conflicts instead of invalid input | Split: `WORKFLOW_ACTIONS` is the four user commands, `WORKFLOW_TRANSITION_ACTIONS` the six recorded transition actions. The command schema accepts only the four. Covered by "refuses the actions the workflow records on its own" |
-| 3 | `infrastructure/experience-store.ts:108` | P2 | The adapter held the state machine (system edges, `present` row, revision bump, `effect_revision`), contradicting its own header | The system edges moved to the contract (`WORKFLOW_SYSTEM_TRANSITIONS`, `nextSystemStatus`) and the engine performs the transition. The adapter is SQL only and no longer has `applyEffectTx` |
-| 4 | `infrastructure/worker.ts:221` | P2 | The worker recognises no `workflow_effect` handler, so such a job would be terminally failed | The engine exports `effectHandler()` (`workflow-effect`/`1`), tested in the caller's transaction. Registering it in `worker.ts`/`composition.ts` is a Phase 17/18 wiring step: neither file is this phase's, and nothing composes the engine yet, so no `workflow_effect` job can be enqueued in production. Recorded as a handoff item |
-| 5 | `db/schema.ts:1194` | P3 | The typed schema declared a composite primary key the DDL did not create | The Drizzle `primaryKey` was removed; the typed schema and the migration DDL now agree on the unique index over the pair |
-| 6 | `infrastructure/experience-store.ts:117` | P3 | `effect_revision` was written before the status/revision checks, so a declined effect advanced the marker | The effect now applies only to the revision it was enqueued for; a declined effect writes nothing and the marker advances only on the applying path |
-
-### Findings from run 2 and their resolutions
-
-| # | Location | Sev | Issue | Resolution |
-| - | -------- | --- | ----- | ---------- |
-| 7 | `apps/web/tests/intelligence-workflows.test.ts:334` | FAIL | TS2322 — the `"start" \| "present"` loop no longer assigned to the four-value action union | The command is built as `Parameters<typeof engine.transitionWorkflow>[0]`, which is the type the schema rejects at runtime; `pnpm --filter web typecheck` now exits 0 |
-| 8 | `apps/web/src/server/intelligence/contracts/experience.ts:186` | FAIL | Prettier violation on the `WORKFLOW_SYSTEM_TRANSITIONS` type argument | `prettier --write` applied; `prettier --check` exits 0 on every changed file |
-
-Two notes from run 2 were also acted on: the `workflowConversations` doc comment no longer claims a
-primary key, and the unreachable `target === "running"` enqueue branch was deleted (no transition
-reaches `running`).
+| # | Location                                            | Sev   | Issue                                                                                                                                        | Resolution                                                                                                                                                          |
+| - | --------------------------------------------------- | ----- | -------------------------------------------------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| 1 | `apps/web/src/server/intelligence/experience/workflows.ts:3` | BLOCK | The domain layer imported `withConnectionTransaction` as a **runtime** value from `@/db/transaction`. That module reaches `@/db/connection`, whose module-level `db` singleton opens the journal and runs the migration runner **at import time**, so importing the domain layer performed a database side effect and bound the domain to the database layer. | The transaction is now an **injected seam**: `createWorkflowEngine` takes `runInTransaction: RunInTransaction` and every database import in the domain layer is **type-only**. `deps.db` is gone — it had no other use. |
+| 2 | `apps/web/src/server/intelligence/experience/workflows.ts:175,249` | FAIL  | `definition_key` / `definition_version` were written on every workflow and never read. The legality of a transition came from `WORKFLOW_TRANSITIONS[status][action]` alone, so a workflow stored under a different definition or version was still advanced by review-observation v1 rules. | The legal-transition source is now keyed by **(definition, version)**: `WORKFLOW_DEFINITIONS` in `contracts/experience.ts` holds the rules of each definition version, and the engine resolves the stored workflow's own definition before any transition. An unsupported definition or version is **refused**, never advanced. |
 
 ### Independently verified
 
-- **Contract**: CAS on the expected revision; a stale revision conflicts and mutates nothing; the
-  same command id with the same payload returns the stored prior result; the same command id with a
-  different payload conflicts; the transition and the effect enqueue share one transaction; the
-  effect applies once and a late effect writes nothing; every transition releases the workflow's
-  pending jobs and never touches a running one; a correction stores a self-report with the
-  execution and correlation ids and leaves the evidence it was given; a workflow outside the
-  commander's scope is refused.
-- **Boundary**: `intelligence-boundaries.test.ts` 8/8 green. The engine depends on the
-  `ExperienceStore` **port** in `contracts/` and never imports `infrastructure/`; the SQLite
-  adapter is injected. No exemption was added to the boundary suite.
-- **Migration hygiene**: `migrations:check` reports the manifest up to date; `0001`–`0006` are
-  byte-unchanged (sha256 compared); `BOOTSTRAP_SQL` reuses `EXPERIENCE_SQL`, so the snapshot cannot
-  drift from the migration; the typed schema mirrors the DDL column for column.
-- **Financial safety**: the engine writes workflow, transition, command and job rows only. The
-  correction test compares the account, note, trade and execution rows before and after and finds
-  them byte-identical.
-- **No engagement behaviour**: `decideEngagement`, cooldown, dismissal, expiry and opportunity
-  behaviour are absent. The four Phase 17/18 tables exist and are used by nobody yet, as the phase
-  guide's allocation requires.
-- **Tests have teeth**: nine deliberate production breaks each failed exactly the behaviour they
-  claim — CAS check, digest comparison, effect revision check, job release, transition validation,
-  enqueue atomicity, scope check, command-action split, system transition. With every break restored
-  the suite is 19/19 green.
+- **Domain boundary**: importing `experience/workflows.ts` opens no journal — the data directory
+  stays empty. Proven by the new case "performs no database side effect when the domain layer is
+  imported", which fails with `journal.db`, `journal.db-shm` and `journal.db-wal` when a runtime
+  database import is put back.
+- **Injected seam**: the engine's work runs through the injected `runInTransaction`, proven by the
+  new case "runs its work through the injected transaction seam", which counts the seam calls of
+  `startWorkflow` and `applyWorkflowEffect`.
+- **Definition version**: a workflow stored under an unknown definition, and one stored under an
+  unsupported **version** of the supported definition, are both refused — the command returns
+  `{kind:"conflict"}`, the revision, the status, the transition history and the command ledger all
+  stay untouched, and the effect does not advance them.
+- **Format and type**: `prettier --check` clean on the three changed files; `pnpm --filter web
+  typecheck` exits 0.
+- **Tests**: `pnpm exec vitest run apps/web/tests/intelligence-workflows.test.ts
+  apps/web/tests/intelligence-knowledge-revisions.test.ts` — 51 passed (24 workflow cases, 27
+  knowledge-revision cases). The boundary suite (8 cases) and the migration suite (17 cases) are
+  green, and `pnpm --filter web migrations:check` reports the checksum manifest up to date.
 
-### Checks run
+### Teeth
 
-| Command | Exit | Result |
-| ------- | ---- | ------ |
-| `pnpm exec vitest run apps/web/tests/intelligence-workflows.test.ts` | 0 | 19 passed |
-| `pnpm exec vitest run apps/web/tests/intelligence-{boundaries,migrations,knowledge-revisions,jobs,worker}.test.ts` | 0 | 92 passed |
-| `pnpm --filter web typecheck` | 0 | clean |
-| `pnpm exec prettier --check <changed files>` | 0 | clean |
-| `pnpm --filter web migrations:check` | 0 | manifest up to date |
+Each of the two findings was proved by deliberately breaking the production code, watching the new
+case fail, and restoring it:
+
+| Break                                                                | While broken                                                                                                      | After restore |
+| -------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------ | ------------- |
+| A runtime import of `@/db/transaction` back into the domain layer    | **5 failed**, 19 passed — the purity case lists the three journal files it opened; the other four fail because the domain layer closed the journal it had no business touching | 24 passed     |
+| An unsupported definition inherits the v1 rules (command path)       | **2 failed**, 22 passed — both new "refuses a command…" cases                                                      | 24 passed     |
+| An unsupported definition inherits the v1 rules (effect path)        | **1 failed**, 23 passed — "does not advance a workflow it does not support when its effect runs"                     | 24 passed     |
+| The whole original engine (both findings present)                   | **21 failed**, 3 passed — every new case fails                                                                    | 24 passed     |
+
+### Out of scope, unchanged
+
+No engagement policy (Phase 17), no worker registration, no schema or migration change, no
+dependency, no financial write, no correction outside the workflow's own self-report.
