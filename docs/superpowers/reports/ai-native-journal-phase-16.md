@@ -95,9 +95,13 @@ export type WorkflowCommand;
 export const workflowResultSchema;                   // strict discriminated union on "kind"
 export type WorkflowResult;                          // applied(newRevision) | duplicate(priorResult) | conflict(currentRevision)
 export const WORKFLOW_TRANSITIONS;                   // the legal user transitions, per status
-export const nextWorkflowStatus(from, action): WorkflowStatus | null;
 export const WORKFLOW_SYSTEM_TRANSITIONS;            // running | scheduled -> waiting_for_user
-export const nextSystemStatus(from): WorkflowStatus | null;
+export interface WorkflowDefinition;                 // { transitions, systemTransitions } — the rules of one definition version
+export const WORKFLOW_DEFINITIONS;                   // the rules of every known definition version, keyed by definition and version
+export const workflowDefinition(key, version);       // the rules of a definition version, or null when it is unknown
+export const nextWorkflowStatus(definition, from, action): WorkflowStatus | null;
+export const nextSystemStatus(definition, from): WorkflowStatus | null;
+export type RunInTransaction;                        // the injected transaction seam
 export interface ExperienceStore;                    // the store port the engine depends on
 
 // apps/web/src/server/intelligence/experience/workflows.ts
@@ -108,7 +112,7 @@ export interface WorkflowEngine {
   applyWorkflowEffectInTx(tx, workflowId, transitionRevision, now): void;
   effectHandler(): WorkflowEffectHandler;
 }
-export const createWorkflowEngine(deps: { db: JournalDb; jobs: JobStore; store: ExperienceStore; clock?: () => number }): WorkflowEngine;
+export const createWorkflowEngine(deps: { runInTransaction: RunInTransaction; jobs: JobStore; store: ExperienceStore; clock?: () => number }): WorkflowEngine;
 export const WORKFLOW_EFFECT_HANDLER_ID = "workflow-effect";
 export const WORKFLOW_EFFECT_HANDLER_VERSION = "1";
 
@@ -153,11 +157,13 @@ real one from `infrastructure/jobs.ts`, so the effect jobs are real durable jobs
 Base SHA: `96b39b3062ec381f15b2ba00fee143ee8e8d4dce` (the verified feature HEAD this phase started
 from).
 
-| Commit    | Subject                                                   |
-| --------- | --------------------------------------------------------- |
-| `cee2009d` | `docs: plan the workflow command and transition engine`     |
-| `6f0dd324` | `feat: persist workflows and coordinate engagement`         |
-| (this)    | `docs: record the Phase 16 workflow engine evidence`        |
+| Commit     | Subject                                                                                        |
+| ---------- | ---------------------------------------------------------------------------------------------- |
+| `cee2009d` | `docs: plan the workflow command and transition engine`                                        |
+| `6f0dd324` | `feat: persist workflows and coordinate engagement`                                            |
+| `d84150b`  | `docs: record the Phase 16 workflow engine evidence`                                           |
+| `f9b5ff5`  | `fix: keep the workflow domain layer free of the database and validate its definition version` |
+| (this)     | `docs: record the Phase 16 domain boundary repair`                                             |
 
 The plan commit is the first commit of this phase; the implementation and the report follow it.
 The implementation tip — the tree every command above was run against — is
@@ -230,6 +236,64 @@ The last break is worth spelling out: without the system edge the workflow never
 user, and thirteen of the nineteen cases fail — the state machine, the ledger, the CAS, the scope
 and the correction all hang off it. The release break fails three cases for the same reason: a
 workflow that never releases its jobs holds one forever.
+
+## Repair: the implementation-diff review
+
+The Phase 16 implementation-diff review returned FAIL with two findings. Both are closed by the
+commit `f9b5ff5` on top of `d84150b`; nothing else about the phase moved.
+
+### The findings and their resolutions
+
+| Finding                                                                                                                                                                                                                                                                                                                                                                              | Resolution                                                                                                                                                                                                                                                                                                                                       |
+| ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| **BLOCK** — `experience/workflows.ts:3` imported `withConnectionTransaction` as a **runtime** value from `@/db/transaction`. That module reaches `@/db/connection`, whose module-level `db` singleton opens the journal and runs the migration runner **at import time**, so importing the domain layer performed a database side effect and bound the domain to the database layer. | The transaction is an **injected seam**: `createWorkflowEngine` now takes `runInTransaction: RunInTransaction` and every database import in the domain layer is **type-only**. `deps.db` is gone — it had no other use. The engine reaches no module that opens the journal.                                                                     |
+| **FAIL** — `intelligence_workflows.definition_key` and `definition_version` were written on every workflow and never read. The legality of a transition came from `WORKFLOW_TRANSITIONS[status][action]` alone, so a workflow stored under a different definition or version was still advanced by review-observation v1 rules.                                                      | The legal-transition source is keyed by **(definition, version)**: `WORKFLOW_DEFINITIONS` in `contracts/experience.ts` holds the rules of each definition version, and the engine resolves the **stored workflow's own** definition before any transition. A workflow under an unsupported definition or version is **refused**, never advanced. |
+
+### What changed
+
+| File                                                       | Change                                                                                                                                                                                                                                                       |
+| ---------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| `apps/web/src/server/intelligence/experience/workflows.ts` | the runtime database import is gone; the transaction seam is injected; the definition of the stored workflow is resolved and validated before every transition and before every effect                                                                       |
+| `apps/web/src/server/intelligence/contracts/experience.ts` | the rules of each definition version (`WorkflowDefinition`, `WORKFLOW_DEFINITIONS`, `workflowDefinition`), the `RunInTransaction` seam type, and the transition helpers now take the definition they belong to                                               |
+| `apps/web/tests/intelligence-workflows.test.ts`            | **5 new cases** (24 in the file): the domain import opens no journal, the engine runs its work through the injected seam, an unsupported definition is refused, an unsupported **version** is refused, an unsupported workflow is not advanced by its effect |
+
+No migration, schema, dependency, provider, credential, financial, hash, key or annotation change.
+Migrations `0001`–`0007` are byte-unchanged and `pnpm --filter web migrations:check` reports the
+checksum manifest up to date.
+
+### The refusal, precisely
+
+- A **command** for a workflow under an unsupported definition or version returns
+  `{kind:"conflict", currentRevision}`: the workflow keeps its revision and its status, the
+  transition history stays empty and the command ledger records nothing.
+- An **effect** for such a workflow is refused too: the workflow is not advanced, no transition is
+  written, and its pending effect jobs are released so the queue does not retry a transition the
+  engine will never make.
+
+### The repair's proof of teeth
+
+Each finding was proved by breaking the production code, watching the new case fail, and restoring
+it.
+
+| Break                                                                 | Result while broken                                                                                                                                                                                                               | Result after restore |
+| --------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | -------------------- |
+| A runtime import of `@/db/transaction` put back into the domain layer | **5 failed**, 19 passed — the purity case lists the three files the import opened (`journal.db`, `journal.db-shm`, `journal.db-wal`); the other four fail because the domain layer closed the journal it had no business touching | 24 passed            |
+| An unsupported definition inherits the v1 rules (command path)        | **2 failed**, 22 passed — "refuses a command for a workflow under a definition it does not support" and "… under a version it does not support"                                                                                   | 24 passed            |
+| An unsupported definition inherits the v1 rules (effect path)         | **1 failed**, 23 passed — "does not advance a workflow it does not support when its effect runs"                                                                                                                                  | 24 passed            |
+| The original engine, with both findings present                       | **21 failed**, 3 passed — every new case fails                                                                                                                                                                                    | 24 passed            |
+
+### The repair's verification commands
+
+| Command                                                                                                                      | Exit | Result                                                     |
+| ---------------------------------------------------------------------------------------------------------------------------- | ---- | ---------------------------------------------------------- |
+| `pnpm exec vitest run apps/web/tests/intelligence-workflows.test.ts apps/web/tests/intelligence-knowledge-revisions.test.ts` | 0    | 51 passed (24 workflow cases, 27 knowledge-revision cases) |
+| `pnpm --filter web typecheck`                                                                                                | 0    | `tsc --noEmit` clean                                       |
+| `pnpm exec vitest run apps/web/tests/intelligence-boundaries.test.ts apps/web/tests/intelligence-migrations.test.ts`         | 0    | 25 passed (8 boundary cases, 17 migration cases)           |
+| `pnpm --filter web migrations:check`                                                                                         | 0    | `migration-checksums.json` is up to date                   |
+| `pnpm exec prettier --check <the three changed files>`                                                                       | 0    | clean                                                      |
+
+The full `pnpm test` and the merged-feature gate were **not** run here: the coordinator's brief
+reserves the destination gate for its verification owner, after the merge.
 
 ## Deviations
 

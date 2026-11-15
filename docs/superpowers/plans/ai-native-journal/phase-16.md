@@ -146,7 +146,8 @@ export const REVIEW_OBSERVATION_DEFINITION = "review_observation";
 export const REVIEW_OBSERVATION_VERSION = 1;
 
 export interface WorkflowEngineDeps {
-  db: JournalDb;
+  /** The transaction seam: the engine never opens the journal itself. */
+  runInTransaction: RunInTransaction;
   jobs: JobStore;
   /** The experience store port, wired to the SQLite adapter at composition. */
   store: ExperienceStore;
@@ -174,8 +175,15 @@ export const createWorkflowEngine = (deps: WorkflowEngineDeps): WorkflowEngine;
 ```
 
 `transitionWorkflow` is the authority named by the detailed plan and the coordinator's brief. It
-is bound to the journal, the job store and the experience store by the factory, exactly like
+is bound to the transaction seam, the job store and the experience store by the factory, exactly like
 `createScheduler` and `createJobStore`.
+
+**The transaction is a seam, not an import.** The domain layer reaches no module that opens the
+journal: the `@/db` imports in `experience/workflows.ts` are type-only, and the transaction runs
+through the injected `runInTransaction`. The legal transitions are keyed by **(definition,
+version)**: the rules of each definition version live in `WORKFLOW_DEFINITIONS`
+(`contracts/experience.ts`), and a workflow stored under a definition or a version the engine does
+not support is refused, never advanced by the rules of another version.
 
 **The store is a port, not an import.** The repository's own import-boundary rule (`rule 5` of
 `apps/web/tests/intelligence-boundaries.test.ts`) allows a domain to reach a sibling's
