@@ -1,7 +1,7 @@
 {
   "schemaVersion": 1,
   "feature": "ai-native-journal",
-  "updatedAt": "2026-11-15T10:09:57Z",
+  "updatedAt": "2026-11-15T11:34:39Z",
   "owner": "parent OMP coordinator (exclusive owner of this record)",
   "repository": {
     "name": "trade-journal",
@@ -35,8 +35,8 @@
     },
     "featureBranch": "codex/ai-native-journal",
     "featureBootstrapSha": "0a278503fd67c0f9e82138dfecb744f4bfd307ad",
-    "featureHeadSha": "3dd7ff1ccedb9b95f1eb32d60c6e6974d42a62c4",
-    "featureHeadShaNote": "feature branch HEAD at the Phase 18 integration and the exact base of the Phase 18 worktree; the coordinator record commit advances the branch by one commit",
+    "featureHeadSha": "a322965ead515695be0af5ed04bb34b7bb38f8bf",
+    "featureHeadShaNote": "feature branch HEAD at the Phase 18 integration and the exact base of the Phase 19 worktree; the coordinator record commit advances the branch by one commit",
     "featureCheckpointCommits": [
       "0a278503fd67c0f9e82138dfecb744f4bfd307ad",
       "80d53ccb62fda801897852a6f4e5d2aab8b0d58b",
@@ -75,7 +75,8 @@
       "f4b3eac45e413c5b293baccd6af61edcd3f28e20",
       "1a7c6ba57d7767d74765a5e89ba86c3739e90c39",
       "a616a67cf340144e294a607ef048a0c6bcc77a49",
-      "3dd7ff1ccedb9b95f1eb32d60c6e6974d42a62c4"
+      "3dd7ff1ccedb9b95f1eb32d60c6e6974d42a62c4",
+      "a322965ead515695be0af5ed04bb34b7bb38f8bf"
     ],
     "featureBranchNote": "Orca slugified the requested name to codex-ai-native-journal at creation; the coordinator renamed the newly created, exclusively owned branch to the contract-required codex/ai-native-journal. Orca reads the renamed ref live (refs/heads/codex/ai-native-journal). No pre-existing branch was overwritten."
   },
@@ -329,8 +330,8 @@
         "startSha": "a616a67cf340144e294a607ef048a0c6bcc77a49",
         "orcaParentWorktreeId": "aa54a522-a9af-4cb4-9de7-f1d9a349c0fd::E:/4004/orca/workspaces/trade-journal/codex-ai-native-journal",
         "setup": "pnpm install --frozen-lockfile completed in the worker checkout; working tree clean; Node v24.20.0, pnpm 11.0.8; own node_modules and own pnpm virtual store",
-        "state": "the implementation-diff review failed with 2 findings; the phase was reopened and the repair dispatched as ctx_ca7bc0dee259",
-        "note": "Phase 18 is the authenticated interaction and control API half of detailed plan Task 12, with schema allocation None. The brief pins the backend only - the React components, shell.tsx and the settings page belong to Phase 19 - and the security rules: mutating routes require same-origin validation, a missing Origin follows an explicit trusted nonbrowser policy rather than accepting arbitrary cross-site requests, no UI command is authorized by its presence in a generated payload alone, and the status codes are fixed at 409 stale revision, 400 invalid input, 401 auth and 403 denied origin or scope. The Ask, Reports, Recap, Critique and Import JSON contracts must stay unchanged. The independent implementation-diff review returned 2 findings. One is a real bug: the observations POST started a review workflow for a superseded or invalidated observation, because findObservation selects by id with no status predicate while the GET surface filters status = active and the route docstring and the phase plan both say one ACTIVE observation. The coordinator confirmed it against the schema and the knowledge store, which set the status to active on insert, invalidated on trade deletion and superseded when a newer revision replaced it. The other is a missing proof rather than a behavioural defect: the revoked-scope refusal for an unknown account has no independent teeth, because the suite exercises it only against an ACCOUNT-BOUND workflow, where the workflow-scope check refuses the same request, so removing the unknown-account check leaves the suite green. The behaviour itself is correct in every reachable case, including a request naming an unknown account against a journal-wide workflow. The coordinator also ran a seven-mutation teeth proof over the phase: six were decisive, each breaking exactly its own test - the foreign-origin refusal, the trusted-nonbrowser policy, the stale-revision check, the action-id consistency check, the purged-workflow refusal and the workflow-scope check - and the seventh was the unknown-account check, which is the finding."
+        "state": "integrated into codex/ai-native-journal at d5a230e and verified on the destination branch (destination gate green on the destination branch after the merge: pnpm install --frozen-lockfile, pnpm --filter web typecheck, the core and importers typecheck, pnpm --filter web migrations:check, node scripts/check-licenses.mjs, prettier --check on every merged file and pnpm build all exit 0; pnpm test 111 test files, 1271 tests passed, 155.25s). The worktree, the git worktree registration, the branch and the leftover directory remain until the user requests cleanup.",
+        "note": "Phase 18 is the authenticated interaction and control API half of detailed plan Task 12, with schema allocation None. The brief pins the backend only - the React components, shell.tsx and the settings page belong to Phase 19 - and the security rules: mutating routes require same-origin validation, a missing Origin follows an explicit trusted nonbrowser policy rather than accepting arbitrary cross-site requests, no UI command is authorized by its presence in a generated payload alone, and the status codes are fixed at 409 stale revision, 400 invalid input, 401 auth and 403 denied origin or scope. The Ask, Reports, Recap, Critique and Import JSON contracts must stay unchanged. The independent implementation-diff review returned 2 findings. One is a real bug: the observations POST started a review workflow for a superseded or invalidated observation, because findObservation selects by id with no status predicate while the GET surface filters status = active and the route docstring and the phase plan both say one ACTIVE observation. The coordinator confirmed it against the schema and the knowledge store, which set the status to active on insert, invalidated on trade deletion and superseded when a newer revision replaced it. The other is a missing proof rather than a behavioural defect: the revoked-scope refusal for an unknown account has no independent teeth, because the suite exercises it only against an ACCOUNT-BOUND workflow, where the workflow-scope check refuses the same request, so removing the unknown-account check leaves the suite green. The behaviour itself is correct in every reachable case, including a request naming an unknown account against a journal-wide workflow. The coordinator also ran a seven-mutation teeth proof over the phase: six were decisive, each breaking exactly its own test - the foreign-origin refusal, the trusted-nonbrowser policy, the stale-revision check, the action-id consistency check, the purged-workflow refusal and the workflow-scope check - and the seventh was the unknown-account check, which is the finding. The first destination gate run failed at prettier --check because the candidate plan and report had never been formatted, so pnpm build and pnpm test did not run at all. The formatting was applied with prettier --write in 2783ab4 and proven to be formatting only: every changed line is a table row or a list marker with identical cell content, and only prettier column padding differs. The whole gate was then re-run alone on the host."
       }
     ]
   },
@@ -648,12 +649,24 @@
       "wave": 18,
       "branch": "codex/ai-native-journal-p18",
       "deps": ["task_00be9f35e203"],
-      "status": "dispatched",
-      "state": "dispatched",
-      "outcome": null,
+      "status": "completed",
+      "state": "integrated",
+      "outcome": "succeeded",
       "nativeDispatch": "ctx_ca7bc0dee259",
       "note": "the backend route and origin half of detailed plan Task 12; the brief pins the origin policy for mutating routes including the missing-Origin case, the refusal that no payload alone authorizes a command, the fixed status codes, the exclusion of the React components that Phase 19 owns, and the teeth bar for every claimed behaviour. The implementation-diff review found a real bug - a review workflow could start for a superseded or invalidated observation - and a missing proof - the revoked scope refusal is only exercised against an account-bound workflow, so a second rule refuses the same request and the suite cannot tell them apart. The coordinator verified both in the code and ran a seven-mutation teeth proof whose sixth mutation was not decisive for exactly that reason.",
-      "priorDispatch": "ctx_a5839c0017ea"
+      "priorDispatch": "ctx_a5839c0017ea",
+      "commits": [
+        "3261798",
+        "c0cfb30",
+        "ddbd0db",
+        "ce1b098",
+        "2683b8c",
+        "d5a230e6e76bb0ac52197c7f965b80ea72db03bc",
+        "cb152ea",
+        "2783ab4"
+      ],
+      "verified": "destination gate green on the destination branch after the merge: pnpm install --frozen-lockfile, pnpm --filter web typecheck, the core and importers typecheck, pnpm --filter web migrations:check, node scripts/check-licenses.mjs, prettier --check on every merged file and pnpm build all exit 0; pnpm test 111 test files, 1271 tests passed, 155.25s",
+      "evidence": "the independent implementation-diff review raised 2 findings: the observations POST started a review workflow for a superseded or invalidated observation, because findObservation selected by id with no status predicate while the GET surface filtered status = active; and the revoked scope refusal for an unknown account had no independent proof, because the suite exercised it only against an account-bound workflow where a second rule refuses the same request. The reviewer confirmed the rest of the phase, including the origin policy, the fixed status codes, the action-id authorisation, the purge race and the scoped GET surface. The coordinator ran an eight-mutation teeth proof: every mutation broke exactly its expected test, including the unknown-account refusal once the journal-wide case existed. Evidence: docs/superpowers/plans/ai-native-journal/phase-18.md, docs/superpowers/reports/ai-native-journal-phase-18.md, docs/superpowers/reports/ai-native-journal-integration-18.md"
     },
     {
       "stable": "T-019",
@@ -1153,12 +1166,13 @@
       "worktree": "aa54a522-a9af-4cb4-9de7-f1d9a349c0fd::E:/4004/orca/workspaces/trade-journal/codex-ai-native-journal-p18",
       "base": "a616a67",
       "purpose": "Phase 18 repair - refuse a review of a superseded or invalidated observation, and pin the revoked scope refusal independently with a journal-wide workflow",
-      "state": "dispatched",
-      "candidate": [],
+      "state": "completed; the repair refused a review of a superseded or invalidated observation and pinned the revoked scope refusal independently",
+      "candidate": ["ce1b098", "2683b8c"],
       "reviewed": false,
-      "integrated": false,
-      "verified": false,
-      "outcome": null
+      "integrated": true,
+      "verified": true,
+      "outcome": "verified by the coordinator with an eight-mutation teeth proof, merged and verified on the destination branch",
+      "tip": "2683b8c"
     }
   ],
   "integration": {
@@ -1539,6 +1553,22 @@
       "review": "one implementation-diff review, then one repair round and one coordinator re-verification; the review found two false claims in the phase plan and the phase report, not production defects. The coordinator ran an independent six-mutation teeth proof and an EXPLAIN QUERY PLAN verification.",
       "note": "no schema change: nothing under apps/web/src/db/ moved and migrations 0001 through 0007 are byte-unchanged. The daily proactive count and the last-proactive read moved from a full table scan to an index search; the subject query still scans and its cost is handed to the next migration, which owns the schema. No dependency and no lockfile change. No push, no pull request and no merge into main.",
       "report": "docs/superpowers/reports/ai-native-journal-integration-17.md"
+    },
+    {
+      "phase": "18",
+      "stable": "T-018",
+      "native": "task_ed0e380a3fa9",
+      "branch": "codex/ai-native-journal-p18",
+      "merge": "d5a230e6e76bb0ac52197c7f965b80ea72db03bc",
+      "destinationBefore": "cba9dce5ebb91432c324c91f5ce07c784999eef7",
+      "head": "2783ab4",
+      "commits": ["3261798", "c0cfb30", "ddbd0db", "ce1b098", "2683b8c", "cb152ea", "2783ab4"],
+      "files": 17,
+      "schema": "none - this phase owns no migration",
+      "verification": "destination gate green on the destination branch after the merge: pnpm install --frozen-lockfile, pnpm --filter web typecheck, the core and importers typecheck, pnpm --filter web migrations:check, node scripts/check-licenses.mjs, prettier --check on every merged file and pnpm build all exit 0; pnpm test 111 test files, 1271 tests passed, 155.25s",
+      "review": "one implementation-diff review, then one repair round and one coordinator re-verification; the review found a real bug, a review workflow could start for a superseded or invalidated observation, and a missing proof, the revoked scope refusal had no independent teeth. The coordinator ran an independent eight-mutation teeth proof.",
+      "note": "no schema change: nothing under apps/web/src/db/ moved and migrations 0001 through 0007 are byte-unchanged. The backend only: no React component was touched, because the UI is Phase 19. The first gate run failed at prettier --check on two unformatted documents; the formatting was applied and proven to be formatting only, and the whole gate was re-run alone. No dependency and no lockfile change. No push, no pull request and no merge into main.",
+      "report": "docs/superpowers/reports/ai-native-journal-integration-18.md"
     }
   ],
   "recordShape": "This file is the index and the authoritative stable-to-native task mapping: stable/native task mapping, worktree and dispatch identifiers, and one compact entry per integrated phase. Narrative, findings, deviations and command output live in the per-phase reports under docs/superpowers/reports/. Keep this file compact - one entry per phase, no duplicated prose. Resolve a native task id from taskMap here or from the native task list, never from a chat summary: a transcription slip once named T-019 as T-005, and the near miss was caught because the native task list disagreed with the prose.",
