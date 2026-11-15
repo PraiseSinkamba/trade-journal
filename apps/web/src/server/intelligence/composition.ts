@@ -8,7 +8,9 @@ import {
   getCurrentProviderConfiguration,
   getAiKey,
   getCompatibleBaseUrl,
+  getTimeZone,
 } from "@/server/settings";
+import { newUuid } from "@/server/ids";
 import { runBackgroundAi } from "@/server/ai-runtime";
 import { AiRuntimeError } from "@/server/ai-contracts";
 import {
@@ -35,6 +37,12 @@ import {
 import type { ExecutionContext, Outcome } from "./contracts/execution";
 import { createBackfillService } from "./infrastructure/backfill";
 import { createEffectStore, createJobStore, createReplayService } from "./infrastructure/jobs";
+import { createExperienceStore } from "./infrastructure/experience-store";
+import { createWorkflowEngine } from "./experience/workflows";
+import { createEngagementCoordinator } from "./experience/interactions";
+import { createCommandService } from "./experience/commands";
+import { createExecutionContext } from "./runtime/execution";
+import { ENGAGEMENT_DEFAULTS } from "./contracts/experience";
 import { persistObservationInTx } from "./infrastructure/knowledge-store";
 import { applySourceChange, nextSourceRevision } from "./infrastructure/knowledge-revisions";
 import { createOutboxDispatcher, type OutboxHandler } from "./infrastructure/outbox";
@@ -283,7 +291,7 @@ export const observationOutboxHandlers: readonly OutboxHandler[] = defaultServic
 const backgroundStore = createPolicyStore({ db });
 
 /** The account ids that still exist in the journal. */
-const existingAccountIds = (): string[] =>
+export const existingAccountIds = (): string[] =>
   db
     .select({ id: accounts.id })
     .from(accounts)
@@ -576,3 +584,80 @@ export const recordSourceChanges = (
 
 export { applySourceChange };
 export type { SourceChange };
+
+/**
+ * The interaction services (Phase 18).
+ *
+ * The wiring point of the operator-facing surface: the workflow engine, the
+ * engagement coordinator, the stores they share and the command service the
+ * interaction routes call. The routes import composition; composition never
+ * imports a route.
+ *
+ * Only composition builds an execution context, and only an interactive one
+ * for an interactive request: the principal is the operator, the scope is
+ * the resolved one, and the budget is small.
+ */
+
+/** The experience store on the default journal. */
+export const experienceStore = createExperienceStore();
+
+/** The job store on the default journal. */
+export const jobStore = createJobStore(db);
+
+/** The workflow engine on the default journal. */
+export const workflowEngine = createWorkflowEngine({
+  runInTransaction: withJournalTransaction,
+  jobs: jobStore,
+  store: experienceStore,
+});
+
+/** The engagement coordinator on the default journal. */
+export const engagementCoordinator = createEngagementCoordinator({
+  runInTransaction: withJournalTransaction,
+  store: experienceStore,
+});
+
+/**
+ * The execution context of one interactive request.
+ *
+ * The scope is the one the request resolved; an empty scope means every
+ * account, which only an interactive request may say.
+ */
+export const interactiveExecutionContext = (accountIds: readonly string[]): ExecutionContext =>
+  createExecutionContext({
+    executionId: `exec-interactive-${newUuid()}`,
+    correlationId: `corr-interactive-${newUuid()}`,
+    principal: "interactive",
+    mode: "interactive",
+    triggerSource: "user.command",
+    scope: {
+      accountIds: [...accountIds],
+      filters: {},
+      timeZone: getTimeZone(),
+      dataSources: ["trades"],
+    },
+    allowedCapabilityIds: [],
+    allowedToolIds: [],
+    budgets: {
+      maxSteps: 4,
+      maxToolCalls: 4,
+      maxOutputTokens: 512,
+      consumeToolCall: () => true,
+    },
+    signal: new AbortController().signal,
+  });
+
+/** The command service the interaction routes apply their commands through. */
+export const interactionCommands = createCommandService({
+  engine: workflowEngine,
+  store: experienceStore,
+  runInTransaction: withJournalTransaction,
+  accountIds: existingAccountIds,
+  context: interactiveExecutionContext,
+});
+
+/** The engagement defaults the status surface serves. */
+export { ENGAGEMENT_DEFAULTS };
+
+/** The intent builders the interaction routes build their intents with. */
+export { observationReviewIntent, statusIntent, inputRequestIntent } from "./experience/intents";
