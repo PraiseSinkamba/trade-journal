@@ -10,12 +10,15 @@ import {
   observationReviewIntent,
   workflowEngine,
 } from "@/server/intelligence/composition";
-import type { WorkflowRow } from "@/server/intelligence/contracts/experience";
+import {
+  REVIEW_OBSERVATION_DEFINITION,
+  type WorkflowRow,
+} from "@/server/intelligence/contracts/experience";
 import {
   evidenceOf,
   findActiveObservation,
   findWorkflow,
-  listObservationReviews,
+  listObservationWorkflows,
   listObservations,
   observationText,
   resolveScope,
@@ -59,18 +62,29 @@ const reviewStateOf = (reviews: readonly WorkflowRow[]): ObservationReviewState 
   return "unreviewed";
 };
 
+/**
+ * The reviews of one observation, oldest first.
+ *
+ * Only the review definition counts: a workflow of another kind that acts on
+ * the same subject is not a review of it.
+ */
+const isReviewOf = (workflow: WorkflowRow, observationId: string): boolean =>
+  workflow.subjectId === observationId && workflow.definitionKey === REVIEW_OBSERVATION_DEFINITION;
+
 export const GET = handler(
   async (request: Request) => {
     const scope = resolveScope(scopeParam(new URL(request.url)));
     if (!scope) return bad("scope_denied", 403);
 
     const rows = listObservations(scope);
-    const reviews = listObservationReviews(rows.map((row) => row.id));
+    // The reviews are read by the ids of the scope's own observations, so a
+    // review can never widen what the scope sees.
+    const reviews = listObservationWorkflows(rows.map((row) => row.id));
     const links = evidenceOf(rows.map((row) => row.id));
 
     const intents: InteractionIntent[] = [];
     const observations = rows.map((row) => {
-      const ofRow = reviews.filter((review) => review.subjectId === row.id);
+      const ofRow = reviews.filter((review) => isReviewOf(review, row.id));
       // The review the operator can act on is the one that waits for them,
       // not the first workflow of the observation: a review the operator
       // already gave is finished, and pairing that one would hide the review
@@ -125,7 +139,11 @@ export const POST = handler(
     // One observation carries one review. A review that waits, runs, is
     // deferred or is already given is refused, so a repeated start cannot
     // leak a workflow row for an observation the operator already reviewed.
-    const reviews = listObservationReviews([observation.id]);
+    // The reviews are read by the observation's own id, so a narrow scope
+    // cannot hide a review that is already there.
+    const reviews = listObservationWorkflows([observation.id]).filter((workflow) =>
+      isReviewOf(workflow, observation.id),
+    );
     if (reviewStateOf(reviews) !== "unreviewed") return bad("review_already_started", 409);
 
     const links = evidenceOf([observation.id]);

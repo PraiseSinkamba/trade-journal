@@ -255,26 +255,44 @@ it("starts the review of an observation the journal has not asked about", async 
   expect(posted("/api/intelligence/observations")?.body).toEqual({ observationId: "obs-1" });
 });
 
-it("never offers a review of an observation the server says carries one", async () => {
+it("never offers a review of an observation that is under review", async () => {
+  routes.set("GET /api/intelligence/observations", {
+    status: 200,
+    body: { observations: [{ ...OBSERVATION, reviewState: "live" }], intents: [] },
+  });
   routes.set("GET /api/intelligence/opportunities", {
     status: 200,
     body: { opportunities: [], intents: [] },
   });
 
-  for (const reviewState of ["live", "reviewed"]) {
-    routes.set("GET /api/intelligence/observations", {
-      status: 200,
-      body: { observations: [{ ...OBSERVATION, reviewState }], intents: [] },
-    });
+  await render(createElement(IntelligenceInbox));
 
-    await render(createElement(IntelligenceInbox));
+  const reviewButtons = Array.from(container.querySelectorAll("button")).filter(
+    (element) => element.textContent?.trim() === "Review",
+  );
+  expect(reviewButtons).toHaveLength(0);
+  expect(posted("/api/intelligence/observations")).toBeUndefined();
+  expect(container.textContent).toContain("being reviewed");
+});
 
-    const reviewButtons = Array.from(container.querySelectorAll("button")).filter(
-      (element) => element.textContent?.trim() === "Review",
-    );
-    expect(reviewButtons).toHaveLength(0);
-    expect(posted("/api/intelligence/observations")).toBeUndefined();
-  }
+it("never offers a review of an observation that was already reviewed", async () => {
+  routes.set("GET /api/intelligence/observations", {
+    status: 200,
+    body: { observations: [{ ...OBSERVATION, reviewState: "reviewed" }], intents: [] },
+  });
+  routes.set("GET /api/intelligence/opportunities", {
+    status: 200,
+    body: { opportunities: [], intents: [] },
+  });
+
+  await render(createElement(IntelligenceInbox));
+
+  const reviewButtons = Array.from(container.querySelectorAll("button")).filter(
+    (element) => element.textContent?.trim() === "Review",
+  );
+  expect(reviewButtons).toHaveLength(0);
+  expect(posted("/api/intelligence/observations")).toBeUndefined();
+  expect(container.textContent).toContain("was reviewed");
 });
 
 it("reports the refusal of a second review and refreshes the list", async () => {

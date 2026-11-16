@@ -1,4 +1,4 @@
-import { and, eq, gt, inArray, isNull, or, type SQL } from "drizzle-orm";
+import { and, asc, eq, gt, inArray, isNull, or, type SQL } from "drizzle-orm";
 import type { AnySQLiteColumn } from "drizzle-orm/sqlite-core";
 import {
   db,
@@ -10,7 +10,6 @@ import {
   intelligenceWorkflows,
   observationEvidence,
 } from "@/db";
-import { REVIEW_OBSERVATION_DEFINITION } from "@/server/intelligence/contracts/experience";
 
 /**
  * The read model of the interaction routes (Phase 18).
@@ -134,15 +133,14 @@ export const observationOfRevision = (revisionId: string) =>
     .get()?.observation ?? null;
 
 /**
- * The review workflows of the given observations, oldest first.
+ * The workflows of the given observations, oldest first.
  *
- * Only the review definition counts: a workflow of another kind that acts on
- * the same subject is not a review of it. The reviews are not filtered by
- * scope — a review belongs to its observation, so a scope may not hide it.
- * The order is the order the reviews were created in: the revision of a
- * workflow counts its own transitions, not the age of the review.
+ * The rows are read by the ids the caller already resolved, so the scope and
+ * the definition rules stay with the caller. The order is a total one — the
+ * creation instant and the id — so a caller that reads the same rows twice
+ * reads them in the same order.
  */
-export const listObservationReviews = (observationIds: readonly string[]) =>
+export const listObservationWorkflows = (observationIds: readonly string[]) =>
   observationIds.length === 0
     ? []
     : db
@@ -151,12 +149,11 @@ export const listObservationReviews = (observationIds: readonly string[]) =>
         .where(
           and(
             eq(intelligenceWorkflows.subjectType, "observation"),
-            eq(intelligenceWorkflows.definitionKey, REVIEW_OBSERVATION_DEFINITION),
             inArray(intelligenceWorkflows.subjectId, [...observationIds]),
           ),
         )
-        .all()
-        .sort((left, right) => left.createdAt - right.createdAt);
+        .orderBy(asc(intelligenceWorkflows.createdAt), asc(intelligenceWorkflows.id))
+        .all();
 
 /** One workflow by id. */
 export const findWorkflow = (id: string) =>
