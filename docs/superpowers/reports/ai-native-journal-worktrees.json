@@ -1,7 +1,7 @@
 {
   "schemaVersion": 1,
   "feature": "ai-native-journal",
-  "updatedAt": "2026-11-15T23:36:44Z",
+  "updatedAt": "2026-11-16T01:25:26Z",
   "owner": "parent OMP coordinator (exclusive owner of this record)",
   "repository": {
     "name": "trade-journal",
@@ -35,8 +35,8 @@
     },
     "featureBranch": "codex/ai-native-journal",
     "featureBootstrapSha": "0a278503fd67c0f9e82138dfecb744f4bfd307ad",
-    "featureHeadSha": "d5c546b71587e507f2df458d54e1003e178ee69d",
-    "featureHeadShaNote": "feature branch HEAD at the Phase 19 dispatch and the exact base of the Phase 19 worktree; the coordinator record commit advances the branch by one commit",
+    "featureHeadSha": "a794f934fd2a9823595f82c8b82206f34f902ee8",
+    "featureHeadShaNote": "feature branch HEAD at the Phase 19 integration and the exact base of the Phase 20 worktree; the coordinator record commit advances the branch by one commit",
     "featureCheckpointCommits": [
       "0a278503fd67c0f9e82138dfecb744f4bfd307ad",
       "80d53ccb62fda801897852a6f4e5d2aab8b0d58b",
@@ -79,7 +79,8 @@
       "a322965ead515695be0af5ed04bb34b7bb38f8bf",
       "14f8ec3aa0451c53c91d9503c2b79425232cdfaf",
       "0a449b0bfff05d6919481a9bb7577147b3687266",
-      "d5c546b71587e507f2df458d54e1003e178ee69d"
+      "d5c546b71587e507f2df458d54e1003e178ee69d",
+      "a794f934fd2a9823595f82c8b82206f34f902ee8"
     ],
     "featureBranchNote": "Orca slugified the requested name to codex-ai-native-journal at creation; the coordinator renamed the newly created, exclusively owned branch to the contract-required codex/ai-native-journal. Orca reads the renamed ref live (refs/heads/codex/ai-native-journal). No pre-existing branch was overwritten."
   },
@@ -345,7 +346,7 @@
         "startSha": "14f8ec3aa0451c53c91d9503c2b79425232cdfaf",
         "orcaParentWorktreeId": "aa54a522-a9af-4cb4-9de7-f1d9a349c0fd::E:/4004/orca/workspaces/trade-journal/codex-ai-native-journal",
         "setup": "pnpm install --frozen-lockfile completed in the worker checkout; working tree clean; Node v24.20.0, pnpm 11.0.8; own node_modules and own pnpm virtual store",
-        "state": "the implementation dispatch was abandoned after it committed; the granted observations pairing fix is being implemented by a repair dispatch",
+        "state": "integrated into codex/ai-native-journal at 4cab43c and verified on the destination branch (destination gate green on the destination branch after the merge: pnpm install --frozen-lockfile, pnpm --filter web typecheck, the core and importers typecheck, pnpm --filter web migrations:check, node scripts/check-licenses.mjs, prettier --check on every merged file and pnpm build all exit 0; pnpm test 113 test files, 1299 tests passed, 134.85s). The worktree, the git worktree registration, the branch and the leftover directory remain until the user requests cleanup.",
         "note": "Phase 19 is the native inbox and control UI half of detailed plan Task 12, and it carries the COMPLETE SLICE B GATE. The brief pins the UI surface - the inbox, the interaction card and the controls over the EXISTING shadcn primitives per ADR 0003, exposing the background AI and proactive opt-ins, the evidence, the correction, pause and resume, the worker status and the intelligence deletion - and the gate: observation to optional AI to opportunity to policy to user command to persisted knowledge, RESTARTING BEFORE THE CONTINUATION, with the completed effect unique and the no-provider path usable. Keyboard and privacy cases are required, the Ask, Reports, Recap, Critique and Import JSON contracts stay unchanged, and no route may change because the routes were Phase 18s. The worker escalated a scope question before implementing and it found a real error in the coordinator brief. Two of the seven exposures had no committed server surface: the proactive opt-in was only an input to engagementCoordinator.engage() with nothing persisting it and no route serving it, and the deletion of PERSISTENT intelligence was named by the brief although the contract review assigns it to the retention phase, Phase 20. A third gap was that nothing in the committed code calls engage() outside tests, so the opportunity producer that Phase 18 report named as Phase 19 Slice B did not exist and the Slice B chain was not a running path. The coordinator granted option A with one correction: the producer module under server/intelligence/experience/ plus its composition wiring, and one controls route apps/web/src/app/api/intelligence/controls/route.ts that persists the proactive opt-in and the pause flag in the existing settings key/value table with no schema change and no new dependency, were granted; the deletion of persistent intelligence was refused and deferred to Phase 20, and the coordinator recorded that the brief was wrong to list it in Phase 19. The implementation dispatch ctx_39512353a5c7 committed six commits (plan, implementation and four documentation commits) and was then ABANDONED by the orchestration before its worker_done was accepted; the native task returned to ready and the committed work was intact. The worker own review had already found the MAJOR: the observations GET paired the FIRST workflow per subject instead of the ACTIONABLE one and the POST started a second workflow while one was live, so the served intent vanished after an acknowledgement and a workflow row leaked on every review cycle. It shipped the client-side mitigation and named the residual in the phase report and the reviewer report, explicitly awaiting the coordinator decision. The coordinator decided A and granted the two Phase 18 files, but the dispatch was already abandoned, so the decision could not reach that worker; a repair dispatch ctx_11b840e4afe2 was started on the same worktree and branch to implement the granted fix and close the residual."
       }
     ]
@@ -690,12 +691,25 @@
       "wave": 19,
       "branch": "codex/ai-native-journal-p19",
       "deps": ["task_ed0e380a3fa9"],
-      "status": "dispatched",
-      "state": "dispatched",
-      "outcome": null,
+      "status": "completed",
+      "state": "integrated",
+      "outcome": "succeeded",
       "nativeDispatch": "ctx_11b840e4afe2",
       "note": "the native inbox and control UI half of detailed plan Task 12, and the complete Slice B gate; the brief pins the shadcn primitives decision, the keyboard and privacy cases, the restart-to-continuation requirement with a unique completed effect, the usable no-provider path, and the teeth bar for every claimed behaviour. The coordinator granted the opportunity producer, the composition wiring and one controls route during the phase, because the complete Slice B gate needs a running path and the proactive opt-in must be a real control, and refused the deletion of persistent intelligence, which the contract review assigns to Phase 20. The implementation dispatch was abandoned after it had committed; the coordinator granted the observations pairing fix and a repair dispatch implements it on the same branch, and the residual the worker recorded is closed by that fix.",
-      "priorDispatch": "ctx_39512353a5c7"
+      "priorDispatch": "ctx_39512353a5c7",
+      "commits": [
+        "f8f0525",
+        "c984996",
+        "5306008",
+        "13d8855",
+        "21f889d",
+        "b3ed0a1",
+        "148f2c6",
+        "7b0fa24",
+        "4cab43c983b4a2d8e252480b778f9b516a14dd11"
+      ],
+      "verified": "destination gate green on the destination branch after the merge: pnpm install --frozen-lockfile, pnpm --filter web typecheck, the core and importers typecheck, pnpm --filter web migrations:check, node scripts/check-licenses.mjs, prettier --check on every merged file and pnpm build all exit 0; pnpm test 113 test files, 1299 tests passed, 134.85s",
+      "evidence": "The worker found its own MAJOR in review: the observations GET paired the FIRST workflow of a subject instead of the ACTIONABLE one and the POST started a second review while one was live, so the served intent vanished after an acknowledgement and a workflow row leaked on every cycle. It shipped the client-side mitigation and named the residual, the coordinator granted the two Phase 18 route files, and the dispatch was abandoned before the decision could be delivered, so a repair dispatch implemented the granted fix and closed the residual. The coordinator ran a five-mutation teeth proof: every mutation broke exactly its expected test. Evidence: docs/superpowers/plans/ai-native-journal/phase-19.md, docs/superpowers/reports/ai-native-journal-phase-19.md, docs/superpowers/reports/ai-native-journal-integration-19.md"
     },
     {
       "stable": "T-020",
@@ -1219,12 +1233,13 @@
       "worktree": "aa54a522-a9af-4cb4-9de7-f1d9a349c0fd::E:/4004/orca/workspaces/trade-journal/codex-ai-native-journal-p19",
       "base": "14f8ec3",
       "purpose": "Phase 19 repair - pair the actionable workflow, serve the observation review state and refuse a duplicate review start, closing the residual the worker recorded",
-      "state": "dispatched",
-      "candidate": [],
+      "state": "completed; the repair paired the actionable workflow, served the observation review state and refused a duplicate review start, closing the residual",
+      "candidate": ["148f2c6", "7b0fa24"],
       "reviewed": false,
-      "integrated": false,
-      "verified": false,
-      "outcome": null
+      "integrated": true,
+      "verified": true,
+      "outcome": "verified by the coordinator with an independent five-mutation teeth proof, merged and verified on the destination branch",
+      "tip": "7b0fa24"
     }
   ],
   "integration": {
@@ -1621,6 +1636,31 @@
       "review": "one implementation-diff review, then one repair round and one coordinator re-verification; the review found a real bug, a review workflow could start for a superseded or invalidated observation, and a missing proof, the revoked scope refusal had no independent teeth. The coordinator ran an independent eight-mutation teeth proof.",
       "note": "no schema change: nothing under apps/web/src/db/ moved and migrations 0001 through 0007 are byte-unchanged. The backend only: no React component was touched, because the UI is Phase 19. The first gate run failed at prettier --check on two unformatted documents; the formatting was applied and proven to be formatting only, and the whole gate was re-run alone. No dependency and no lockfile change. No push, no pull request and no merge into main.",
       "report": "docs/superpowers/reports/ai-native-journal-integration-18.md"
+    },
+    {
+      "phase": "19",
+      "stable": "T-019",
+      "native": "task_9eb1b8b7ab2f",
+      "branch": "codex/ai-native-journal-p19",
+      "merge": "4cab43c983b4a2d8e252480b778f9b516a14dd11",
+      "destinationBefore": "a305f726b5beddf039d055d24022b2a9b9c6add2",
+      "head": "7b0fa24",
+      "commits": [
+        "f8f0525",
+        "c984996",
+        "5306008",
+        "13d8855",
+        "21f889d",
+        "b3ed0a1",
+        "148f2c6",
+        "7b0fa24"
+      ],
+      "files": 18,
+      "schema": "none - this phase owns no migration",
+      "verification": "destination gate green on the destination branch after the merge: pnpm install --frozen-lockfile, pnpm --filter web typecheck, the core and importers typecheck, pnpm --filter web migrations:check, node scripts/check-licenses.mjs, prettier --check on every merged file and pnpm build all exit 0; pnpm test 113 test files, 1299 tests passed, 134.85s",
+      "review": "one implementation-diff review, then one repair round and one coordinator re-verification; the worker found the workflow pairing defect and the leaked row in its own review, and the coordinator granted the two Phase 18 route files to fix it. The coordinator ran an independent five-mutation teeth proof.",
+      "note": "no schema change: nothing under apps/web/src/db/ moved and migrations 0001 through 0007 are byte-unchanged. The proactive opt-in and the pause flag persist in the existing settings key/value table and the producer reads them, so the toggle is a real control. The opportunity producer makes the Slice B chain a running path, with the effect applied exactly once across a restart and the no-provider path usable. The deletion of PERSISTENT intelligence is deferred to Phase 20 and the phase report names it. No dependency and no lockfile change. No push, no pull request and no merge into main.",
+      "report": "docs/superpowers/reports/ai-native-journal-integration-19.md"
     }
   ],
   "recordShape": "This file is the index and the authoritative stable-to-native task mapping: stable/native task mapping, worktree and dispatch identifiers, and one compact entry per integrated phase. Narrative, findings, deviations and command output live in the per-phase reports under docs/superpowers/reports/. Keep this file compact - one entry per phase, no duplicated prose. Resolve a native task id from taskMap here or from the native task list, never from a chat summary: a transcription slip once named T-019 as T-005, and the near miss was caught because the native task list disagreed with the prose.",
