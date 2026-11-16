@@ -3,13 +3,14 @@
 Phase guide row 20 · detailed-plan Task 13 (storage/operations portion) · milestone M6 ·
 schema allocation: **None**
 
-|                       |                                                                                           |
-| --------------------- | ----------------------------------------------------------------------------------------- |
-| Branch                | `codex/ai-native-journal-p20` (child of the feature worktree)                             |
-| Base                  | `036fd3f83e63018d38160dd5138949d5aa7ce86d` (verified feature HEAD)                        |
-| Plan commit           | _docs: plan the retention, backup and operations work_                                    |
-| Implementation commit | _test: harden intelligence recovery packaging and operations_                             |
-| Migrations            | none. `0001`–`0007` are byte-unchanged; no schema, registry or checksum file was touched. |
+|                       |                                                                                                                                              |
+| --------------------- | -------------------------------------------------------------------------------------------------------------------------------------------- |
+| Branch                | `codex/ai-native-journal-p20` (child of the feature worktree)                                                                                |
+| Base                  | `036fd3f83e63018d38160dd5138949d5aa7ce86d` (verified feature HEAD)                                                                           |
+| Plan commit           | _docs: plan the retention, backup and operations work_                                                                                       |
+| Implementation commit | _test: harden intelligence recovery packaging and operations_                                                                                |
+| Repair commits        | _fix: keep the backlog, the rebuild and the deleted account safe_ · _fix: keep a queued seed job queued and cover the backup's key refusals_ |
+| Migrations            | none. `0001`–`0007` are byte-unchanged; no schema, registry or checksum file was touched.                                                    |
 
 ## What was built
 
@@ -23,10 +24,13 @@ and hand the operator a backup that can be read again — with a runbook that sa
   - `pruneIntelligence(before, limit)` prunes the **transport** class (an outbox event whose whole
     subtree is finished) and the **diagnostics** class (the diagnostic payload of a finished
     background run). The bound is strict: a subtree that does not fit in the remaining budget is
-    left whole, so one call never exceeds the number of rows it was given.
+    left whole, so one call never exceeds the number of rows it was given — and the prune carries on
+    with a cheaper subtree instead of ending the call. An event the dispatcher never handed to a
+    handler is still the backlog, so it is never a candidate.
   - `pruneSupersededKnowledge(before, limit)` prunes the **knowledge** class: the superseded and
-    invalidated records that are not the newest of their subject, and the superseded and invalidated
-    observations nobody names.
+    invalidated records and observations nobody names. The newest version of a subject survives the
+    window only while it is still live, so a record a source deletion invalidated — which raises no
+    successor — falls to the 90-day rule instead of surviving forever.
   - `purgeAccountIntelligence(tx, accountId)` takes the account's whole intelligence with it: its
     outbox events, their deliveries and jobs (cancelled first, so a leased worker is fenced), the
     evidence sidecar of its fills, its observations, its knowledge, its workflows, its opportunities
@@ -78,9 +82,9 @@ journal that was purged is never restored without the ledger that says so.
 
 | File                                             | Cases | What it proves                                                                                                                                               |
 | ------------------------------------------------ | ----- | ------------------------------------------------------------------------------------------------------------------------------------------------------------ |
-| `apps/web/tests/intelligence-retention.test.ts`  | 30    | the reference-safe prune, the compact dedup keys, the bound, the windows, the purge, the reset and the rebuild, the cancellation fence, the knowledge window |
-| `apps/web/tests/intelligence-backup.test.ts`     | 19    | the explicit inputs, the quiescence check, the key travel, the key verification, the restore verification, no resurrection                                   |
-| `apps/web/tests/intelligence-acceptance.test.ts` | 3     | the phase gate end to end, and the two migration failure cases                                                                                               |
+| `apps/web/tests/intelligence-retention.test.ts`  | 32    | the reference-safe prune, the compact dedup keys, the bound, the windows, the purge, the reset and the rebuild, the cancellation fence, the knowledge window |
+| `apps/web/tests/intelligence-backup.test.ts`     | 23    | the explicit inputs, the quiescence check, the key travel, the key verification, the restore verification, no resurrection                                   |
+| `apps/web/tests/intelligence-acceptance.test.ts` | 10    | the phase gate end to end, the two migration failure cases, and the operator routes                                                                          |
 
 ### The proof of teeth
 
@@ -106,9 +110,15 @@ deliberate break of the production behaviour, the test that failed, and the rest
 | the restore's deleted branch stopped running the purge                | `takes the whole intelligence of a deleted account out of the restored journal`   |
 | the backup accepted a source with a foreign key                       | `refuses a source that does not hold the journal's own key`                       |
 | the prune deleted an event that was never dispatched                  | `keeps an event that was never dispatched`                                        |
+| the prune deleted an event the dispatcher never stamped               | `keeps an event the dispatcher never stamped`                                     |
+| the prune deleted a dispatched event that never reached a handler     | `keeps a dispatched event that has no delivery row`                               |
 | the rebuild enqueued nothing on a second cycle                        | `re-arms the seed job when the account is rebuilt again`                          |
 | the restore left the fills and the trades of a deleted account        | `takes the fills and the trades of a deleted account out of the restored journal` |
 | the restore reported a verified key it never verified                 | `reports a key as verified only when it verified one`                             |
+| a restore reported a verified key when it verified none               | `reports a key as unverified when the backup carries none`                        |
+| the backup copied the key file world-readable                         | `copies the key material so only its owner can read it`                           |
+| the backup accepted a journal whose key lives in the environment      | `refuses a backup when the key comes from the environment`                        |
+| the backup copied encrypted material no key can travel with           | `refuses a backup of encrypted material no key can travel with`                   |
 | the knowledge prune kept an invalidated record forever                | `removes a knowledge record a source deletion invalidated`                        |
 
 Two test bugs were found by the teeth work and fixed: several "keeps" cases used an event newer
@@ -118,14 +128,18 @@ are now older than the cutoff, and the ledger is what removes the account from t
 
 ### The commands that were run
 
-| Command                                                                                                                                                                                                                                                                                          | Result                  |
-| ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ | ----------------------- |
-| `npx vitest run apps/web/tests/intelligence-retention.test.ts apps/web/tests/intelligence-backup.test.ts apps/web/tests/intelligence-acceptance.test.ts`                                                                                                                                         | **59 passed** (3 files) |
-| `npx vitest run apps/web/tests/trade-mutation-commands.test.ts apps/web/tests/intelligence-observations.test.ts apps/web/tests/intelligence-slice-a.test.ts apps/web/tests/intelligence-slice-b.test.ts apps/web/tests/intelligence-jobs.test.ts apps/web/tests/intelligence-migrations.test.ts` | **96 passed** (6 files) |
-| `npx tsc --noEmit -p apps/web/tsconfig.json`                                                                                                                                                                                                                                                     | exit 0                  |
-| `npx prettier --check` on the changed files                                                                                                                                                                                                                                                      | clean                   |
+Every command below was run against the final tree of this phase, on Node v24.22.3 and pnpm 11.0.8.
 
-The whole-project `pnpm test` and the destination gate are the coordinator's.
+| Command                                                                                                                                                                                                                                                                                                                          | Exit | Runtime | Result                   |
+| -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ---- | ------- | ------------------------ |
+| `pnpm exec vitest run apps/web/tests/intelligence-retention.test.ts apps/web/tests/intelligence-backup.test.ts apps/web/tests/intelligence-acceptance.test.ts`                                                                                                                                                                   | 0    | 18 s    | **65 passed** (3 files)  |
+| `pnpm --filter web typecheck`                                                                                                                                                                                                                                                                                                    | 0    | 116 s   | no type errors           |
+| `npx prettier --check` on every touched path                                                                                                                                                                                                                                                                                     | 0    | 8 s     | clean                    |
+| `npx vitest run apps/web/tests/trade-mutation-commands.test.ts apps/web/tests/intelligence-observations.test.ts apps/web/tests/intelligence-slice-a.test.ts apps/web/tests/intelligence-slice-b.test.ts apps/web/tests/intelligence-jobs.test.ts apps/web/tests/intelligence-migrations.test.ts` (the reviewer's regression run) | 0    | —       | **96 passed** (6 files)  |
+| `npx vitest run apps/web/tests/intelligence-worker.test.ts apps/web/tests/intelligence-workflows.test.ts apps/web/tests/intelligence-knowledge-revisions.test.ts apps/web/tests/intelligence-engagement.test.ts` (the reviewer's regression run)                                                                                 | 0    | —       | **100 passed** (4 files) |
+
+The 65 cases are 32 retention, 23 backup and 10 acceptance. The whole-project `pnpm test` and the
+destination gate are the coordinator's.
 
 ## The review and its findings
 
@@ -186,6 +200,16 @@ candidate again on every later prune); a rebuild forgets only a **reset** in the
 deleted account keeps its protection; the restored journal is verified once more after the ledger
 was applied; and the manifest is checked rather than trusted, so a manifest without a version or
 without a database is refused with a clear reason instead of a crash.
+
+The nine findings were closed in **two** commits. The first carried the behavioural fixes; the
+second carried the **refinements and the missing coverage** the first left behind: a rebuild now
+re-arms only a seed job that is no longer live, so a rebuild asked for twice while the seed is
+still queued stays one job and a running seed is not fenced; the prune carries on with a cheaper
+subtree instead of ending the run; the restore removes a deleted account's fills through the same
+helper the delete path uses; and six new cases close the gaps the review named but no test covered
+— the copied key file's permissions, the refusal when the key comes from the environment, the
+refusal of a backup whose encrypted material no key can travel with, an unverified key, and the two
+backlog cases of the prune.
 
 Two more test bugs were found while proving the teeth of these fixes: the restore test never called
 `restoreJournal` (it opened a fresh directory, so it asserted nothing), and the rebuild test
