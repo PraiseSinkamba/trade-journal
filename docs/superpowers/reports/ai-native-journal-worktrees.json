@@ -1,7 +1,7 @@
 {
   "schemaVersion": 1,
   "feature": "ai-native-journal",
-  "updatedAt": "2026-11-16T08:18:31Z",
+  "updatedAt": "2026-11-16T11:25:21Z",
   "owner": "parent OMP coordinator (exclusive owner of this record)",
   "repository": {
     "name": "trade-journal",
@@ -35,7 +35,7 @@
     },
     "featureBranch": "codex/ai-native-journal",
     "featureBootstrapSha": "0a278503fd67c0f9e82138dfecb744f4bfd307ad",
-    "featureHeadSha": "d0605c8fa611f1a2b55e512912cd2927dec2eeae",
+    "featureHeadSha": "468d931042d95c14d6ed3e3ab88b4b7afe527588",
     "featureHeadShaNote": "feature branch HEAD at the Phase 20 dispatch and the exact base of the Phase 20 worktree; the coordinator record commit advances the branch by one commit",
     "featureCheckpointCommits": [
       "0a278503fd67c0f9e82138dfecb744f4bfd307ad",
@@ -82,7 +82,8 @@
       "d5c546b71587e507f2df458d54e1003e178ee69d",
       "a794f934fd2a9823595f82c8b82206f34f902ee8",
       "036fd3f83e63018d38160dd5138949d5aa7ce86d",
-      "d0605c8fa611f1a2b55e512912cd2927dec2eeae"
+      "d0605c8fa611f1a2b55e512912cd2927dec2eeae",
+      "468d931042d95c14d6ed3e3ab88b4b7afe527588"
     ],
     "featureBranchNote": "Orca slugified the requested name to codex-ai-native-journal at creation; the coordinator renamed the newly created, exclusively owned branch to the contract-required codex/ai-native-journal. Orca reads the renamed ref live (refs/heads/codex/ai-native-journal). No pre-existing branch was overwritten."
   },
@@ -735,8 +736,9 @@
       "status": "dispatched",
       "state": "dispatched",
       "outcome": null,
-      "nativeDispatch": "ctx_66a06c539d6a",
-      "note": "the storage and operations half of detailed plan Task 13; the brief pins the reference-aware retention with compact dedup preservation, the cancel and purge racing a leased completion, the reset without reseed, the restore with synthetic encrypted settings, the migration failure recovery, the quiescent backup, the pending and unacknowledged failures staying inspectable, the operations runbook, and the exclusion of the benchmark, the CI sequence and the Docker and Windows smoke that belong to Phase 21. The coordinator additionally granted the workflow effect handler registration after the dispatch, because the handler already existed and was simply never registered, so every deferred workflow dead-lettered its wake-up job and never resumed."
+      "nativeDispatch": "ctx_2c945e14a45d",
+      "note": "the storage and operations half of detailed plan Task 13; the brief pins the reference-aware retention with compact dedup preservation, the cancel and purge racing a leased completion, the reset without reseed, the restore with synthetic encrypted settings, the migration failure recovery, the quiescent backup, the pending and unacknowledged failures staying inspectable, the operations runbook, and the exclusion of the benchmark, the CI sequence and the Docker and Windows smoke that belong to Phase 21. The coordinator additionally granted the workflow effect handler registration after the dispatch, because the handler already existed and was simply never registered, so every deferred workflow dead-lettered its wake-up job and never resumed. The coordinator granted the worker wiring, the operator routes and the workflow effect registration after the candidate was reviewed, because a retention that never runs and an operator with no way to run it would leave the phase acceptance undemonstrable in production and the operations runbook describing an action the operator cannot take.",
+      "priorDispatch": "ctx_66a06c539d6a"
     },
     {
       "stable": "T-021",
@@ -1267,6 +1269,23 @@
       "worktree": "aa54a522-a9af-4cb4-9de7-f1d9a349c0fd::E:/4004/orca/workspaces/trade-journal/codex-ai-native-journal-p20",
       "base": "036fd3f83e63018d38160dd5138949d5aa7ce86d",
       "purpose": "Phase 20 - retention, backup/restore, deletion of persistent intelligence and operations documentation",
+      "state": "completed; the candidate was reviewed and the coordinator granted the wiring it asked for",
+      "candidate": ["0e0eddc", "59d3661", "f4c5767"],
+      "reviewed": true,
+      "integrated": false,
+      "verified": false,
+      "outcome": "the worker delivered the retention, purge, backup, restore and reset behaviour and correctly identified that none of it was wired: no retention job handler was registered, the operator had no route, and the deferred workflow resume was still broken",
+      "tip": "f4c5767"
+    },
+    {
+      "task": "T-020",
+      "native": "task_16692d8c9708",
+      "dispatch": "ctx_2c945e14a45d",
+      "agent": "omp",
+      "provider": "omp",
+      "worktree": "aa54a522-a9af-4cb4-9de7-f1d9a349c0fd::E:/4004/orca/workspaces/trade-journal/codex-ai-native-journal-p20",
+      "base": "036fd3f",
+      "purpose": "Phase 20 repair - register the retention job handler and the workflow effect handler, and add the operator routes for the reset, the rebuild request and the retention run",
       "state": "dispatched",
       "candidate": [],
       "reviewed": false,
