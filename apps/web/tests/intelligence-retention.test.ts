@@ -287,6 +287,99 @@ describe("the reference-safe prune", () => {
     expect(events.map((event) => event.id)).toContain("evt-undispatched");
   });
 
+  it("keeps an event the dispatcher never stamped", () => {
+    insertAccount("acct-1");
+    // The handler answered, but the dispatcher never stamped the event: the
+    // event is still the record of work the journal owes, and its delivery
+    // carries the dedup key.
+    db.insert(domainOutbox)
+      .values({
+        id: "evt-unstamped",
+        type: "trade.projection_changed",
+        schemaVersion: 1,
+        aggregateType: "trade",
+        aggregateId: "trade-evt-unstamped",
+        aggregateRevision: 1,
+        correlationId: "corr-evt-unstamped",
+        origin: "import",
+        accountId: "acct-1",
+        payloadJson: "{}",
+        recordedAt: NOW - 41 * DAY,
+        occurredAt: null,
+        dispatchedAt: null,
+      })
+      .run();
+    db.insert(intelligenceJobs)
+      .values({
+        id: "job-evt-unstamped",
+        idempotencyKey: "evt-unstamped:trade-observation:1",
+        type: "evaluate_trade",
+        payloadJson: JSON.stringify({
+          type: "evaluate_trade",
+          eventId: "evt-unstamped",
+          handlerId: "trade-observation",
+          handlerVersion: "1",
+        }),
+        status: "completed",
+        attempts: 1,
+        availableAt: NOW - 41 * DAY,
+        owner: null,
+        fence: 1,
+        leaseUntil: null,
+        cancelRequested: false,
+        lastError: null,
+        createdAt: NOW - 41 * DAY,
+        updatedAt: NOW - 41 * DAY,
+      })
+      .run();
+    db.insert(eventDeliveries)
+      .values({
+        eventId: "evt-unstamped",
+        handlerId: "trade-observation",
+        handlerVersion: "1",
+        state: "delivered",
+        jobId: "job-evt-unstamped",
+        lastError: null,
+        createdAt: NOW - 41 * DAY,
+        updatedAt: NOW - 41 * DAY,
+      })
+      .run();
+
+    pruneIntelligence(NOW - 40 * DAY, 100);
+
+    const events = db.select().from(domainOutbox).all();
+    expect(events.map((event) => event.id)).toContain("evt-unstamped");
+  });
+
+  it("keeps a dispatched event that has no delivery row", () => {
+    insertAccount("acct-1");
+    // The dispatcher marked the event as dispatched but no handler answered
+    // yet: the delivery is the work that is still owed, so the event is not a
+    // finished subtree.
+    db.insert(domainOutbox)
+      .values({
+        id: "evt-no-delivery",
+        type: "trade.projection_changed",
+        schemaVersion: 1,
+        aggregateType: "trade",
+        aggregateId: "trade-evt-no-delivery",
+        aggregateRevision: 1,
+        correlationId: "corr-evt-no-delivery",
+        origin: "import",
+        accountId: "acct-1",
+        payloadJson: "{}",
+        recordedAt: NOW - 41 * DAY,
+        occurredAt: null,
+        dispatchedAt: NOW - 41 * DAY,
+      })
+      .run();
+
+    pruneIntelligence(NOW - 40 * DAY, 100);
+
+    const events = db.select().from(domainOutbox).all();
+    expect(events.map((event) => event.id)).toContain("evt-no-delivery");
+  });
+
   it("removes the event of a finished subtree", () => {
     insertAccount("acct-1");
     insertEvent("evt-done", "acct-1", {
@@ -874,6 +967,10 @@ describe("the reset and its reseed suppression", () => {
     expect(second).toHaveLength(1);
     expect(second[0]!.status).toBe("pending");
     expect(second[0]!.attempts).toBe(0);
+    // The re-armed job is runnable work: a worker can claim it, so the
+    // account's intelligence comes back.
+    const claim = jobs.claim(OWNER, NOW + 1000);
+    expect(claim?.jobId).toBe(second[0]!.id);
   });
 
   it("moves the checkpoint back to pending when a rebuild is requested", () => {

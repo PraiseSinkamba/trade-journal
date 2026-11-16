@@ -195,8 +195,9 @@ export const persistObservationInTx = (
  *
  * A record is prunable when it is not the newest version of its subject — a
  * newer version says what the subject is now — and when it is older than the
- * cutoff. A record that is still the newest of its subject stays: it is the
- * current knowledge of that subject, whatever its status.
+ * cutoff. A record that is still the newest of its subject stays only while
+ * it is live: an invalidated record raises no successor, so nothing would
+ * ever replace it.
  *
  * Returns how many rows were removed.
  */
@@ -314,7 +315,6 @@ const knowledgeHypothesesInTx = (tx: JournalTx, before: number) =>
       subjectType: knowledgeHypotheses.subjectType,
       subjectId: knowledgeHypotheses.subjectId,
       version: knowledgeHypotheses.version,
-      status: knowledgeHypotheses.status,
       evidenceIdsJson: knowledgeHypotheses.evidenceIdsJson,
     })
     .from(knowledgeHypotheses)
@@ -334,7 +334,6 @@ const knowledgePatternsInTx = (tx: JournalTx, before: number) =>
       subjectType: knowledgePatterns.subjectType,
       subjectId: knowledgePatterns.subjectId,
       version: knowledgePatterns.version,
-      status: knowledgePatterns.status,
       evidenceIdsJson: knowledgePatterns.evidenceIdsJson,
     })
     .from(knowledgePatterns)
@@ -347,10 +346,16 @@ const knowledgePatternsInTx = (tx: JournalTx, before: number) =>
     .all();
 
 /**
- * Whether a record is the newest version of its subject.
+ * Whether a record is the newest version of its subject, and still live.
  *
- * The newest version is the current knowledge of the subject, so it survives
- * whatever its status says.
+ * The newest version of a subject is the current knowledge of that subject,
+ * so it survives the window — but only while it is **live**
+ * (`active`, `stale` or `pending`). A superseded or invalidated record is
+ * finished knowledge: an invalidated one raises no successor, so it would
+ * otherwise survive the 90-day window forever.
+ *
+ * The newest row of the subject is the record itself once the versions
+ * match, so the record's own status is that newest row's status.
  */
 const isNewestOfSubject = (
   tx: JournalTx,
@@ -359,20 +364,26 @@ const isNewestOfSubject = (
     subjectType: string;
     subjectId: string;
     version: number;
-    status: "active" | "stale" | "pending" | "superseded" | "invalidated";
   },
 ): boolean => {
-  // A record that is still **live** is the current knowledge of its subject
-  // and stays whatever its version. A superseded or invalidated record is
-  // finished knowledge: an invalidated one raises no successor, so it would
-  // otherwise survive the 90-day window forever.
-  if (record.status !== "active" && record.status !== "stale" && record.status !== "pending") {
-    return false;
-  }
+  const subject = and(
+    eq(table.subjectType, record.subjectType),
+    eq(table.subjectId, record.subjectId),
+  );
   const newest = tx
     .select({ version: sql<number>`max(${table.version})` })
     .from(table)
-    .where(and(eq(table.subjectType, record.subjectType), eq(table.subjectId, record.subjectId)))
+    .where(subject)
     .get();
-  return (newest?.version ?? record.version) === record.version;
+  // A record that is not the newest of its subject is superseded knowledge.
+  if ((newest?.version ?? record.version) !== record.version) return false;
+  // The newest version of a subject survives the window only while it is
+  // live: an invalidated record raises no successor, so it would otherwise
+  // survive the window forever.
+  const row = tx
+    .select({ status: table.status })
+    .from(table)
+    .where(and(subject, eq(table.version, record.version)))
+    .get();
+  return row?.status === "active" || row?.status === "stale" || row?.status === "pending";
 };

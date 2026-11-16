@@ -1,5 +1,13 @@
 import { afterAll, beforeEach, describe, expect, it } from "vitest";
-import { copyFileSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import {
+  copyFileSync,
+  mkdirSync,
+  mkdtempSync,
+  readFileSync,
+  rmSync,
+  statSync,
+  writeFileSync,
+} from "node:fs";
 import { createCipheriv, randomBytes } from "node:crypto";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -439,6 +447,114 @@ describe("the no resurrection guarantee", () => {
       destination: directory("restored-plain"),
     });
     expect(restored.keyVerified).toBe(false);
+  });
+
+  it("copies the key material so only its owner can read it", () => {
+    withJournalTransaction((tx) => setAiKeyInTx(tx, "openai", "sk-synthetic-mode-key"));
+
+    const result = backupJournal({
+      source: scratch,
+      destination: directory("out-mode"),
+      quiesced: true,
+    });
+
+    expect(result.keyFile).not.toBeNull();
+    const copied = result.keyFile!;
+    // The copy is the key material of the journal: nobody else may read it.
+    if (process.platform !== "win32") {
+      expect(statSync(copied).mode & 0o777).toBe(0o600);
+    } else {
+      expect(readFileSync(copied, "utf8").trim()).toBe(
+        readFileSync(join(scratch, ".secret"), "utf8").trim(),
+      );
+    }
+  });
+
+  it("refuses a backup when the key comes from the environment", () => {
+    // The key lives in the environment, so it cannot travel with the backup.
+    const previous = process.env.JOURNAL_SECRET;
+    process.env.JOURNAL_SECRET = "synthetic-environment-secret";
+    try {
+      expect(() =>
+        backupJournal({ source: scratch, destination: directory("out-env"), quiesced: true }),
+      ).toThrow(/JOURNAL_SECRET/);
+    } finally {
+      if (previous === undefined) delete process.env.JOURNAL_SECRET;
+      else process.env.JOURNAL_SECRET = previous;
+    }
+  });
+
+  it("refuses a backup of encrypted material no key can travel with", () => {
+    // A journal whose credentials are sealed under an environment secret has
+    // no key file, so a backup taken without that variable in the
+    // environment carries no key: the restored journal could never read its
+    // settings.
+    const sealed = directory("sealed-live");
+    const sealedJournal = openConnection(sealed);
+    try {
+      const other = randomBytes(32);
+      const iv = randomBytes(12);
+      const cipher = createCipheriv("aes-256-gcm", other, iv);
+      const encrypted = Buffer.concat([
+        cipher.update(Buffer.from("sealed", "utf8")),
+        cipher.final(),
+      ]);
+      sealedJournal
+        .insert(settings)
+        .values({
+          key: "openaiKeyEnc",
+          value: [
+            iv.toString("base64"),
+            encrypted.toString("base64"),
+            cipher.getAuthTag().toString("base64"),
+          ].join("."),
+        })
+        .run();
+    } finally {
+      sealedJournal.$client.close();
+    }
+    // The live directory that would hold the key has none.
+    const previousDir = process.env.JOURNAL_DATA_DIR;
+    const previousSecret = process.env.JOURNAL_SECRET;
+    delete process.env.JOURNAL_SECRET;
+    process.env.JOURNAL_DATA_DIR = directory("no-key-home");
+    try {
+      expect(() =>
+        backupJournal({
+          source: sealed,
+          destination: directory("out-sealed-live"),
+          quiesced: true,
+        }),
+      ).toThrow(/no key material is available/);
+    } finally {
+      process.env.JOURNAL_DATA_DIR = previousDir;
+      if (previousSecret !== undefined) process.env.JOURNAL_SECRET = previousSecret;
+    }
+  });
+
+  it("reports a key as unverified when the backup carries none", () => {
+    // A journal with nothing encrypted needs no key, so the backup carries
+    // none and the restore verified nothing.
+    const plain = directory("plain-live");
+    const plainJournal = openConnection(plain);
+    plainJournal.$client.close();
+    const previousDir = process.env.JOURNAL_DATA_DIR;
+    const previousSecret = process.env.JOURNAL_SECRET;
+    delete process.env.JOURNAL_SECRET;
+    process.env.JOURNAL_DATA_DIR = directory("no-key-home-plain");
+    try {
+      backupJournal({ source: plain, destination: directory("out-plain-live"), quiesced: true });
+
+      const restored = restoreJournal({
+        source: directory("out-plain-live"),
+        destination: directory("restored-plain-live"),
+      });
+
+      expect(restored.keyVerified).toBe(false);
+    } finally {
+      process.env.JOURNAL_DATA_DIR = previousDir;
+      if (previousSecret !== undefined) process.env.JOURNAL_SECRET = previousSecret;
+    }
   });
 
   it("takes the fills and the trades of a deleted account out of the restored journal", () => {

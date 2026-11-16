@@ -29,6 +29,7 @@ import {
 } from "@/db/transaction";
 import { newUuid } from "@/server/ids";
 import { decryptJson } from "@/server/crypto";
+import { deleteAccountExecutionsInTx } from "@/server/executions";
 import { liveReferenceIndex } from "./experience-store";
 import { createJobStore, deleteTerminalJobsForEventInTx } from "./jobs";
 import { pruneKnowledgeInTx, pruneObservationsInTx } from "./knowledge-store";
@@ -424,29 +425,29 @@ export const requestAccountIntelligenceRebuildInTx = (
   // finished job would leave the account with a pending checkpoint and no
   // runnable work.
   const seedKey = JSON.stringify(["seed_account", accountId, baselineOperationId, null]);
+  createJobStore(db).enqueue(tx, seedKey, { type: "seed_account", accountId }, now);
   const existing = tx
-    .select({ id: intelligenceJobs.id })
+    .select({ id: intelligenceJobs.id, status: intelligenceJobs.status })
     .from(intelligenceJobs)
     .where(eq(intelligenceJobs.idempotencyKey, seedKey))
     .get();
-  if (existing) {
-    tx.update(intelligenceJobs)
-      .set({
-        status: "pending",
-        attempts: 0,
-        availableAt: now,
-        owner: null,
-        fence: sql`${intelligenceJobs.fence} + 1`,
-        leaseUntil: null,
-        cancelRequested: false,
-        lastError: null,
-        updatedAt: now,
-      })
-      .where(eq(intelligenceJobs.id, existing.id))
-      .run();
-  } else {
-    createJobStore(db).enqueue(tx, seedKey, { type: "seed_account", accountId }, now);
-  }
+  // A job that is still queued or running is one job: a rebuild asked for
+  // twice while the seed is still queued must not restart it.
+  if (!existing || ["pending", "running", "retry_wait"].includes(existing.status)) return;
+  tx.update(intelligenceJobs)
+    .set({
+      status: "pending",
+      attempts: 0,
+      availableAt: now,
+      owner: null,
+      fence: sql`${intelligenceJobs.fence} + 1`,
+      leaseUntil: null,
+      cancelRequested: false,
+      lastError: null,
+      updatedAt: now,
+    })
+    .where(eq(intelligenceJobs.id, existing.id))
+    .run();
 };
 
 /* ---------------------------------------------------------------------------
@@ -525,9 +526,10 @@ export const pruneIntelligenceInTx = (
 
     // The subtree is one unit: the jobs go first, then the event, whose
     // deliveries cascade with it. The bound is strict, so a subtree that does
-    // not fit in the remaining budget is left whole.
+    // not fit in the remaining budget is left whole — and the prune carries
+    // on with a cheaper one instead of ending the call.
     const cost = finishedJobCount(tx, jobIds, before) + 1;
-    if (removed + cost > limit) break;
+    if (removed + cost > limit) continue;
 
     // The jobs go first, then the event: the event's deliveries cascade with
     // it, and a job whose delivery is gone has no dedup key left to keep.
@@ -652,31 +654,65 @@ const readKeyFile = (directory: string): Buffer | null => {
 };
 
 /**
+ * Whether a settings value is an encrypted envelope.
+ *
+ * The envelope is three dot-separated base64 parts, each long enough to be
+ * key material, so a plain setting (a time zone, a version) never looks like
+ * one.
+ */
+const isEncryptedEnvelope = (value: unknown): value is string => {
+  if (typeof value !== "string") return false;
+  const parts = value.split(".");
+  return (
+    parts.length === 3 &&
+    parts.every((part) => part.length >= 8 && /^[A-Za-z0-9+/]+={0,2}$/.test(part))
+  );
+};
+
+/**
+ * Whether a journal holds encrypted material.
+ *
+ * An encrypted setting or an account with sealed credentials is material the
+ * journal needs its key to read.
+ */
+const holdsEncryptedMaterial = (directory: string): boolean => {
+  const file = join(directory, "journal.db");
+  if (!existsSync(file)) return false;
+  const journal = new Database(file, { fileMustExist: true });
+  try {
+    const settings = journal.prepare("SELECT value FROM settings").all() as { value?: string }[];
+    if (settings.some((row) => isEncryptedEnvelope(row.value))) return true;
+    const accounts = journal
+      .prepare("SELECT COUNT(*) AS count FROM accounts WHERE credentials_enc IS NOT NULL")
+      .get() as { count?: number } | undefined;
+    return (accounts?.count ?? 0) > 0;
+  } catch {
+    // A journal that cannot be read may hold anything, so the backup refuses
+    // rather than promises a snapshot that cannot be read back.
+    return true;
+  } finally {
+    journal.close();
+  }
+};
+
+/**
  * Whether the key opens every encrypted setting of a journal.
  *
- * A credential envelope is a JSON value with three dot-separated parts, so a
- * settings row that carries one is an encrypted credential the journal needs
- * its key to read. A journal with no encrypted setting has nothing to open.
+ * A settings row that carries an encrypted envelope is a credential the
+ * journal needs its key to read. A journal with no encrypted setting has
+ * nothing to open.
  */
 const opensEncryptedSettings = (directory: string, key: Buffer): boolean => {
   const file = join(directory, "journal.db");
   if (!existsSync(file)) return true;
-  const journal = new Database(file, { fileMustExist: true, readonly: true });
+  const journal = new Database(file, { fileMustExist: true });
   try {
-    const rows = journal.prepare("SELECT value FROM settings WHERE value LIKE '%.%.%'").all() as {
+    const rows = journal.prepare("SELECT value FROM settings").all() as {
       value?: string;
     }[];
-    for (const row of rows) {
-      if (typeof row.value !== "string" || row.value.split(".").length !== 3) continue;
-      try {
-        decryptJson(row.value);
-      } catch {
-        // The key does not open this credential, so the backup could not be
-        // read back.
-        return false;
-      }
-    }
-    return true;
+    return !rows.some(
+      (row) => isEncryptedEnvelope(row.value) && openProbe(key, row.value) === null,
+    );
   } catch {
     // A journal whose settings table cannot be read holds no credential that
     // the key must open.
@@ -785,6 +821,13 @@ export const backupJournal = (request: BackupRequest): BackupResult => {
     // backup of it could never be read back.
     throw new Error(
       "The journal holds encrypted settings its key cannot open; the backup could not be read back.",
+    );
+  }
+  if (!liveKey && holdsEncryptedMaterial(request.source)) {
+    // The source holds encrypted material and no key travels with the
+    // backup: the restored journal could never read its own settings.
+    throw new Error(
+      "The journal holds encrypted material and no key material is available to travel with the backup; the backup could not be read back.",
     );
   }
   const key = liveKey;
@@ -931,7 +974,7 @@ export const restoreJournal = (request: RestoreRequest): RestoreResult => {
           // as the live delete path removes them: neither table has a
           // foreign key to the account, so nothing else would take them.
           tx.delete(trades).where(eq(trades.accountId, accountId)).run();
-          tx.delete(executions).where(eq(executions.accountId, accountId)).run();
+          deleteAccountExecutionsInTx(tx, accountId);
           tx.delete(accounts).where(eq(accounts.id, accountId)).run();
         } else {
           resetAccountIntelligenceInTx(tx, accountId, Date.now());
@@ -1032,10 +1075,9 @@ const finishedJobCount = (tx: JournalTx, jobIds: readonly string[], before: numb
 /**
  * Reads the deletion ledger of a journal directory.
  *
- * Both halves count: the ledger row inside the database and the ledger file
- * beside it. The row is the one that committed with the purge; the file is the
- * one that survives the database being replaced, so a purge that happened
- * after the last file write is still known.
+ * The ledger is file-only: the file beside the database is the one that
+ * survives the database being replaced, so a purge that happened after the
+ * last snapshot is still known.
  */
 const readLedgerOf = (directory: string): PurgeLedgerEntry[] => {
   const ledger = new Map<string, PurgeKind>();
