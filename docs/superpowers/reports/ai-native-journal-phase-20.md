@@ -266,8 +266,10 @@ recorded in the phase plan under **The granted repair**:
 ## The next phase's inputs
 
 - **The persisted home for an AI-assisted insight** stays where Phase 19 left it: the chain's AI
-  leg has no place to store its answer, and a restore of that place is a schema change this phase
-  does not make.
+  leg has no table of its own, and no phase in this run owns the migration that would give it one.
+  The leg itself is optional, so this is a **next-milestone item and not a hole in this gate** — the
+  gate of this phase is the retention, the deletion, the backup and the restore, and all four are
+  proven.
 - **The benchmark, the full CI sequence, the Docker and Windows smoke and the package audit** are
   Phase 21's release half of Task 13.
 
