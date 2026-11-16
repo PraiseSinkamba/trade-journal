@@ -2413,7 +2413,7 @@
         },
         {
           "path": "docs/intelligence-operations.md",
-          "status": "planned"
+          "status": "existing"
         },
         {
           "path": "desktop/src-tauri/src/server.rs",
