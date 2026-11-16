@@ -1,7 +1,7 @@
 {
   "schemaVersion": 1,
   "feature": "ai-native-journal",
-  "updatedAt": "2026-11-16T01:28:18Z",
+  "updatedAt": "2026-11-16T08:18:31Z",
   "owner": "parent OMP coordinator (exclusive owner of this record)",
   "repository": {
     "name": "trade-journal",
@@ -35,7 +35,7 @@
     },
     "featureBranch": "codex/ai-native-journal",
     "featureBootstrapSha": "0a278503fd67c0f9e82138dfecb744f4bfd307ad",
-    "featureHeadSha": "036fd3f83e63018d38160dd5138949d5aa7ce86d",
+    "featureHeadSha": "d0605c8fa611f1a2b55e512912cd2927dec2eeae",
     "featureHeadShaNote": "feature branch HEAD at the Phase 20 dispatch and the exact base of the Phase 20 worktree; the coordinator record commit advances the branch by one commit",
     "featureCheckpointCommits": [
       "0a278503fd67c0f9e82138dfecb744f4bfd307ad",
@@ -81,7 +81,8 @@
       "0a449b0bfff05d6919481a9bb7577147b3687266",
       "d5c546b71587e507f2df458d54e1003e178ee69d",
       "a794f934fd2a9823595f82c8b82206f34f902ee8",
-      "036fd3f83e63018d38160dd5138949d5aa7ce86d"
+      "036fd3f83e63018d38160dd5138949d5aa7ce86d",
+      "d0605c8fa611f1a2b55e512912cd2927dec2eeae"
     ],
     "featureBranchNote": "Orca slugified the requested name to codex-ai-native-journal at creation; the coordinator renamed the newly created, exclusively owned branch to the contract-required codex/ai-native-journal. Orca reads the renamed ref live (refs/heads/codex/ai-native-journal). No pre-existing branch was overwritten."
   },
@@ -360,7 +361,7 @@
         "orcaParentWorktreeId": "aa54a522-a9af-4cb4-9de7-f1d9a349c0fd::E:/4004/orca/workspaces/trade-journal/codex-ai-native-journal",
         "setup": "pnpm install --frozen-lockfile completed in the worker checkout; working tree clean; Node v24.20.0, pnpm 11.0.8; own node_modules and own pnpm virtual store",
         "state": "dispatched: ctx_66a06c539d6a, worker handle term_59658373-1510-4dc9-aa37-82d196da6b1e",
-        "note": "Phase 20 is the storage and operations half of detailed plan Task 13: reference-aware retention, the account purge of persistent intelligence, the backup and restore path, the reset behaviour and the operations runbook. It owns NO migration - the allocation is no new schema expected - and it is the phase that finally implements the two things Phase 19 named as its own Phase 20 inputs: the deletion of persistent intelligence and the storage for an AI-assisted insight. The benchmark, the full CI sequence, the Docker and Windows packaged smoke and the Dockerfile and CI workflow changes are Phase 21 and are excluded, and the brief forbids starting Docker on this host."
+        "note": "Phase 20 is the storage and operations half of detailed plan Task 13: reference-aware retention, the account purge of persistent intelligence, the backup and restore path, the reset behaviour and the operations runbook. It owns NO migration - the allocation is no new schema expected - and it is the phase that finally implements the two things Phase 19 named as its own Phase 20 inputs: the deletion of persistent intelligence and the storage for an AI-assisted insight. The benchmark, the full CI sequence, the Docker and Windows packaged smoke and the Dockerfile and CI workflow changes are Phase 21 and are excluded, and the brief forbids starting Docker on this host. After the dispatch the coordinator read the Phase 19 worker_done, which named a third Phase 20 input: the workflow_effect job handler. The coordinator confirmed it and it is a real production defect: experience/workflows.ts already exports effectHandler() with the id workflow-effect, it is used only in a Phase 16 test, and it is NEVER registered with the worker, so a deferred workflow enqueues a wake-up job that the worker claims, cannot resolve a handler for, and fails TERMINALLY as unhandled_job. The deferred workflow therefore never resumes and every deferral leaves a dead-lettered job behind. The coordinator granted Phase 20 apps/web/src/server/intelligence/composition.ts for exactly that registration and sent the worker a follow-up requiring an end-to-end proof that a deferred workflow resumes and that the dead letter does not accumulate, with the explicit alternative that if the worker judges it out of contract it records it as a Phase 21 input and says the deferral leg stays broken until then."
       }
     ]
   },
@@ -735,7 +736,7 @@
       "state": "dispatched",
       "outcome": null,
       "nativeDispatch": "ctx_66a06c539d6a",
-      "note": "the storage and operations half of detailed plan Task 13; the brief pins the reference-aware retention with compact dedup preservation, the cancel and purge racing a leased completion, the reset without reseed, the restore with synthetic encrypted settings, the migration failure recovery, the quiescent backup, the pending and unacknowledged failures staying inspectable, the operations runbook, and the exclusion of the benchmark, the CI sequence and the Docker and Windows smoke that belong to Phase 21."
+      "note": "the storage and operations half of detailed plan Task 13; the brief pins the reference-aware retention with compact dedup preservation, the cancel and purge racing a leased completion, the reset without reseed, the restore with synthetic encrypted settings, the migration failure recovery, the quiescent backup, the pending and unacknowledged failures staying inspectable, the operations runbook, and the exclusion of the benchmark, the CI sequence and the Docker and Windows smoke that belong to Phase 21. The coordinator additionally granted the workflow effect handler registration after the dispatch, because the handler already existed and was simply never registered, so every deferred workflow dead-lettered its wake-up job and never resumed."
     },
     {
       "stable": "T-021",
