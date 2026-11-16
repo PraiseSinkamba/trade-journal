@@ -71,15 +71,15 @@ SCHEMA VERDICT: ALLOWED — this phase owns no migration and no schema change, a
 - No path under `apps/web/src/db/` changed at all: the schema, the migration registry `apps/web/src/db/migrations.ts` and the checksum artifact `apps/web/src/db/migration-checksums.json` are untouched. The diff `git diff --name-status --find-renames 5741264889b30dc50917ff8b6c39778e9230dbb9..5f2793c035f781c172624b39f38466bd39e34377 -- apps/web/src/db/` returned no path.
 - Migrations `0001 through 0007` are byte-unchanged against the merge base `5741264889b30dc50917ff8b6c39778e9230dbb9`: the git blob hash of every migration file is identical at the merge base and at the candidate tip.
 
-| Migration | File | Git blob hash |
-| --- | --- | --- |
-| `0001` | `apps/web/src/db/migrations/0001-legacy-baseline.ts` | `5a2fd458699ecc523a237b9c13b33f35251c8453` (base = tip) |
-| `0002` | `apps/web/src/db/migrations/0002-trade-projections.ts` | `ae720a2c5beff259a16c71891548dd7f8e82b46e` (base = tip) |
-| `0003` | `apps/web/src/db/migrations/0003-durable-jobs.ts` | `030b6a8bf7688eaa4d8113665cba6cf526a8ef03` (base = tip) |
-| `0004` | `apps/web/src/db/migrations/0004-observations.ts` | `103bb72ea3b71c6d0ef047eb57cd6e4df2292f9e` (base = tip) |
-| `0005` | `apps/web/src/db/migrations/0005-intelligence-runtime.ts` | `353e55137c567af27e854fe9d2c6c4bb26c1ce4b` (base = tip) |
-| `0006` | `apps/web/src/db/migrations/0006-knowledge-scheduling.ts` | `86bdbf2fe7facb7565c2b3d253042e22dd2d6185` (base = tip) |
-| `0007` | `apps/web/src/db/migrations/0007-intelligence-experience.ts` | `fe693722d11445f2b6b73623d288a9199c2efdff` (base = tip) |
+| Migration | File                                                         | Git blob hash                                           |
+| --------- | ------------------------------------------------------------ | ------------------------------------------------------- |
+| `0001`    | `apps/web/src/db/migrations/0001-legacy-baseline.ts`         | `5a2fd458699ecc523a237b9c13b33f35251c8453` (base = tip) |
+| `0002`    | `apps/web/src/db/migrations/0002-trade-projections.ts`       | `ae720a2c5beff259a16c71891548dd7f8e82b46e` (base = tip) |
+| `0003`    | `apps/web/src/db/migrations/0003-durable-jobs.ts`            | `030b6a8bf7688eaa4d8113665cba6cf526a8ef03` (base = tip) |
+| `0004`    | `apps/web/src/db/migrations/0004-observations.ts`            | `103bb72ea3b71c6d0ef047eb57cd6e4df2292f9e` (base = tip) |
+| `0005`    | `apps/web/src/db/migrations/0005-intelligence-runtime.ts`    | `353e55137c567af27e854fe9d2c6c4bb26c1ce4b` (base = tip) |
+| `0006`    | `apps/web/src/db/migrations/0006-knowledge-scheduling.ts`    | `86bdbf2fe7facb7565c2b3d253042e22dd2d6185` (base = tip) |
+| `0007`    | `apps/web/src/db/migrations/0007-intelligence-experience.ts` | `fe693722d11445f2b6b73623d288a9199c2efdff` (base = tip) |
 
 ## Layer-boundary verdict
 
@@ -635,20 +635,74 @@ Database imports counted as layer boundary violations:
   (none)
 ```
 
+### The gate failed once, and what it caught
+
+The first destination gate after the merge of this phase FAILED, and it is worth recording what it
+caught and how it was fixed.
+
+Every command before `pnpm test` exited 0 — install, the web typecheck, the core and importers
+typecheck, `migrations:check`, the license check, prettier over all twenty merged files and the
+build. The full suite then failed **2 of 1372 tests**, and both were in the repository's own
+architecture test, `apps/web/tests/intelligence-boundaries.test.ts`:
+
+    rule 4: only the infrastructure layer wires the concrete driver
+      apps/web/src/server/intelligence/infrastructure/retention.ts imports "better-sqlite3" (outside apps/web/src/db/)
+    rule 5 application: intelligence tree > no domain imports a sibling's private file
+      apps/web/src/server/intelligence/infrastructure/worker.ts imports "../experience/workflows" (sibling domain "experience")
+
+Both violations were this phase's own, and both were real.
+
+The phase's own verification command had run only the three Phase 20 suites. It never ran
+`apps/web/tests/intelligence-boundaries.test.ts`, which is the test that caught its violations. Every
+later phase's targeted command now includes the boundary test.
+
+The repair moved the code between the layers the rules name, and changed no behaviour:
+
+- the four places where the retention module opened the raw `better-sqlite3` driver — the
+  encrypted-material probe, the encrypted-settings probe, the backup's `VACUUM INTO` with its lease
+  check, and the restored-journal `integrity_check` and `foreign_key_check` — became primitives of
+  `apps/web/src/db/journal-file.ts`, so only the database layer wires the driver. The file is still
+  opened WITHOUT migrating it, because opening it through the journal would migrate it and the
+  backup and the verification must judge the journal as it is.
+- `WORKFLOW_EFFECT_HANDLER_ID` and `WORKFLOW_EFFECT_HANDLER_VERSION` moved into the contracts layer
+  the worker already imports its handler types from, so no domain imports a sibling's private file.
+
+The repair is commits `73930f9` and `5f2793c`, merged in `33e1fce`. After it, the boundary test and
+the three Phase 20 suites pass together — 4 files, 81 tests — and `pnpm --filter web typecheck`
+exits 0.
+
+### The gate table
+
+One full gate run on the destination branch, alone on the host, sequentially, after the repair
+merge. Every exit code is the exit status of the command itself, never the status of a pipe.
+
+| Command                                                                             | Exit | Result |
+| ----------------------------------------------------------------------------------- | ---- | ------ |
+| `pnpm install --frozen-lockfile`                                                    | 0    | passed |
+| `pnpm --filter web typecheck`                                                       | 0    | passed |
+| `pnpm --filter @luxalgo/journal-core --filter @luxalgo/journal-importers typecheck` | 0    | passed |
+| `pnpm --filter web migrations:check`                                                | 0    | passed |
+| `node scripts/check-licenses.mjs`                                                   | 0    | passed |
+| `pnpm exec prettier --check <the merged files>`                                     | 0    | passed |
+| `pnpm build`                                                                        | 0    | passed |
+| `pnpm test`                                                                         | 0    | passed |
+
+`pnpm test` reported 116 test files and 1372 tests passed in 146.02s.
+
 ## Destination gate
 
 One full gate run on the destination branch, alone on the host, sequentially. Every exit code is the exit status of the command itself, never the status of a pipe.
 
-| Command | Exit | Result |
-| --- | --- | --- |
-| `pnpm install --frozen-lockfile` | 0 | passed |
-| `pnpm --filter web typecheck` | 0 | passed |
-| `pnpm --filter @luxalgo/journal-core --filter @luxalgo/journal-importers typecheck` | 0 | passed |
-| `pnpm --filter web migrations:check` | 0 | passed |
-| `node scripts/check-licenses.mjs` | 0 | passed |
-| `pnpm exec prettier --check <8 merged files>` | 0 | passed |
-| `pnpm build` | 0 | passed |
-| `pnpm test` | 0 | passed |
+| Command                                                                             | Exit | Result |
+| ----------------------------------------------------------------------------------- | ---- | ------ |
+| `pnpm install --frozen-lockfile`                                                    | 0    | passed |
+| `pnpm --filter web typecheck`                                                       | 0    | passed |
+| `pnpm --filter @luxalgo/journal-core --filter @luxalgo/journal-importers typecheck` | 0    | passed |
+| `pnpm --filter web migrations:check`                                                | 0    | passed |
+| `node scripts/check-licenses.mjs`                                                   | 0    | passed |
+| `pnpm exec prettier --check <8 merged files>`                                       | 0    | passed |
+| `pnpm build`                                                                        | 0    | passed |
+| `pnpm test`                                                                         | 0    | passed |
 
 The prettier file list was computed after the merge, from the merge commit itself: `git diff --name-only 0ca8dd4a0331a4505b20f309dddbf75fc35d8369..33e1fce6d21d739e280e9b85c2fe2bd25f76e57e` in the feature worktree, with deleted paths excluded because prettier cannot check them (8 files).
 
