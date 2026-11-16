@@ -2,78 +2,47 @@
 
 ## Outcome
 
-Phase 20 was merged into `codex/ai-native-journal` at `85ee9bc17beb218cfd3da3c2ae0e210f2dc262ae`, but the destination gate FAILED at `pnpm test` (exit code 1). The failing command was not re-run, no success is claimed, and the merge was not undone.
+Phase 20 was merged into `codex/ai-native-journal` at `33e1fce6d21d739e280e9b85c2fe2bd25f76e57e` and the destination gate passed.
 
 - Destination branch: `codex/ai-native-journal`
-- Destination-before SHA: `6873cd3e9ff4868e7af0219f6f293b684c18ee55`
-- Candidate base SHA: `036fd3f83e63018d38160dd5138949d5aa7ce86d`
-- Candidate tip SHA: `5741264889b30dc50917ff8b6c39778e9230dbb9`
-- Merge SHA: `85ee9bc17beb218cfd3da3c2ae0e210f2dc262ae` (`--no-ff`)
-- Merge parents: `6873cd3e9ff4868e7af0219f6f293b684c18ee55` and `5741264889b30dc50917ff8b6c39778e9230dbb9`
+- Destination-before SHA: `0ca8dd4a0331a4505b20f309dddbf75fc35d8369`
+- Candidate base SHA: `5741264889b30dc50917ff8b6c39778e9230dbb9`
+- Candidate tip SHA: `5f2793c035f781c172624b39f38466bd39e34377`
+- Merge SHA: `33e1fce6d21d739e280e9b85c2fe2bd25f76e57e` (`--no-ff`)
+- Merge parents: `0ca8dd4a0331a4505b20f309dddbf75fc35d8369` and `5f2793c035f781c172624b39f38466bd39e34377`
 - The candidate base was resolved at run time as `git merge-base codex/ai-native-journal-p20 codex/ai-native-journal`; no SHA is hardcoded in the integration script.
 
 ## Candidate commits
 
 ```
-5741264 fix: import the retention route's database bindings through the db barrel
-80c8a4f fix: ship the operator entry point the operations runbook promises
-af84455 docs: say plainly what stays a next-milestone item
-3acfee8 docs: record the Phase 20 wiring repair
-c5da090 fix: keep a queued seed job queued and cover the backup's key refusals
-4e8e503 fix: keep the backlog, the rebuild and the deleted account safe
-f4c5767 docs: record the Phase 20 retention and operations evidence
-59d3661 test: harden intelligence recovery packaging and operations
-0e0eddc docs: plan the retention, backup and operations work
+5f2793c docs: record the Phase 20 boundary repair
+73930f9 fix: keep the retention driver in the database layer and the handler constants in the contracts
 ```
 
 ## Changed-file summary
 
 ```
-.omp/reviewer-report.md                            |  237 ++--
- apps/web/package.json                              |    3 +-
- apps/web/scripts/intelligence-operations.mjs       |  172 +++
- .../api/intelligence/retention/rebuild/route.ts    |   36 +
- .../app/api/intelligence/retention/reset/route.ts  |   38 +
- .../src/app/api/intelligence/retention/route.ts    |  105 ++
- apps/web/src/server/intelligence/composition.ts    |   48 +-
- .../infrastructure/experience-store.ts             |   99 ++
- .../src/server/intelligence/infrastructure/jobs.ts |   42 +
- .../intelligence/infrastructure/knowledge-store.ts |  203 ++-
- .../intelligence/infrastructure/retention.ts       | 1021 +++++++++++++-
- .../server/intelligence/infrastructure/worker.ts   |   25 +
- apps/web/src/server/trading/commands.ts            |  119 +-
- apps/web/tests/intelligence-acceptance.test.ts     |  557 ++++++++
- apps/web/tests/intelligence-backup.test.ts         |  813 ++++++++++++
- apps/web/tests/intelligence-retention.test.ts      | 1389 ++++++++++++++++++++
- docs/database-migrations.md                        |   85 +-
- docs/intelligence-operations.md                    |  493 +++++++
- .../plans/ai-native-journal/phase-20.md            |  556 ++++++++
- .../reports/ai-native-journal-phase-20.md          |  383 ++++++
- 20 files changed, 6254 insertions(+), 170 deletions(-)
+.omp/reviewer-report.md                            | 191 ++++++++++-----------
+ apps/web/src/db/journal-file.ts                    | 138 +++++++++++++++
+ .../server/intelligence/contracts/experience.ts    |   5 +
+ .../server/intelligence/experience/workflows.ts    |   7 +-
+ .../intelligence/infrastructure/retention.ts       |  86 +++-------
+ .../server/intelligence/infrastructure/worker.ts   |   4 +-
+ .../plans/ai-native-journal/phase-20.md            |  48 +++++-
+ .../reports/ai-native-journal-phase-20.md          | 112 ++++++++++++
+ 8 files changed, 416 insertions(+), 175 deletions(-)
 ```
 
-20 candidate files, 20 files in the merge.
+8 candidate files, 8 files in the merge.
 
 Merged files:
 
 - `.omp/reviewer-report.md`
-- `apps/web/package.json`
-- `apps/web/scripts/intelligence-operations.mjs`
-- `apps/web/src/app/api/intelligence/retention/rebuild/route.ts`
-- `apps/web/src/app/api/intelligence/retention/reset/route.ts`
-- `apps/web/src/app/api/intelligence/retention/route.ts`
-- `apps/web/src/server/intelligence/composition.ts`
-- `apps/web/src/server/intelligence/infrastructure/experience-store.ts`
-- `apps/web/src/server/intelligence/infrastructure/jobs.ts`
-- `apps/web/src/server/intelligence/infrastructure/knowledge-store.ts`
+- `apps/web/src/db/journal-file.ts`
+- `apps/web/src/server/intelligence/contracts/experience.ts`
+- `apps/web/src/server/intelligence/experience/workflows.ts`
 - `apps/web/src/server/intelligence/infrastructure/retention.ts`
 - `apps/web/src/server/intelligence/infrastructure/worker.ts`
-- `apps/web/src/server/trading/commands.ts`
-- `apps/web/tests/intelligence-acceptance.test.ts`
-- `apps/web/tests/intelligence-backup.test.ts`
-- `apps/web/tests/intelligence-retention.test.ts`
-- `docs/database-migrations.md`
-- `docs/intelligence-operations.md`
 - `docs/superpowers/plans/ai-native-journal/phase-20.md`
 - `docs/superpowers/reports/ai-native-journal-phase-20.md`
 
@@ -81,23 +50,11 @@ Merged files:
 
 ```
 .omp/reviewer-report.md: ALLOWED (local artifact)
-apps/web/package.json: ALLOWED (owned file)
-apps/web/scripts/intelligence-operations.mjs: ALLOWED (owned file)
-apps/web/src/app/api/intelligence/retention/rebuild/route.ts: ALLOWED (owned directory prefix: apps/web/src/app/api/intelligence/retention/)
-apps/web/src/app/api/intelligence/retention/reset/route.ts: ALLOWED (owned directory prefix: apps/web/src/app/api/intelligence/retention/)
-apps/web/src/app/api/intelligence/retention/route.ts: ALLOWED (owned directory prefix: apps/web/src/app/api/intelligence/retention/)
-apps/web/src/server/intelligence/composition.ts: ALLOWED (owned file)
-apps/web/src/server/intelligence/infrastructure/experience-store.ts: ALLOWED (owned file)
-apps/web/src/server/intelligence/infrastructure/jobs.ts: ALLOWED (owned file)
-apps/web/src/server/intelligence/infrastructure/knowledge-store.ts: ALLOWED (owned file)
+apps/web/src/db/journal-file.ts: ALLOWED (owned file)
+apps/web/src/server/intelligence/contracts/experience.ts: ALLOWED (owned file)
+apps/web/src/server/intelligence/experience/workflows.ts: ALLOWED (owned file)
 apps/web/src/server/intelligence/infrastructure/retention.ts: ALLOWED (owned file)
 apps/web/src/server/intelligence/infrastructure/worker.ts: ALLOWED (owned file)
-apps/web/src/server/trading/commands.ts: ALLOWED (owned file)
-apps/web/tests/intelligence-acceptance.test.ts: ALLOWED (owned file)
-apps/web/tests/intelligence-backup.test.ts: ALLOWED (owned file)
-apps/web/tests/intelligence-retention.test.ts: ALLOWED (owned file)
-docs/database-migrations.md: ALLOWED (owned file)
-docs/intelligence-operations.md: ALLOWED (owned file)
 docs/superpowers/plans/ai-native-journal/phase-20.md: ALLOWED (owned file)
 docs/superpowers/reports/ai-native-journal-phase-20.md: ALLOWED (owned file)
 OWNERSHIP VERDICT: ALLOWED
@@ -110,9 +67,9 @@ The Phase 20 ownership set is the exact files `apps/web/src/server/intelligence/
 SCHEMA VERDICT: ALLOWED
 SCHEMA VERDICT: ALLOWED — this phase owns no migration and no schema change, and migrations 0001 through 0007 are byte-unchanged.
 
-- Schema allocation: NO new schema expected. This phase owns NO migration and NO schema change. The migration diff against the merge base `036fd3f83e63018d38160dd5138949d5aa7ce86d` is empty: `git diff --name-status --find-renames 036fd3f83e63018d38160dd5138949d5aa7ce86d..5741264889b30dc50917ff8b6c39778e9230dbb9 -- apps/web/src/db/migrations/` returned no path, so no migration file was added, deleted or renamed.
-- No path under `apps/web/src/db/` changed at all: the schema, the migration registry `apps/web/src/db/migrations.ts` and the checksum artifact `apps/web/src/db/migration-checksums.json` are untouched. The diff `git diff --name-status --find-renames 036fd3f83e63018d38160dd5138949d5aa7ce86d..5741264889b30dc50917ff8b6c39778e9230dbb9 -- apps/web/src/db/` returned no path.
-- Migrations `0001 through 0007` are byte-unchanged against the merge base `036fd3f83e63018d38160dd5138949d5aa7ce86d`: the git blob hash of every migration file is identical at the merge base and at the candidate tip.
+- Schema allocation: NO new schema expected. This phase owns NO migration and NO schema change. The migration diff against the merge base `5741264889b30dc50917ff8b6c39778e9230dbb9` is empty: `git diff --name-status --find-renames 5741264889b30dc50917ff8b6c39778e9230dbb9..5f2793c035f781c172624b39f38466bd39e34377 -- apps/web/src/db/migrations/` returned no path, so no migration file was added, deleted or renamed.
+- No path under `apps/web/src/db/` changed at all: the schema, the migration registry `apps/web/src/db/migrations.ts` and the checksum artifact `apps/web/src/db/migration-checksums.json` are untouched. The diff `git diff --name-status --find-renames 5741264889b30dc50917ff8b6c39778e9230dbb9..5f2793c035f781c172624b39f38466bd39e34377 -- apps/web/src/db/` returned no path.
+- Migrations `0001 through 0007` are byte-unchanged against the merge base `5741264889b30dc50917ff8b6c39778e9230dbb9`: the git blob hash of every migration file is identical at the merge base and at the candidate tip.
 
 | Migration | File | Git blob hash |
 | --- | --- | --- |
@@ -270,9 +227,9 @@ Database-importing lines (file:line: text):
   apps/web/src/server/intelligence/infrastructure/policy-store.ts:3: import { withConnectionTransaction, type JournalTx } from "@/db/transaction";
   apps/web/src/server/intelligence/infrastructure/policy-store.ts:4: import { intelligenceBudgetReservations, intelligencePolicy, intelligenceRuns } from "@/db/schema";
   apps/web/src/server/intelligence/infrastructure/retention.ts:1: import { and, eq, inArray, isNotNull, lt, notInArray, sql } from "drizzle-orm";
-  apps/web/src/server/intelligence/infrastructure/retention.ts:2: import Database from "better-sqlite3";
-  apps/web/src/server/intelligence/infrastructure/retention.ts:23: } from "@/db/schema";
-  apps/web/src/server/intelligence/infrastructure/retention.ts:24: import { dataDir, db, openConnection } from "@/db/connection";
+  apps/web/src/server/intelligence/infrastructure/retention.ts:22: } from "@/db/schema";
+  apps/web/src/server/intelligence/infrastructure/retention.ts:23: import { dataDir, db, openConnection } from "@/db/connection";
+  apps/web/src/server/intelligence/infrastructure/retention.ts:24: import { checkJournalFile, copyJournalFile, readJournalFileFacts } from "@/db/journal-file";
   apps/web/src/server/intelligence/infrastructure/retention.ts:29: } from "@/db/transaction";
   apps/web/src/server/intelligence/infrastructure/scheduler.ts:1: import { and, asc, eq, gt, gte, lt, or } from "drizzle-orm";
   apps/web/src/server/intelligence/infrastructure/scheduler.ts:3: import type { JournalDb } from "@/db/connection";
@@ -485,9 +442,9 @@ Runtime database imports (counted as violations where the layer forbids a runtim
   apps/web/src/server/intelligence/infrastructure/policy-store.ts:3: import { withConnectionTransaction, type JournalTx } from "@/db/transaction";
   apps/web/src/server/intelligence/infrastructure/policy-store.ts:4: import { intelligenceBudgetReservations, intelligencePolicy, intelligenceRuns } from "@/db/schema";
   apps/web/src/server/intelligence/infrastructure/retention.ts:1: import { and, eq, inArray, isNotNull, lt, notInArray, sql } from "drizzle-orm";
-  apps/web/src/server/intelligence/infrastructure/retention.ts:2: import Database from "better-sqlite3";
-  apps/web/src/server/intelligence/infrastructure/retention.ts:23: } from "@/db/schema";
-  apps/web/src/server/intelligence/infrastructure/retention.ts:24: import { dataDir, db, openConnection } from "@/db/connection";
+  apps/web/src/server/intelligence/infrastructure/retention.ts:22: } from "@/db/schema";
+  apps/web/src/server/intelligence/infrastructure/retention.ts:23: import { dataDir, db, openConnection } from "@/db/connection";
+  apps/web/src/server/intelligence/infrastructure/retention.ts:24: import { checkJournalFile, copyJournalFile, readJournalFileFacts } from "@/db/journal-file";
   apps/web/src/server/intelligence/infrastructure/retention.ts:29: } from "@/db/transaction";
   apps/web/src/server/intelligence/infrastructure/scheduler.ts:1: import { and, asc, eq, gt, gte, lt, or } from "drizzle-orm";
   apps/web/src/server/intelligence/infrastructure/scheduler.ts:4: import { withConnectionTransaction, type JournalTx } from "@/db/transaction";
@@ -689,46 +646,26 @@ One full gate run on the destination branch, alone on the host, sequentially. Ev
 | `pnpm --filter @luxalgo/journal-core --filter @luxalgo/journal-importers typecheck` | 0 | passed |
 | `pnpm --filter web migrations:check` | 0 | passed |
 | `node scripts/check-licenses.mjs` | 0 | passed |
-| `pnpm exec prettier --check <20 merged files>` | 0 | passed |
+| `pnpm exec prettier --check <8 merged files>` | 0 | passed |
 | `pnpm build` | 0 | passed |
-| `pnpm test` | 1 | failed |
+| `pnpm test` | 0 | passed |
 
-The prettier file list was computed after the merge, from the merge commit itself: `git diff --name-only 6873cd3e9ff4868e7af0219f6f293b684c18ee55..85ee9bc17beb218cfd3da3c2ae0e210f2dc262ae` in the feature worktree, with deleted paths excluded because prettier cannot check them (20 files).
+The prettier file list was computed after the merge, from the merge commit itself: `git diff --name-only 0ca8dd4a0331a4505b20f309dddbf75fc35d8369..33e1fce6d21d739e280e9b85c2fe2bd25f76e57e` in the feature worktree, with deleted paths excluded because prettier cannot check them (8 files).
 
 - `.omp/reviewer-report.md`
-- `apps/web/package.json`
-- `apps/web/scripts/intelligence-operations.mjs`
-- `apps/web/src/app/api/intelligence/retention/rebuild/route.ts`
-- `apps/web/src/app/api/intelligence/retention/reset/route.ts`
-- `apps/web/src/app/api/intelligence/retention/route.ts`
-- `apps/web/src/server/intelligence/composition.ts`
-- `apps/web/src/server/intelligence/infrastructure/experience-store.ts`
-- `apps/web/src/server/intelligence/infrastructure/jobs.ts`
-- `apps/web/src/server/intelligence/infrastructure/knowledge-store.ts`
+- `apps/web/src/db/journal-file.ts`
+- `apps/web/src/server/intelligence/contracts/experience.ts`
+- `apps/web/src/server/intelligence/experience/workflows.ts`
 - `apps/web/src/server/intelligence/infrastructure/retention.ts`
 - `apps/web/src/server/intelligence/infrastructure/worker.ts`
-- `apps/web/src/server/trading/commands.ts`
-- `apps/web/tests/intelligence-acceptance.test.ts`
-- `apps/web/tests/intelligence-backup.test.ts`
-- `apps/web/tests/intelligence-retention.test.ts`
-- `docs/database-migrations.md`
-- `docs/intelligence-operations.md`
 - `docs/superpowers/plans/ai-native-journal/phase-20.md`
 - `docs/superpowers/reports/ai-native-journal-phase-20.md`
-
-The gate stopped at `pnpm test` with exit code 1. The exact failing command was:
-
-```
-pnpm test
-```
-
-Every command after it was not run. The gate did not pass and this report does not claim it did.
 
 The `desktop` workspace was deliberately not typechecked: its `cargo check` fails on a pre-existing repository defect (the Tauri sidecar resource `binaries/node-x86_64-pc-windows-msvc.exe` is missing because `desktop/scripts/run-sidecar-setup.js` uses CommonJS `require()` inside an ESM package). That defect belongs to Phase 21 and is recorded as blocked host evidence. It was not mocked and it is not reported as passed.
 
 ## Review verdict
 
-CHANGES REQUIRED. The ownership verdict is ALLOWED, the schema verdict is ALLOWED (this phase owns no migration and migrations 0001 through 0007 are byte-unchanged) and the layer-boundary verdict, including the contracts layer, the knowledge layer, the experience layer with its no-runtime-database-import rule, the runtime no-direct-database rule, the pure core package rule, the new route directory rule (apps/web/src/app/api/intelligence/), the shared client-side interaction module rule (apps/web/src/lib/intelligence-interactions.ts), the browser-layer rule (apps/web/src/components/, apps/web/src/lib/, apps/web/src/app/settings/) and the explicit server-versus-browser distinction, is ALLOWED, but the destination gate failed at `pnpm test` (exit code 1). The merge stays in place; the failing command must be fixed and the gate re-run before this phase is called integrated.
+PASS. The candidate commits were reviewed, the ownership boundary held (ALLOWED), the schema verdict is no migration owned with 0001 through 0007 byte-unchanged (ALLOWED), the layer-boundary verdict, including the contracts layer, the knowledge layer, the experience layer with its no-runtime-database-import rule, the runtime no-direct-database rule, the pure core package rule, the new route directory rule (apps/web/src/app/api/intelligence/), the shared client-side interaction module rule (apps/web/src/lib/intelligence-interactions.ts), the browser-layer rule (apps/web/src/components/, apps/web/src/lib/, apps/web/src/app/settings/) and the explicit server-versus-browser distinction, is ALLOWED, and the destination gate passed on the destination branch.
 
 ## What was not done
 
