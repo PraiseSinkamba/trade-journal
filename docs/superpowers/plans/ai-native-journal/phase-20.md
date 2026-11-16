@@ -42,7 +42,9 @@ resolver), the route handlers, the contracts under `intelligence/contracts/`, `d
 it does not add one.
 
 The coordinator granted three of those areas after the candidate was committed — **The granted
-repair** below records the grant and what was wired there. Nothing else moved.
+repair** below records the grant and what was wired there. Nothing else moved. A later grant —
+**The boundary repair** below — moved the retention module's driver calls behind the database
+layer and the handler vocabulary into the contracts layer.
 
 ## Required interfaces
 
@@ -418,11 +420,14 @@ Small steps, each one runnable on its own:
 ```
 pnpm exec vitest run apps/web/tests/intelligence-retention.test.ts \
   apps/web/tests/intelligence-backup.test.ts \
-  apps/web/tests/intelligence-acceptance.test.ts
+  apps/web/tests/intelligence-acceptance.test.ts \
+  apps/web/tests/intelligence-boundaries.test.ts
 pnpm typecheck
 ```
 
-The whole-project `pnpm test` and the destination gate are the coordinator's.
+The boundary test is part of the targeted command: it is the repository's own architecture test,
+and it is what caught this phase's two import-graph violations. The whole-project `pnpm test` and
+the destination gate are the coordinator's.
 
 ## Stop condition
 
@@ -532,6 +537,43 @@ stopping the supervisor is refused. Both documents now say to wait until
 `intelligence_worker_lease.lease_until` is in the past and run it again, and never to delete the
 row. The command list in the migration guide also carries the `JOURNAL_DATA_DIR` the backup
 needs, because that is where the key that travels with the backup comes from.
+
+## The boundary repair
+
+The destination gate failed on the repository's own architecture test, `apps/web/tests/intelligence-boundaries.test.ts`,
+with 2 of 1372 tests failing. Both were import-graph rules this phase's own code had broken, and
+the coordinator granted the repair. It moves code between layers and changes no behaviour.
+
+| The granted area                                            | What the repair does there                                      |
+| ----------------------------------------------------------- | --------------------------------------------------------------- |
+| `apps/web/src/db/journal-file.ts`                           | new: the driver-owning primitives the retention module calls    |
+| `apps/web/src/db/connection.ts`                             | the seam the new module sits beside                             |
+| `apps/web/src/server/intelligence/contracts/experience.ts`  | the handler identity the worker and the experience module share |
+| `apps/web/src/server/intelligence/experience/workflows.ts`  | imports that identity from the contracts layer                  |
+| `apps/web/src/server/intelligence/infrastructure/worker.ts` | imports that identity from the contracts layer                  |
+
+**The driver belongs to the database layer.** Only `apps/web/src/db/` may wire the concrete driver,
+so the retention module's four raw opens — the encrypted-material probe, the encrypted-settings
+probe, the backup's `VACUUM INTO` with its worker-lease check, and the restored-file verification —
+become three primitives in `apps/web/src/db/journal-file.ts`: `readJournalFileFacts`,
+`copyJournalFile` and `checkJournalFile`. The retention module keeps its policy (what may travel,
+what may be pruned, what a purge takes); the database layer keeps the driver.
+
+The distinction the move had to preserve is the one the old code drew: a journal file that is
+**absent** holds no encrypted material, while a journal file that is **present but unreadable** may
+hold anything, so the backup refuses. `readJournalFileFacts` reports `present` separately from the
+`null` that means "could not be read". The file is still opened **without migrating it** — opening
+it through the journal would migrate it, and the backup and the verification must judge the
+journal as it is.
+
+**The shared vocabulary belongs to the contracts layer.** `WORKFLOW_EFFECT_HANDLER_ID` and
+`WORKFLOW_EFFECT_HANDLER_VERSION` are declared once in `intelligence/contracts/experience.ts`,
+beside the workflow-effect job-key prefix that names the same handler. The experience module
+imports them from the contracts layer, and the worker does too — `contracts/` is the only
+permitted public surface between sibling intelligence domains.
+
+`db/schema.ts`, `db/migrations.ts`, `db/migration-checksums.json` and migrations `0001`–`0007` stay
+byte-unchanged, and no dependency is added.
 
 ## What this phase leaves to the next one
 

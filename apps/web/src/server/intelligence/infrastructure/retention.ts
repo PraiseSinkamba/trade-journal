@@ -1,5 +1,4 @@
 import { and, eq, inArray, isNotNull, lt, notInArray, sql } from "drizzle-orm";
-import Database from "better-sqlite3";
 import { createCipheriv, createDecipheriv, randomBytes } from "node:crypto";
 import { copyFileSync, existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { isAbsolute, join } from "node:path";
@@ -22,6 +21,7 @@ import {
   trades,
 } from "@/db/schema";
 import { dataDir, db, openConnection } from "@/db/connection";
+import { checkJournalFile, copyJournalFile, readJournalFileFacts } from "@/db/journal-file";
 import {
   withConnectionTransaction,
   withJournalTransaction,
@@ -676,23 +676,13 @@ const isEncryptedEnvelope = (value: unknown): value is string => {
  * journal needs its key to read.
  */
 const holdsEncryptedMaterial = (directory: string): boolean => {
-  const file = join(directory, "journal.db");
-  if (!existsSync(file)) return false;
-  const journal = new Database(file, { fileMustExist: true });
-  try {
-    const settings = journal.prepare("SELECT value FROM settings").all() as { value?: string }[];
-    if (settings.some((row) => isEncryptedEnvelope(row.value))) return true;
-    const accounts = journal
-      .prepare("SELECT COUNT(*) AS count FROM accounts WHERE credentials_enc IS NOT NULL")
-      .get() as { count?: number } | undefined;
-    return (accounts?.count ?? 0) > 0;
-  } catch {
-    // A journal that cannot be read may hold anything, so the backup refuses
-    // rather than promises a snapshot that cannot be read back.
-    return true;
-  } finally {
-    journal.close();
-  }
+  const facts = readJournalFileFacts(directory);
+  if (!facts.present) return false;
+  // A journal that cannot be read may hold anything, so the backup refuses
+  // rather than promises a snapshot that cannot be read back.
+  if (facts.settingValues === null || facts.credentialAccounts === null) return true;
+  if (facts.settingValues.some((value) => isEncryptedEnvelope(value))) return true;
+  return facts.credentialAccounts > 0;
 };
 
 /**
@@ -703,23 +693,13 @@ const holdsEncryptedMaterial = (directory: string): boolean => {
  * nothing to open.
  */
 const opensEncryptedSettings = (directory: string, key: Buffer): boolean => {
-  const file = join(directory, "journal.db");
-  if (!existsSync(file)) return true;
-  const journal = new Database(file, { fileMustExist: true });
-  try {
-    const rows = journal.prepare("SELECT value FROM settings").all() as {
-      value?: string;
-    }[];
-    return !rows.some(
-      (row) => isEncryptedEnvelope(row.value) && openProbe(key, row.value) === null,
-    );
-  } catch {
-    // A journal whose settings table cannot be read holds no credential that
-    // the key must open.
-    return true;
-  } finally {
-    journal.close();
-  }
+  const facts = readJournalFileFacts(directory);
+  // A journal whose settings table cannot be read holds no credential that
+  // the key must open.
+  if (facts.settingValues === null) return true;
+  return !facts.settingValues.some(
+    (value) => isEncryptedEnvelope(value) && openProbe(key, value) === null,
+  );
 };
 
 /** Encrypts the key probe under the journal's key, in the journal's envelope. */
@@ -834,19 +814,11 @@ export const backupJournal = (request: BackupRequest): BackupResult => {
 
   mkdirSync(request.destination, { recursive: true });
   const database = join(request.destination, "journal.db");
-  const source = new Database(join(request.source, "journal.db"), { fileMustExist: true });
-  try {
-    // A live worker lease means a worker is writing: the copy would not be a
-    // point in time.
-    const lease = source
-      .prepare("SELECT lease_until FROM intelligence_worker_lease WHERE name = ?")
-      .get(WORKER_LEASE_NAME) as { lease_until?: number } | undefined;
-    if (lease && typeof lease.lease_until === "number" && lease.lease_until > Date.now()) {
-      throw new Error("The journal still holds a worker lease; stop the worker before the backup.");
-    }
-    source.exec(`VACUUM INTO '${database.replace(/'/g, "''")}'`);
-  } finally {
-    source.close();
+  // A live worker lease means a worker is writing: the copy would not be a
+  // point in time.
+  const copy = copyJournalFile(request.source, database, WORKER_LEASE_NAME);
+  if (copy.liveLeaseUntil !== null) {
+    throw new Error("The journal still holds a worker lease; stop the worker before the backup.");
   }
 
   let keyFile: string | null = null;
@@ -1036,18 +1008,12 @@ const readManifest = (path: string): BackupManifest => {
  * it, and the verification must judge the backup.
  */
 const verifyRestoredJournal = (database: string): void => {
-  const sqlite = new Database(database, { fileMustExist: true, readonly: true });
-  try {
-    const integrity: unknown = sqlite.pragma("integrity_check", { simple: true });
-    if (integrity !== "ok") {
-      throw new Error(`The restored journal fails its integrity check: ${String(integrity)}.`);
-    }
-    const violations = sqlite.pragma("foreign_key_check") as unknown[];
-    if (violations.length > 0) {
-      throw new Error("The restored journal fails its foreign-key check.");
-    }
-  } finally {
-    sqlite.close();
+  const verdict = checkJournalFile(database);
+  if (verdict.integrity !== "ok") {
+    throw new Error(`The restored journal fails its integrity check: ${verdict.integrity}.`);
+  }
+  if (verdict.foreignKeyViolations > 0) {
+    throw new Error("The restored journal fails its foreign-key check.");
   }
 };
 

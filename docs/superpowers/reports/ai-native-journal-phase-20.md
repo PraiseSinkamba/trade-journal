@@ -358,6 +358,118 @@ recorded in the phase plan under **The granted operator entry point**:
   call the shipped functions unchanged.
 - the runbook and the migration guide name the same entry point with the same exact invocation.
 
+## The boundary repair
+
+The destination gate for this phase failed on the repository's own architecture test, not on the
+phase's behaviour: `apps/web/tests/intelligence-boundaries.test.ts` reported 2 of 1372 tests
+failing, and both were import-graph rules this phase's own code had broken.
+
+- **Rule 4 — only the infrastructure layer wires the concrete driver.**
+  `apps/web/src/server/intelligence/infrastructure/retention.ts` imported `"better-sqlite3"`
+  directly and opened the raw driver in four places: the encrypted-material probe, the
+  encrypted-settings probe, the backup's `VACUUM INTO` with its worker-lease check, and the
+  restored-file verification.
+- **Rule 5 — no domain imports a sibling's private file.**
+  `apps/web/src/server/intelligence/infrastructure/worker.ts` imported `WORKFLOW_EFFECT_HANDLER_ID`
+  and `WORKFLOW_EFFECT_HANDLER_VERSION` from `"../experience/workflows"`.
+
+Both were real, and both were of the kind the repository has always guarded. The repair moves
+code between layers and changes no behaviour.
+
+### The resolution
+
+**The driver moved behind the database layer.** `apps/web/src/db/journal-file.ts` (new) is the
+driver-owning module beside `connection.ts`. It exposes three primitives and no policy:
+
+| Primitive                                     | What it does                                                             |
+| --------------------------------------------- | ------------------------------------------------------------------------ |
+| `readJournalFileFacts(directory)`             | the settings values and the sealed-credential account count of a journal |
+| `copyJournalFile(source, destination, lease)` | the `VACUUM INTO` snapshot, refusing a journal a live worker lease holds |
+| `checkJournalFile(database)`                  | the integrity and foreign-key verdicts of a copied journal               |
+
+The retention module keeps its policy — what may travel with a backup, what may be pruned, what a
+purge takes — and calls the primitives instead of opening the driver. The distinction the move had
+to preserve is the one the old code drew: a journal file that is **absent** holds no encrypted
+material (the backup proceeds), while a journal file that is **present but unreadable** may hold
+anything (the backup refuses), so `readJournalFileFacts` reports `present` separately from the
+`null` that means "could not be read".
+
+The file is still opened **without migrating it**. Opening a journal through the journal would
+migrate it, and the backup and the verification must judge the journal as it is — that is why the
+retention module opened the file directly in the first place. The new primitives open the file
+through the raw driver and never through `openJournalDatabase`, so no migration runs.
+
+**The shared vocabulary moved to the contracts layer.** `WORKFLOW_EFFECT_HANDLER_ID` and
+`WORKFLOW_EFFECT_HANDLER_VERSION` are now declared once in
+`apps/web/src/server/intelligence/contracts/experience.ts`, beside the workflow-effect job-key
+prefix that names the same handler. The experience module imports them from `../contracts/experience`
+and no longer declares or re-exports them; the worker imports them from `../contracts/experience`
+and no longer reaches into the experience domain's private file. `contracts/` is the only permitted
+public surface between sibling intelligence domains, and the worker already imported its handler
+types from `../contracts/jobs`.
+
+No schema changed: `db/schema.ts`, `db/migrations.ts`, `db/migration-checksums.json` and migrations
+`0001`–`0007` are byte-unchanged, and no dependency was added.
+
+### The proof of teeth
+
+Each fix was broken deliberately, the boundary test was watched to fail, the break was restored and
+the test was watched to pass again.
+
+| What was broken                                                        | The result                                                                  |
+| ---------------------------------------------------------------------- | --------------------------------------------------------------------------- |
+| the `better-sqlite3` import put back into the retention module         | rule 4 **failed** — `1 failed \| 7 passed (8)` — and the restoration passed |
+| the two constants moved back into the experience domain's private file | rule 5 **failed** — `1 failed \| 7 passed (8)` — and the restoration passed |
+
+The boundary test file itself was not touched: no assertion was weakened and no exemption was
+added.
+
+### The corrected verification command
+
+The phase command ran only the three Phase 20 suites. It did not run the boundary test — the very
+test that caught both violations — so **every phase from here runs the boundary test as part of its
+targeted command**:
+
+```
+pnpm exec vitest run apps/web/tests/intelligence-retention.test.ts \
+  apps/web/tests/intelligence-backup.test.ts \
+  apps/web/tests/intelligence-acceptance.test.ts \
+  apps/web/tests/intelligence-boundaries.test.ts
+pnpm --filter web typecheck
+```
+
+### The commands that were run for the repair
+
+Every command below was run against the final tree of this repair, on Node v24.22.3 and
+pnpm 11.0.8.
+
+| Command                                                                                                                                       | Exit | Runtime | Result                  |
+| --------------------------------------------------------------------------------------------------------------------------------------------- | ---- | ------- | ----------------------- |
+| `pnpm exec vitest run apps/web/tests/intelligence-{retention,backup,acceptance,boundaries}.test.ts`                                           | 0    | 27 s    | **81 passed** (4 files) |
+| `pnpm --filter web typecheck`                                                                                                                 | 0    | 46 s    | no type errors          |
+| `npx prettier --check` on every touched path                                                                                                  | 0    | 8 s     | clean                   |
+| `pnpm exec vitest run apps/web/tests/intelligence-{worker,workflows,jobs,slice-a,slice-b,migrations}.test.ts` (the reviewer's regression run) | 0    | 24 s    | **96 passed** (6 files) |
+
+### The review of the repair
+
+One reviewer run, on the implementation diff. It returned PASS with one P2 finding, which was
+real and is fixed:
+
+- **P2 — the foreign-key check ran before the caller could read the integrity verdict.** The
+  pre-move code threw the curated integrity message first and never reached the foreign-key pragma
+  when the integrity check failed. The moved code ran both pragmas eagerly, so a corrupt restored
+  journal could surface a raw `SqliteError` from the foreign-key pragma instead of
+  `The restored journal fails its integrity check: …`. The refusal itself was never lost — no
+  journal was wrongly accepted — but the operator's message was. `checkJournalFile` now
+  short-circuits: the foreign-key check runs only when the integrity check passed, so the original
+  order is restored exactly.
+
+The reviewer's other notes were checked and were not defects: the file-absent versus
+file-unreadable distinction, the `fileMustExist` and `readonly` open flags, the lease-liveness
+comparison, the `VACUUM INTO` destination quoting, the single declaration of each moved constant,
+and the untouched schema, migration, checksum and boundary-test artifacts were all confirmed
+correct.
+
 ## The next phase's inputs
 
 - **The persisted home for an AI-assisted insight** stays where Phase 19 left it: the chain's AI

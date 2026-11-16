@@ -68,6 +68,11 @@ export const REVIEW_OBSERVATION_VERSION = 1;
 /** The prefix every workflow effect job key carries. */
 export const WORKFLOW_EFFECT_JOB_KEY_PREFIX = "workflow-effect:";
 
+/** The id of the handler that runs a workflow effect job. */
+export const WORKFLOW_EFFECT_HANDLER_ID = "workflow-effect";
+/** The version of the workflow effect handler. */
+export const WORKFLOW_EFFECT_HANDLER_VERSION = "1";
+
 /**
  * The key of the effect job of one workflow transition.
  *
