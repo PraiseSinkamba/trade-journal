@@ -178,31 +178,63 @@ Stop the writers first. Two of them write to the journal:
 1. the **HTTP writer** — the web process;
 2. the **worker** — the separate consumer process.
 
+Stop the journal supervisor, which owns both: it forks the web process and the worker, and it
+restarts a worker that dies on its own. In production that is the `pnpm start` command; in
+development it is `pnpm --filter web dev:journal`, which starts the web process but no worker
+unless `--worker enabled` is passed.
+
 The worker's lease tells you whether it is running: `intelligence_worker_lease.lease_until` in the
-future means a worker holds it.
+future means a worker holds it. The lease row outlives the stopped worker — nothing deletes it,
+and it stays valid for up to `WORKER_LEASE_MS` (30 seconds) — so the backup is refused until
+`lease_until` is in the past. Wait and run it again; never delete the row.
 
-Then copy the **whole data directory** — the database, its WAL/SHM sidecars, the key file
-(`.secret`) and the deletion ledger (`purge-ledger.json`). Never copy only `journal.db` while the
-WAL is live: the sidecar holds committed data that has not been checkpointed yet.
+The journal's own backup command takes the backup safely. From the repository root:
 
-The journal's own backup command does this safely: it writes a consistent snapshot with SQLite's
-`VACUUM INTO`, copies the key material beside it and records a key probe in a manifest. It refuses
-a journal whose worker lease is still live, and it refuses a journal whose key comes from
-`JOURNAL_SECRET`, because that key cannot travel with the backup.
+```bash
+JOURNAL_DATA_DIR=/data/trade-journal \
+pnpm --filter web intelligence:operations backup \
+  --source /data/trade-journal \
+  --destination /backups/journal-2026-11-16 \
+  --acknowledge-quiescence
+```
 
-Verify a restore in scratch storage before you need it: `PRAGMA integrity_check`,
-`PRAGMA foreign_key_check` and a credential decryption with **synthetic** credentials — never the
-operator's real ones.
+It writes a consistent snapshot with SQLite's `VACUUM INTO`, copies the key material beside it
+and records a key probe in a manifest. It refuses a journal whose worker lease is still live, and
+it refuses a journal whose key comes from `JOURNAL_SECRET`, because that key cannot travel with
+the backup. The destination is created if it does not exist, and is refused if it already holds a
+journal.
+
+A copy of the **whole data directory** — the database, its WAL/SHM sidecars, the key file
+(`.secret`) and the deletion ledger (`purge-ledger.json`) — is a manual copy, not a backup: it
+carries no manifest, so the restore command below refuses it. Never copy only `journal.db` while
+the WAL is live: the sidecar holds committed data that has not been checkpointed yet. Restore a
+manual copy by hand, or take the backup with the command above.
+
+Verify a restore in scratch storage before you need it: the restore command verifies the copy
+before anything migrates it, and `PRAGMA integrity_check`, `PRAGMA foreign_key_check` and a
+credential decryption with **synthetic** credentials — never the operator's real ones — prove the
+key material travels.
+
+See [Intelligence operations](./intelligence-operations.md) for the whole procedure, including how
+a restored journal is promoted.
 
 ## Commands
 
 ```bash
 pnpm --filter web migrations:build                  # regenerate the checksum artifact
 pnpm --filter web migrations:check                  # fail when the artifact is stale
+JOURNAL_DATA_DIR=<journal directory> \
+pnpm --filter web intelligence:operations backup \
+  --source <journal directory> --destination <backup directory> --acknowledge-quiescence
+pnpm --filter web intelligence:operations restore \
+  --source <backup directory> --destination <scratch directory>
 pnpm exec vitest run apps/web/tests/intelligence-migrations.test.ts \
   apps/web/tests/db-concurrent-init.test.ts \
   apps/web/tests/db-connection-lifecycle.test.ts \
   apps/web/tests/execution-storage.test.ts
 ```
+
+`JOURNAL_DATA_DIR` is required by the backup: it names the journal whose key material travels
+with the backup. The restore does not need it.
 
 See also: [ADR 0007 — durable SQLite worker and migrations](../decisions/0007-durable-sqlite-worker-and-migrations.md).

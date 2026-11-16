@@ -476,6 +476,63 @@ in `apps/web/tests/intelligence-retention.test.ts`: the worker claims the job, t
 are proven in `apps/web/tests/intelligence-acceptance.test.ts`: the gate (no session, a foreign
 origin, a body the route cannot read), the prune the route runs, the reset and the rebuild.
 
+## The granted operator entry point
+
+The coordinator reviewed the phase candidate and found one defect: `backupJournal` and
+`restoreJournal` were exported but **reachable by nobody**. The runbook promised procedures an
+operator could perform, and the backup and the restore were the two it promised without a way to
+perform them. The coordinator granted four areas for the repair:
+
+| The granted area                                                 | What the repair does there                                       |
+| ---------------------------------------------------------------- | ---------------------------------------------------------------- |
+| `apps/web/scripts/intelligence-operations.mjs`                   | the operator command: a `backup` and a `restore` operation       |
+| `apps/web/package.json`                                          | one script entry, `intelligence:operations`, and nothing else    |
+| `apps/web/src/server/intelligence/infrastructure/retention.ts`   | the shipped functions the command calls — unchanged in behaviour |
+| `docs/intelligence-operations.md`, `docs/database-migrations.md` | the runbook and the migration guide, true end to end             |
+
+**The command, not a route.** The backup is only valid on a quiescent journal, and the two writers
+are the web process and the worker — a route is served by the web process, which is one of the
+writers. The backup must therefore run with the writers stopped, so the surface that performs it
+is a command the operator runs on the stopped journal. The route shape was not taken.
+
+**It calls the shipped functions.** `apps/web/scripts/intelligence-operations.mjs` bundles
+`retention.ts` with the same toolchain the worker bundle uses (`build-worker.mjs` resolves esbuild
+through `tsup`), and calls `backupJournal` and `restoreJournal` unchanged. Every shipped refusal is
+reachable through it: a missing or relative path, a source and a destination that are the same, a
+missing quiescence acknowledgement, a journal that still holds a worker lease, a source that does
+not hold the journal's own key, a destination that already holds a journal, and a source that does
+not hold a backup manifest. The command adds two preconditions of its own, and they are
+preconditions rather than refusals of the backup: `JOURNAL_DATA_DIR` must name the journal the
+operator owns, because that is where the key that travels with the backup comes from.
+
+**Nothing is defaulted.** The operator types the source, the destination and the quiescence
+acknowledgement (`--acknowledge-quiescence`); an omitted flag is a refusal, not a default.
+
+**The module never opens the journal it copies.** The bundled module opens a journal when it is
+evaluated, so the command loads it against a scratch directory and points `JOURNAL_DATA_DIR` at
+the operator's journal only for the call itself. A journal that cannot be opened therefore does
+not stop a restore.
+
+**Where the proof lives.** `apps/web/tests/intelligence-backup.test.ts` runs the command as a child
+process: it backs a journal up, it refuses a relative path, it refuses a missing acknowledgement,
+it refuses a destination that already holds a journal, it carries the key beside the snapshot and
+nowhere else, and it restores a backup into scratch storage.
+
+**The runbook is true end to end.** Every claim was re-read against the shipped code. The
+corrections: the worker is forked by the journal supervisor, not by the web process; the retention
+job payload carries the `type` the worker's payload schema discriminates on; the prune — not the
+purge — is what leaves the delivery, run and opportunity rows alone; the `curl` example carries
+the session cookie; the account deletion and the clear history name their routes; and the replay
+seam and the job cancel say plainly that no operator surface calls them yet.
+
+**The quiescence procedure, corrected.** The first review of the repair found that the documented
+procedure could not work: the worker lease row outlives the stopped worker — nothing deletes it,
+and it stays valid for up to `WORKER_LEASE_MS` (30 seconds) — so a backup run immediately after
+stopping the supervisor is refused. Both documents now say to wait until
+`intelligence_worker_lease.lease_until` is in the past and run it again, and never to delete the
+row. The command list in the migration guide also carries the `JOURNAL_DATA_DIR` the backup
+needs, because that is where the key that travels with the backup comes from.
+
 ## What this phase leaves to the next one
 
 - **Nothing of the granted repair.** The retention job runs, the deferred workflow resumes and the
@@ -484,10 +541,16 @@ origin, a body the route cannot read), the prune the route runs, the reset and t
   candidate was committed, and **The granted repair** above records what was wired there. The
   prune is no longer a directly callable server function only — it is the worker's job and the
   operator's route.
+- **Nothing of the granted operator entry point.** The backup and the restore are commands the
+  operator can run, and **The granted operator entry point** above records what was shipped. The
+  backup is no longer a function nobody can reach.
 - **The persisted home of an AI-assisted insight.** The chain's AI leg has no table of its own: an
   opportunity carries no text, and a provider call may not happen inside a write transaction. No
   phase in this run owns the migration that would give it one, and the leg itself is optional, so
   this is a next-milestone item and not a hole in this gate. The gate of this phase is the
   retention, the deletion, the backup and the restore, and all four are proven.
+- **The replay and the job cancel.** Both exist in the code (`createReplayService`,
+  `JobStore.cancel`) and neither has an operator surface. The runbook says so plainly; the
+  surfaces are a next-milestone item.
 - The benchmark, the full CI sequence, the Docker and Windows smoke and the package audit are
   Phase 21's release half.

@@ -3,14 +3,14 @@
 Phase guide row 20 · detailed-plan Task 13 (storage/operations portion) · milestone M6 ·
 schema allocation: **None**
 
-|                       |                                                                                                                                              |
-| --------------------- | -------------------------------------------------------------------------------------------------------------------------------------------- |
-| Branch                | `codex/ai-native-journal-p20` (child of the feature worktree)                                                                                |
-| Base                  | `036fd3f83e63018d38160dd5138949d5aa7ce86d` (verified feature HEAD)                                                                           |
-| Plan commit           | _docs: plan the retention, backup and operations work_                                                                                       |
-| Implementation commit | _test: harden intelligence recovery packaging and operations_                                                                                |
-| Repair commits        | _fix: keep the backlog, the rebuild and the deleted account safe_ · _fix: keep a queued seed job queued and cover the backup's key refusals_ |
-| Migrations            | none. `0001`–`0007` are byte-unchanged; no schema, registry or checksum file was touched.                                                    |
+|                       |                                                                                                                                                                                                                     |
+| --------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Branch                | `codex/ai-native-journal-p20` (child of the feature worktree)                                                                                                                                                       |
+| Base                  | `036fd3f83e63018d38160dd5138949d5aa7ce86d` (verified feature HEAD)                                                                                                                                                  |
+| Plan commit           | _docs: plan the retention, backup and operations work_                                                                                                                                                              |
+| Implementation commit | _test: harden intelligence recovery packaging and operations_                                                                                                                                                       |
+| Repair commits        | _fix: keep the backlog, the rebuild and the deleted account safe_ · _fix: keep a queued seed job queued and cover the backup's key refusals_ · _fix: ship the operator entry point the operations runbook promises_ |
+| Migrations            | none. `0001`–`0007` are byte-unchanged; no schema, registry or checksum file was touched.                                                                                                                           |
 
 ## What was built
 
@@ -70,6 +70,38 @@ because the database is what a restore replaces: a ledger inside the database wo
 with it, and the purged account would come back. The entry is written before the purge runs, so a
 journal that was purged is never restored without the ledger that says so.
 
+### The operator entry point
+
+The coordinator's review of the candidate found one defect that mattered more than any other: the
+backup and the restore were **reachable by nobody**. `backupJournal` and `restoreJournal` were
+exported, tested, and documented — and no operator could run either one, because no route, no
+script and no package script called them. The runbook promised procedures that could not be
+performed, which is the worst kind of documentation: it reads as if the journal is protected when
+it is not.
+
+- `apps/web/scripts/intelligence-operations.mjs` (new) — the operator command. A `backup`
+  operation and a `restore` operation, each of which calls the shipped `backupJournal` and
+  `restoreJournal` unchanged. Every shipped refusal is reachable through it; nothing is
+  reimplemented.
+- `apps/web/package.json` (extended) — one script entry, `intelligence:operations`, and nothing
+  else. No dependency, no version, no other script touched.
+
+**Why a command and not a route.** A backup is only valid on a quiescent journal, and the two
+writers are the web process and the worker. A route is served by the web process — one of the
+writers — so a route could never take a valid backup of the journal it serves. The command runs
+against the stopped journal instead, which is the only shape in which the shipped refusal list
+means anything.
+
+**Nothing is defaulted.** The operator types the source, the destination and the quiescence
+acknowledgement. An omitted `--acknowledge-quiescence` is a refusal, not a quiet default: the
+shipped function refuses a backup it cannot vouch for, and the command passes that refusal on
+rather than smoothing it over.
+
+**The command never opens the journal it copies.** The bundled module opens a journal when it is
+evaluated, so the command loads it against a scratch directory and points `JOURNAL_DATA_DIR` at
+the operator's journal only for the call itself. A journal too broken to open therefore does not
+stop a restore — which is exactly the case the rollback table tells an operator to recover from.
+
 ### The documentation
 
 - `docs/intelligence-operations.md` (new) — the runbook: the worker and its states, the backlog, the
@@ -78,13 +110,23 @@ journal that was purged is never restored without the ledger that says so.
 - `docs/database-migrations.md` (extended) — what each of `0001`–`0007` means to an operator, the
   backup procedure before an upgrade, and the pointer to the runbook.
 
+Both documents were re-read line by line against the shipped code, and both now name the **same**
+entry point with its exact invocation. The runbook was corrected where it did not match the tree:
+the worker is forked by the journal supervisor rather than by the web process; the retention job's
+payload carries the `type` the worker's payload schema discriminates on, so the `INSERT` the runbook
+shows produces a job the worker can read; the **prune** — not the purge — is what leaves the
+delivery, run and opportunity rows alone; the `curl` example carries the session cookie the gate
+requires; the account deletion and the clear history name their routes; and the replay seam and the
+job cancel say plainly that no operator surface calls them yet, rather than implying they can be
+performed.
+
 ## The tests
 
-| File                                             | Cases | What it proves                                                                                                                                               |
-| ------------------------------------------------ | ----- | ------------------------------------------------------------------------------------------------------------------------------------------------------------ |
-| `apps/web/tests/intelligence-retention.test.ts`  | 32    | the reference-safe prune, the compact dedup keys, the bound, the windows, the purge, the reset and the rebuild, the cancellation fence, the knowledge window |
-| `apps/web/tests/intelligence-backup.test.ts`     | 23    | the explicit inputs, the quiescence check, the key travel, the key verification, the restore verification, no resurrection                                   |
-| `apps/web/tests/intelligence-acceptance.test.ts` | 10    | the phase gate end to end, the two migration failure cases, and the operator routes                                                                          |
+| File                                             | Cases | What it proves                                                                                                                                                  |
+| ------------------------------------------------ | ----- | --------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `apps/web/tests/intelligence-retention.test.ts`  | 32    | the reference-safe prune, the compact dedup keys, the bound, the windows, the purge, the reset and the rebuild, the cancellation fence, the knowledge window    |
+| `apps/web/tests/intelligence-backup.test.ts`     | 31    | the explicit inputs, the quiescence check, the key travel, the key verification, the restore verification, no resurrection, and the operator command end to end |
+| `apps/web/tests/intelligence-acceptance.test.ts` | 10    | the phase gate end to end, the two migration failure cases, and the operator routes                                                                             |
 
 ### The proof of teeth
 
@@ -143,7 +185,8 @@ destination gate are the coordinator's.
 
 ## The review and its findings
 
-Two plan reviews and one implementation review, all against the committed phase plan.
+Two plan reviews, one implementation review and one coordinator review, all against the committed
+phase plan.
 
 **Plan review 1** returned FAIL with 17 findings. The plan was rewritten against every one of
 them: the failed-delivery cascade, the unscoped job clause and the unstated prune order, the
@@ -215,6 +258,49 @@ Two more test bugs were found while proving the teeth of these fixes: the restor
 `restoreJournal` (it opened a fresh directory, so it asserted nothing), and the rebuild test
 asserted only the checkpoint status. Both now exercise the behaviour they claim.
 
+**Coordinator review** returned FAIL with one BLOCK and one FAIL, and both had the same root: the
+runbook promised a procedure the operator could not perform. `backupJournal` and `restoreJournal`
+were called from nowhere but the tests — no route, no script, no package script — while the runbook
+described the backup and the restore as things an operator does, and `docs/database-migrations.md`
+named "the journal's own backup command", which did not exist. An operator following the runbook
+would have believed their journal was backed up when nothing had been taken.
+
+The repair shipped the operator command described under **The operator entry point**, and the
+runbook was re-read line by line against the shipped code. The corrections are listed under **The
+documentation**: the worker topology, the retention job payload, the scope of the dedup claims, the
+`curl` example, the two routes the runbook did not name, and the two seams that have no operator
+surface. Where an action is still not performable, the runbook now says so plainly instead of
+implying otherwise.
+
+**A follow-up review of the repair** returned FAIL with one BLOCK and one FAIL, and both were
+real:
+
+- **BLOCK — the documented quiescence procedure did not work.** The runbook said to stop the
+  writers and run the backup, and the shipped command refuses a source whose worker lease is still
+  live. The lease row outlives the stopped worker: nothing deletes it, and it stays valid for up
+  to `WORKER_LEASE_MS` (30 seconds). A backup run immediately after stopping the supervisor was
+  therefore refused even though the worker was stopped. Both documents now say to wait until
+  `intelligence_worker_lease.lease_until` is in the past and run it again, and never to delete the
+  row — a live lease is the journal's own record of who was writing to it.
+- **FAIL — the migration guide's command list named a command that could not succeed.** The
+  `pnpm --filter web intelligence:operations backup` line carried no `JOURNAL_DATA_DIR`, and the
+  command refuses without it, because that is where the key that travels with the backup comes
+  from. The list now carries it, and says why the restore does not need it.
+
+The review also named six smaller corrections, all made: the command's own two preconditions are
+now distinguished from the shipped refusals rather than claiming to be them; the runbook names the
+supervisor command the operator actually stops, and says that the development command starts no
+worker; the restore's steps are in the order the code performs them, and the last verification is
+said to judge the migrated journal; the backup's refusal list no longer reads as exhaustive; the
+destination is described as created when absent rather than as a directory the operator must
+prepare; and the lease check is said to read the source journal's own database.
+
+Two of the review's notes were checked against the code and found to be wrong, and were not
+acted on: the scratch directory **is** removed when the bundle fails to build (the `try` encloses
+the build and both removals carry `force: true`), and the manual copy of a whole data directory is
+now described accurately — it carries no manifest, so the restore command refuses it, which is
+what the second review's BLOCK found.
+
 ## Deviations from the plan
 
 1. **The deletion ledger is a file, not a settings row.** The plan put the ledger in the settings
@@ -263,6 +349,15 @@ recorded in the phase plan under **The granted repair**:
   workflow resume — the leg Phase 19 left open — now run in production.
 - the operator routes answer a retention run, the current retention state, a reset and a rebuild.
 
+The coordinator then granted a second repair, after the review found that the backup and the
+restore were unreachable: `apps/web/scripts/intelligence-operations.mjs` (the operator command),
+`apps/web/package.json` (one script entry), and the two documents. The grant and what it ships are
+recorded in the phase plan under **The granted operator entry point**:
+
+- the backup and the restore are commands an operator can run against a stopped journal, and they
+  call the shipped functions unchanged.
+- the runbook and the migration guide name the same entry point with the same exact invocation.
+
 ## The next phase's inputs
 
 - **The persisted home for an AI-assisted insight** stays where Phase 19 left it: the chain's AI
@@ -270,6 +365,8 @@ recorded in the phase plan under **The granted repair**:
   The leg itself is optional, so this is a **next-milestone item and not a hole in this gate** — the
   gate of this phase is the retention, the deletion, the backup and the restore, and all four are
   proven.
+- **The replay and the job cancel** exist in the code and still have no operator surface. The
+  runbook says so plainly; the surfaces are a next-milestone item.
 - **The benchmark, the full CI sequence, the Docker and Windows smoke and the package audit** are
   Phase 21's release half of Task 13.
 
@@ -280,5 +377,7 @@ recorded in the phase plan under **The granted repair**:
   deletion behaviour, callable from the server.
 - `backupJournal` and `restoreJournal` — a consistent snapshot with its key material, and a restore
   that verifies the copy before anything migrates it and applies the deletion ledger again.
+- `pnpm --filter web intelligence:operations backup|restore` — the entry point an operator runs, so
+  the two functions above are reachable rather than merely exported.
 - `docs/intelligence-operations.md` — the runbook an operator acts on.
 - `docs/database-migrations.md` — what the migrations mean to an operator.

@@ -1,16 +1,21 @@
 import { afterAll, beforeEach, describe, expect, it } from "vitest";
+import { execFile } from "node:child_process";
 import {
   copyFileSync,
+  existsSync,
   mkdirSync,
   mkdtempSync,
   readFileSync,
+  readdirSync,
   rmSync,
   statSync,
   writeFileSync,
 } from "node:fs";
 import { createCipheriv, randomBytes } from "node:crypto";
 import { tmpdir } from "node:os";
-import { join } from "node:path";
+import { dirname, join, resolve } from "node:path";
+import { fileURLToPath } from "node:url";
+import { promisify } from "node:util";
 import { eq } from "drizzle-orm";
 
 /**
@@ -48,8 +53,39 @@ const { decryptJson } = await import("../src/server/crypto");
 
 const NOW = 1_800_000_000_000;
 
+const appRoot = resolve(dirname(fileURLToPath(import.meta.url)), "..");
+const operationsScript = join(appRoot, "scripts", "intelligence-operations.mjs");
+const execute = promisify(execFile);
+
 /** A directory inside the scratch space. */
 const directory = (name: string): string => join(scratch, name);
+
+/**
+ * A journal the operator owns, written by the journal's own bootstrap.
+ *
+ * The shipped backup reads the settings, the accounts and the worker lease of
+ * the source, so the source has to be a journal and not a file that looks like
+ * one.
+ */
+const operatorJournal = (name: string): string => {
+  const path = directory(name);
+  const connection = openConnection(path);
+  connection.$client.close();
+  return path;
+};
+
+/** Runs the operator command and answers with its outcome. */
+const runOperatorCommand = async (args: string[], journalDir: string) => {
+  try {
+    const { stdout, stderr } = await execute(process.execPath, [operationsScript, ...args], {
+      env: { ...process.env, JOURNAL_DATA_DIR: journalDir },
+    });
+    return { code: 0, stdout, stderr };
+  } catch (error) {
+    const failure = error as { code?: number; stdout?: string; stderr?: string };
+    return { code: failure.code ?? 1, stdout: failure.stdout ?? "", stderr: failure.stderr ?? "" };
+  }
+};
 
 /** An account row, with the fields the journal points at. */
 const insertAccount = (id: string): void => {
@@ -641,5 +677,137 @@ describe("the no resurrection guarantee", () => {
 
     const ledger = readPurgeLedger(scratch);
     expect(ledger).toContainEqual({ accountId: "acct-2", kind: "deleted" });
+  });
+});
+
+describe("the operator command", () => {
+  it("is a command an operator can run", () => {
+    expect(existsSync(operationsScript)).toBe(true);
+    const manifest = JSON.parse(readFileSync(join(appRoot, "package.json"), "utf8")) as {
+      scripts: Record<string, string>;
+    };
+    expect(manifest.scripts["intelligence:operations"]).toBe(
+      "node scripts/intelligence-operations.mjs",
+    );
+  });
+
+  it("takes a backup of the journal the operator names", async () => {
+    const source = operatorJournal("operator-backup-source");
+    const destination = directory("operator-backup-out");
+
+    const result = await runOperatorCommand(
+      ["backup", "--source", source, "--destination", destination, "--acknowledge-quiescence"],
+      source,
+    );
+
+    expect(result.code).toBe(0);
+    // The shipped backup wrote the snapshot and its manifest.
+    expect(existsSync(join(destination, "journal.db"))).toBe(true);
+    expect(existsSync(join(destination, "manifest.json"))).toBe(true);
+  });
+
+  it("refuses a relative path", async () => {
+    const source = operatorJournal("operator-relative-source");
+    const destination = directory("operator-relative-out");
+
+    const result = await runOperatorCommand(
+      ["backup", "--source", "journal", "--destination", destination, "--acknowledge-quiescence"],
+      source,
+    );
+
+    expect(result.code).not.toBe(0);
+    expect(result.stderr).toMatch(/absolute source and destination/);
+    // Nothing was written where the operator did not name a directory.
+    expect(existsSync(join(destination, "journal.db"))).toBe(false);
+  });
+
+  it("refuses a backup without the quiescence acknowledgement", async () => {
+    const source = operatorJournal("operator-unacknowledged-source");
+    const destination = directory("operator-unacknowledged-out");
+
+    const result = await runOperatorCommand(
+      ["backup", "--source", source, "--destination", destination],
+      source,
+    );
+
+    expect(result.code).not.toBe(0);
+    expect(result.stderr).toMatch(/quiescent/);
+    expect(existsSync(join(destination, "journal.db"))).toBe(false);
+  });
+
+  it("refuses to write over a journal that is already there", async () => {
+    const source = operatorJournal("operator-occupied-source");
+    const destination = operatorJournal("operator-occupied-destination");
+    const before = statSync(join(destination, "journal.db")).mtimeMs;
+
+    const result = await runOperatorCommand(
+      ["backup", "--source", source, "--destination", destination, "--acknowledge-quiescence"],
+      source,
+    );
+
+    expect(result.code).not.toBe(0);
+    expect(result.stderr).toMatch(/already holds a journal/);
+    // The journal that was already there is untouched.
+    expect(statSync(join(destination, "journal.db")).mtimeMs).toBe(before);
+  });
+
+  it("carries the key material beside the snapshot and nowhere else", async () => {
+    const source = operatorJournal("operator-key-source");
+    // The key material lives beside the journal it belongs to.
+    const key = `${"ab".repeat(32)}\n`;
+    writeFileSync(join(source, ".secret"), key, "utf8");
+    const destination = directory("operator-key-out");
+
+    const result = await runOperatorCommand(
+      ["backup", "--source", source, "--destination", destination, "--acknowledge-quiescence"],
+      source,
+    );
+
+    expect(result.code).toBe(0);
+    // The key travels beside the snapshot, and the journal keeps its own copy.
+    expect(existsSync(join(destination, ".secret"))).toBe(true);
+    expect(existsSync(join(source, ".secret"))).toBe(true);
+    // The backup holds the snapshot, the key and the manifest, and nothing else.
+    expect(readdirSync(destination).sort()).toEqual([".secret", "journal.db", "manifest.json"]);
+    // The manifest carries a sealed probe, never the key itself.
+    const manifest = readFileSync(join(destination, "manifest.json"), "utf8");
+    expect(manifest).not.toContain("ab".repeat(32));
+    expect(manifest).toContain("keyProbe");
+  });
+
+  it("leaves the journal it copies untouched", async () => {
+    const source = operatorJournal("operator-untouched-source");
+    const before = statSync(join(source, "journal.db"));
+    const destination = directory("operator-untouched-out");
+
+    const result = await runOperatorCommand(
+      ["backup", "--source", source, "--destination", destination, "--acknowledge-quiescence"],
+      source,
+    );
+
+    expect(result.code).toBe(0);
+    // The source journal is unchanged, and nothing was written beside it.
+    const after = statSync(join(source, "journal.db"));
+    expect(after.size).toBe(before.size);
+    expect(after.mtimeMs).toBe(before.mtimeMs);
+    expect(readdirSync(source)).toEqual(["journal.db"]);
+  });
+
+  it("restores a backup into scratch storage", async () => {
+    const source = operatorJournal("operator-restore-source");
+    const backup = directory("operator-restore-backup");
+    await runOperatorCommand(
+      ["backup", "--source", source, "--destination", backup, "--acknowledge-quiescence"],
+      source,
+    );
+
+    const restored = directory("operator-restore-out");
+    const result = await runOperatorCommand(
+      ["restore", "--source", backup, "--destination", restored],
+      source,
+    );
+
+    expect(result.code).toBe(0);
+    expect(existsSync(join(restored, "journal.db"))).toBe(true);
   });
 });

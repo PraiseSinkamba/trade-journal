@@ -2,7 +2,8 @@
 
 The runbook for the journal's intelligence runtime: the worker, the backlog, the failures, the
 backup, the restore and the rollback. Every command here is one an operator can run against a
-journal they own.
+journal they own — except where a section says plainly that the operator has no surface for it
+yet, and names what is missing.
 
 > **Never operate on live trader data to test a procedure.** Use a scratch journal
 > (`JOURNAL_DATA_DIR` pointing at a disposable directory) and synthetic credentials.
@@ -11,7 +12,7 @@ journal they own.
 
 | Part                    | Where it lives                                                                       | What it holds                                                                          |
 | ----------------------- | ------------------------------------------------------------------------------------ | -------------------------------------------------------------------------------------- |
-| the **worker**          | a separate process, supervised by the web process                                    | claims jobs, runs the handlers, acknowledges the effects                               |
+| the **worker**          | a separate process, forked by the journal supervisor                                 | claims jobs, runs the handlers, acknowledges the effects                               |
 | the **backlog**         | `intelligence_jobs`                                                                  | durable work: observations, seeds, schedule triggers, retention runs, workflow effects |
 | the **outbox**          | `domain_outbox` and `event_deliveries`                                               | the committed change events and what each handler did with them                        |
 | the **observations**    | `intelligence_observations` and `observation_evidence`                               | what the journal concluded about a trade, and the revisions it rests on                |
@@ -33,8 +34,8 @@ competing.
 | `blocked`         | it cannot take the lease                               | another worker holds it, or the lease expired mid-run — see **lease recovery** |
 | `stopped`         | it was asked to stop, or its loop broke on a fault     | start it again to move the backlog                                             |
 
-The web process cannot observe the worker: it serves `worker: null`. Read the worker's own health
-record, or the journal itself, to know its state.
+The web process cannot observe the worker: it serves `worker: null`. The supervisor prints the
+worker's health record on its own standard output, and the journal itself shows the lease.
 
 ### The backlog
 
@@ -94,6 +95,10 @@ The replay seam (`createReplayService`) re-queues the work of a stored event and
 whose account was reset or purged. Replaying an event whose handler already delivered it is a
 no-op for the delivery but re-runs the handler's effect — which is what you want when the handler
 itself was at fault.
+
+> **No operator surface for the replay yet.** The seam exists and refuses an account that was
+> reset or purged, but no command or route calls it. Until one does, a dead letter can be
+> inspected, not replayed.
 
 **A workflow effect job has no event to replay.** Its payload names a workflow and a transition
 revision — `{"type": "workflow_effect", "workflowId": "...", "transitionRevision": n}` — and its
@@ -157,6 +162,10 @@ fence, and the dead worker's completion is refused.
 acknowledged, and its effect would be lost. Cancel it through the job store instead: a cancelled
 job is fenced, and the worker that holds it fails its completion cleanly.
 
+> **No operator surface for the cancel yet.** The job store can cancel a job, but no command or
+> route calls it. Until one does, leave the row alone and let it fail: a dead letter stays
+> inspectable, which is what the section above needs it for.
+
 ## The no-provider behaviour
 
 The journal works with no AI provider configured. The observation path — the facts the journal
@@ -211,31 +220,36 @@ delivery, or a failure nobody has acknowledged.
 The prune is bounded: one call removes at most the number of rows you give it, so a retention run
 cannot hold the write lock for an unbounded time.
 
-The same work runs on the worker's schedule. A retention job — `type: "retention"`, payload
-`{"before": <epoch ms>}` — is claimed by the worker and runs inside the **worker's** transaction:
-the transport and the diagnostics class at the cutoff the payload names, the knowledge class at its
-own 90-day window, and the whole run inside one bound of 500 rows. The windows are 30 days for the
-transport and the diagnostics class and 90 days for the knowledge class.
+The same work runs inside the worker. A retention job — `type: "retention"`, payload
+`{"type": "retention", "before": <epoch ms>}` — is claimed by the worker and runs inside the
+**worker's** transaction: the transport and the diagnostics class at the cutoff the payload names,
+the knowledge class at its own 90-day window, and the whole run inside one bound of 500 rows. The
+windows are 30 days for the transport and the diagnostics class and 90 days for the knowledge
+class.
 
 Nothing in the journal enqueues that job by itself, so an operator puts one in the backlog and the
 worker claims it on its next tick:
 
 ```sql
 -- A retention job for the worker to claim. The idempotency key is unique, so a
--- second run of the same key is refused by the index.
+-- second run of the same key is refused by the index. The payload carries the
+-- "type" the worker's payload schema discriminates on: a payload without it
+-- is not read, and the job dies as an unhandled job.
 INSERT INTO intelligence_jobs
   (id, idempotency_key, type, payload_json, status, attempts, available_at, fence,
    cancel_requested, created_at, updated_at)
 VALUES
-  ('<uuid>', 'retention:<epoch ms>', 'retention', '{"before":<epoch ms>}', 'pending', 0,
+  ('<uuid>', 'retention:<epoch ms>', 'retention',
+   '{"type":"retention","before":<epoch ms>}', 'pending', 0,
    <epoch ms>, 0, 0, <epoch ms>, <epoch ms>);
 ```
 
-The dedup keys outlive the work they describe, so nothing is raised twice:
+The dedup keys outlive the work they describe, so nothing is raised twice. The prune is what
+leaves them alone — a purge of an account takes that account's rows with it:
 
 - a delivery row stays as long as its event, so a handler never runs twice for one event;
-- a background run row stays forever, so an effect is never queued twice;
-- an opportunity row is never removed, so a dismissal outlives the thing it dismisses.
+- the prune never removes a background run row, so an effect is never queued twice;
+- the prune never removes an opportunity row, so a dismissal outlives the thing it dismisses.
 
 ### Running the prune, the reset and the rebuild
 
@@ -271,8 +285,12 @@ classes share the one bound.
 ```sh
 curl -X POST http://localhost:3000/api/intelligence/retention \
   -H 'content-type: application/json' \
+  -b 'journal_session=<your session cookie>' \
   -d '{"before": 1760000000000}'
 ```
+
+A journal with no password set answers `401` only when it has one; on a journal without a
+password the cookie is not needed.
 
 #### `GET /api/intelligence/retention` — read the current state
 
@@ -308,8 +326,12 @@ reset has been undone. The answer is `{"accountId": "...", "checkpoint": "pendin
 ## Deletion
 
 Deleting an account takes its whole intelligence with it: its events, their deliveries and jobs,
-the evidence of its fills, its observations, its knowledge, its workflows, its opportunities and
-its conversations.
+the evidence of its fills, its observations, its knowledge, its workflows, its opportunities, its
+conversations and the background runs scoped to it. A run scoped to several accounts loses only
+the deleted account; a run scoped to the deleted account alone goes with it, and its budget
+reservations with it.
+
+The operator deletes an account with `DELETE /api/accounts/{id}`.
 
 Every purge is recorded in the **deletion ledger**: a file `purge-ledger.json` beside the database,
 holding the account ids that were purged and the kind of purge.
@@ -346,21 +368,52 @@ Clearing an account's fills leaves the account in place. The evidence of the del
 anything about a fill that is gone. The membership evidence survives — it must survive ordinary
 source-fill deletion.
 
+The operator clears it with `POST /api/accounts/{id}/actions` and the body `{"action": "clear"}`.
+
 ## Backup
 
 **A backup is only valid on a quiescent journal.** The command refuses anything it cannot vouch
-for: a missing or relative path, a source and a destination that are the same, a destination that
-already holds a journal, a journal whose worker lease is still live, a journal whose key comes
-from `JOURNAL_SECRET` (that key cannot travel with a backup), and a source that does not hold the
-journal's own key material (the key probe is sealed under the journal's live key, so a stale copy
-would verify against the wrong key).
+for, among others: a missing or relative path, a source and a destination that are the same, a
+destination that already holds a journal, a journal whose worker lease is still live, a journal
+whose key comes from `JOURNAL_SECRET` (that key cannot travel with a backup), a source that does
+not hold the journal's own key material (the key probe is sealed under the journal's live key, so a
+stale copy would verify against the wrong key), a source that does not hold a journal at all, a
+source whose encrypted settings the live key cannot open, and a source that holds encrypted
+material no key can travel with.
+
+The backup is taken by the journal's own operations command, from the repository root:
+
+```sh
+JOURNAL_DATA_DIR=/data/trade-journal \
+pnpm --filter web intelligence:operations backup \
+  --source /data/trade-journal \
+  --destination /backups/journal-2026-11-16 \
+  --acknowledge-quiescence
+```
+
+Every input is typed: the **source** (the journal's own data directory), the **destination** (the
+directory to write the backup into — it is created if it does not exist, and refused if it
+already holds a journal) and the **acknowledgement** that the journal is quiescent. Nothing is
+defaulted, and the command refuses an input it cannot vouch for rather than guessing one.
 
 The operator acknowledges the quiescence. Two writers must be stopped:
 
 1. the **HTTP writer** — stop the web process, so no request writes to the journal;
 2. the **worker** — stop the worker process, so no job writes to the journal.
 
-The command checks the worker lease itself; the HTTP writer is on you.
+Stop the journal supervisor, which owns both: it forks the web process and the worker, and it
+restarts a worker that dies on its own. In production that is the `pnpm start` command; in
+development it is `pnpm --filter web dev:journal`, which starts the web process but no worker
+unless `--worker enabled` is passed.
+
+**Wait for the lease to expire.** The command refuses a source journal whose worker lease is still
+live, and the lease row outlives the stopped worker: nothing deletes it, and it stays valid for up
+to `WORKER_LEASE_MS` (30 seconds) after the worker stops. So a backup run immediately after
+stopping the supervisor is refused with "The journal still holds a worker lease". Wait until
+`intelligence_worker_lease.lease_until` is in the past and run it again. Never delete the lease row
+to make the refusal go away — a live lease is the journal's own record of who was writing to it.
+
+The command checks that lease in the source journal's own database. The HTTP writer is on you.
 
 The snapshot is written with SQLite's `VACUUM INTO`, so it is a consistent copy of the whole
 journal — never a copy of a live WAL file. The key material (`.secret`) is copied beside it, and
@@ -382,11 +435,19 @@ Restore into **scratch storage** first. The restore:
 
 1. refuses a destination that already holds a journal, so it never overwrites a live journal;
 2. copies the snapshot and the key material;
-3. verifies the copy **before anything migrates it** — `PRAGMA integrity_check` and
+3. verifies the key: the manifest's probe must open under the restored key material;
+4. verifies the copy **before anything migrates it** — `PRAGMA integrity_check` and
    `PRAGMA foreign_key_check` judge the backup, not a migrated version of it;
-4. verifies the key: the manifest's probe must open under the restored key material;
 5. applies the deletion ledger again — a purged account stays purged;
-6. verifies the restored journal once more.
+6. verifies the restored journal once more, after the restore has migrated it to the current schema.
+
+The restore is run by the same command, from the repository root:
+
+```sh
+pnpm --filter web intelligence:operations restore \
+  --source /backups/journal-2026-11-16 \
+  --destination /scratch/journal-restore-2026-11-16
+```
 
 The restore never reads, decrypts or writes a credential. To prove the key material travels, set
 a **synthetic** provider key in a scratch journal, back it up, restore it and decrypt the
@@ -398,14 +459,21 @@ The live `purge-ledger.json` is newer than the backup's copy, and it is what kee
 happened after the backup from being undone. It must reach the restore **before** the restore
 runs, because the restore applies the ledger it finds in its destination.
 
-1. Stop the web process and the worker.
-2. Copy the live `purge-ledger.json` into the **restore destination**, beside the backup's
-   `journal.db`. Do this before the restore: a restore that ran without it would bring a purged
-   account back.
-3. Run the restore into that destination. It applies the ledger it finds there, so the purged
-   account stays purged.
+1. Stop the journal supervisor, which owns the web process and the worker.
+2. Copy the live `purge-ledger.json` into the **restore destination**. Do this before the
+   restore: a restore that ran without it would bring a purged account back.
+3. Run the restore into that destination:
+
+   ```sh
+   pnpm --filter web intelligence:operations restore \
+     --source /backups/journal-2026-11-16 \
+     --destination /scratch/journal-restore-2026-11-16
+   ```
+
+   It applies the ledger it finds there, so the purged account stays purged.
+
 4. Replace the journal's data directory with the restored one.
-5. Start the web process, then the worker.
+5. Start the journal supervisor, which starts the web process and then the worker.
 6. Confirm the journal opens, the ledger is present, and the backlog is what you expect.
 
 ## Rollback
@@ -415,7 +483,7 @@ runs, because the restore applies the ledger it finds in its destination.
 | a migration failed to apply               | Stop. The journal stays at the version it fully applied; the runner rolled the failed migration back with its ledger row. Fix forward — never edit an applied migration, never delete a ledger row. |
 | a migration's checksum does not match     | The journal was migrated from a different source. Restore the original source and rebuild the checksum artifact, or restore the journal from a backup.                                              |
 | the journal was migrated by a newer build | Deploy the newer build, or restore a backup. Do not run the older build against it.                                                                                                                 |
-| the journal is corrupt                    | Stop the writers, restore the verified backup into scratch storage, verify it, then promote it.                                                                                                     |
+| the journal is corrupt                    | Stop the writers, restore the verified backup into scratch storage with the restore command, verify it, then promote it.                                                                            |
 | the wrong data was written                | Roll back to the last verified backup and reconcile the difference. Do not edit rows by hand.                                                                                                       |
 
 An older binary lacks the new version guards, so it must not write to a newer journal. Never
