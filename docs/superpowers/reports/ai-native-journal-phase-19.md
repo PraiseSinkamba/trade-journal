@@ -8,6 +8,7 @@ Phase guide row 19 · detailed-plan Task 12 · milestone M5 · schema allocation
 | Base                  | `14f8ec3aa0451c53c91d9503c2b79425232cdfaf` (verified feature HEAD)                        |
 | Plan commit           | `f8f0525c11` — "docs: plan the native inbox and the Slice B gate"                         |
 | Implementation commit | `c9849963bb` — "feat: expose controlled intelligence interactions and user settings"      |
+| Repair commit         | `148f2c6df6` — "fix: pair the actionable workflow and refuse a duplicate review"          |
 | Migrations            | none. `0001`–`0007` are byte-unchanged; no schema, registry or checksum file was touched. |
 
 ## What was built
@@ -89,13 +90,16 @@ and a visible focus ring.
 
 ## The commands, and what they proved
 
-| Command                                                                                                                                                                                                                                                        | Exit | Result                                                       |
-| -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ---- | ------------------------------------------------------------ |
-| `pnpm exec vitest run apps/web/tests/intelligence-ui.test.ts apps/web/tests/intelligence-slice-b.test.ts`                                                                                                                                                      | 0    | 2 files, 23 tests passed (10 UI, 13 gate)                    |
-| `pnpm --filter web typecheck`                                                                                                                                                                                                                                  | 0    | `next typegen` + `tsc --noEmit` clean                        |
-| `pnpm exec vitest run apps/web/tests/intelligence-boundaries.test.ts apps/web/tests/intelligence-routes.test.ts apps/web/tests/intelligence-workflows.test.ts apps/web/tests/intelligence-engagement.test.ts apps/web/tests/intelligence-observations.test.ts` | 0    | 5 files, 107 tests passed                                    |
-| `pnpm exec vitest run apps/web/tests`                                                                                                                                                                                                                          | 0    | 101 files, 1131 tests passed, run against the committed tree |
-| `pnpm exec prettier --check <the 13 phase files>`                                                                                                                                                                                                              | 0    | every phase file is Prettier-clean                           |
+| Command                                                                                                                                                                                                                                                        | Exit | Result                                                            |
+| -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ---- | ----------------------------------------------------------------- |
+| `pnpm exec vitest run apps/web/tests/intelligence-ui.test.ts apps/web/tests/intelligence-slice-b.test.ts`                                                                                                                                                      | 0    | 2 files, 23 tests passed (10 UI, 13 gate)                         |
+| `pnpm --filter web typecheck`                                                                                                                                                                                                                                  | 0    | `next typegen` + `tsc --noEmit` clean                             |
+| `pnpm exec vitest run apps/web/tests/intelligence-boundaries.test.ts apps/web/tests/intelligence-routes.test.ts apps/web/tests/intelligence-workflows.test.ts apps/web/tests/intelligence-engagement.test.ts apps/web/tests/intelligence-observations.test.ts` | 0    | 5 files, 107 tests passed                                         |
+| `pnpm exec vitest run apps/web/tests`                                                                                                                                                                                                                          | 0    | 101 files, 1131 tests passed, run against the committed tree      |
+| `pnpm exec vitest run apps/web/tests/intelligence-ui.test.ts apps/web/tests/intelligence-slice-b.test.ts` (after the repair)                                                                                                                                   | 0    | 2 files, 27 tests passed                                          |
+| `pnpm --filter web typecheck` (after the repair)                                                                                                                                                                                                               | 0    | `next typegen` + `tsc --noEmit` clean                             |
+| `pnpm exec vitest run apps/web/tests/intelligence-routes.test.ts` (after the repair)                                                                                                                                                                           | 0    | 1 file, 21 tests passed — the Phase 18 route contract still holds |
+| `pnpm exec prettier --check <the 13 phase files>`                                                                                                                                                                                                              | 0    | every phase file is Prettier-clean                                |
 
 The repository-root `pnpm typecheck` still fails in the `desktop` Rust package on this host (the
 Tauri sidecar binary is not tracked); `pnpm --filter web typecheck` — the scope of this phase — is
@@ -139,23 +143,33 @@ effect that does not advance the status; the card rendering the composed intent 
 dropping the `409` refusal; the inbox not rendering the review it started; the controls route
 accepting an unknown key. Each break failed its test and nothing else.
 
+The pairing repair is broken the same way: the route's pairing of the review that waits was reverted to
+the first review of the observation — the defect itself — and the gate was run. The broken run exited
+`1`; the restored run exited `0`, and the file was restored byte-for-byte before the second run.
+
 ## The review and its findings
 
 One implementation review, per the phase budget. The report is `.omp/reviewer-report.md`
 ("## Verdict: PASS"), with the findings and their resolutions recorded in the same file.
 
 - **MAJOR — the inbox re-offers a review that is already finished, and the second review is never
-  shown.** The defect is real and it lives half in Phase 18's route, which this phase does not own:
-  the GET pairs the FIRST workflow of a subject, and the POST starts a new review even when one
-  exists. The coordinator was asked for the ownership to fix it server-side
-  (`msg_dc600a06763b`, options A/B/C). What ships now is the client half of the fix, inside this
-  phase's ownership: the inbox renders the intent the POST answers, so the review the operator just
-  started is actionable, and it never offers a second review of the same observation while the
-  session lives. The residual is named: after a reload the client no longer knows the observation was
-  reviewed, so one more workflow row can still be started for it — the operator does get an
-  actionable review, but the row leaks. The server-side pairing — serve the observation's review
-  state, pair the actionable workflow, refuse a duplicate start — is a Phase 20 input unless the
-  coordinator grants the ownership.
+  shown.** The defect was real and it lived half in Phase 18's route, which this phase did not own:
+  the GET paired the FIRST workflow of a subject, and the POST started a new review even when one
+  existed. The coordinator confirmed the finding and granted the ownership of the two route files
+  (`msg_73aea0f05530`, decision A), and the server-side fix is in `148f2c6df6` ("fix: pair the
+  actionable workflow and refuse a duplicate review"):
+  - the surface pairs the review that WAITS for the operator, not the first one, so a review the
+    operator already gave no longer hides the review that is due;
+  - every observation answers with its review state — `unreviewed`, `live` or `reviewed` — so the
+    client knows after a reload which observations already carry a review and never offers one again;
+  - a second review of a live or given observation is refused with `409 review_already_started` and
+    writes nothing; an abandoned review holds nothing, so the observation may be reviewed again.
+
+  The residual named by the first version of this report — that after a reload one more workflow row
+  could still be started — no longer holds: the server refuses the duplicate start, so no row leaks.
+  The client-side mitigation stays (the session's list of the observations it put up for review, and
+  the intent the POST answered with), and the two agree.
+
 - The seven MINOR findings — a duplicated background-policy shape, an unreadable success body, two
   producer inputs no caller sets, the whole evidence table read in the consent path, a count that
   counted re-engagements, two switches written in two statements, and two unformatted files — are all
@@ -181,9 +195,6 @@ One implementation review, per the phase budget. The report is `.omp/reviewer-re
 
 ## Next-phase inputs
 
-- The observation-review pairing in `app/api/intelligence/observations/route.ts`: serve the
-  observation's review state, pair the actionable workflow rather than the first, and refuse to start a
-  second review while one is live.
 - The `workflow_effect` job handler in the worker, so a deferred workflow resumes in production.
 - A persisted home for an AI-assisted insight, so the optional-AI node of the design chain can be
   wired.
@@ -201,3 +212,6 @@ One implementation review, per the phase budget. The report is `.omp/reviewer-re
   the UI imports them and nothing else from the server side.
 - The inbox, the interaction card and the controls are native components over the existing primitives;
   ADR 0003 records that no primitive was added.
+- The observation surface pairs the review that waits for the operator and serves each observation's
+  review state, so a later surface never offers a review that already exists and never leaks a
+  workflow row for one.
