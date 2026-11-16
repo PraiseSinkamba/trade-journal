@@ -1,9 +1,7 @@
 import { z } from "zod";
 import { bad, handler, ok } from "@/server/api";
 import { checkRequestOrigin } from "@/server/request-origin";
-import { db } from "@/db";
-import { dataDir } from "@/db/connection";
-import { accounts, intelligenceSeedCheckpoints } from "@/db/schema";
+import { accounts, db, dataDir, intelligenceSeedCheckpoints } from "@/db";
 import {
   KNOWLEDGE_RETENTION_WINDOW_MS,
   readPurgeLedger,
