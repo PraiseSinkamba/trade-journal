@@ -41,6 +41,9 @@ resolver), the route handlers, the contracts under `intelligence/contracts/`, `d
 `db/migrations.ts` and the checksum artifact stay untouched: this phase deletes and retains rows,
 it does not add one.
 
+The coordinator granted three of those areas after the candidate was committed — **The granted
+repair** below records the grant and what was wired there. Nothing else moved.
+
 ## Required interfaces
 
 ```ts
@@ -427,15 +430,64 @@ The plan is implemented, the three targeted test files and the typecheck are gre
 implementation review has passed, and the phase report is committed. The candidate stops there; the
 merge into `codex/ai-native-journal` is the coordinator's job.
 
+## The granted repair
+
+The phase candidate was committed (`test: harden intelligence recovery packaging and operations`).
+After that, the coordinator granted three areas that **Ownership** above declared out of scope:
+
+| The granted area                                            | What the repair does there                                          |
+| ----------------------------------------------------------- | ------------------------------------------------------------------- |
+| `apps/web/src/server/intelligence/infrastructure/worker.ts` | resolves the handler of a `retention` and a `workflow_effect` job   |
+| `apps/web/src/server/intelligence/composition.ts`           | registers the retention handler and the workflow effect handler     |
+| `apps/web/src/app/api/intelligence/`                        | the operator routes of the retention run, the reset and the rebuild |
+
+The repair is wiring, not a new capability: the prune, the purge, the reset and the rebuild were
+already this phase's work in `retention.ts` and `trading/commands.ts`. What was missing was the
+registration that lets the worker run the work and the surface that lets the operator ask for it.
+
+**The retention handler.** `worker.ts` names the handler of a retention job — `RETENTION_HANDLER_ID`
+`retention` and `RETENTION_HANDLER_VERSION` `1` — and `composition.ts` registers it. Its `run`
+calls `pruneIntelligenceInTx(tx, job.payload.before, RETENTION_PRUNE_LIMIT)` and then
+`pruneSupersededKnowledgeInTx(tx, clock() - KNOWLEDGE_RETENTION_WINDOW_MS, RETENTION_PRUNE_LIMIT -
+removed.removed)`: the transport and the diagnostics class at the cutoff the payload names, the
+knowledge class at its own 90-day window, and the whole run inside one bound of 500 rows. The
+entry points `pruneIntelligence(before, limit)` and `pruneSupersededKnowledge(before, limit)` stay
+the seam the operator route uses.
+
+**The deferred workflow resume.** `worker.ts` resolves a `workflow_effect` payload to the
+`workflow-effect` handler (version `1`) that the workflow engine hands out through `effectHandler()`,
+and `composition.ts` registers it. A workflow that waits for you and was deferred now resumes when
+the worker wakes it, instead of dying as an `unhandled_job` dead letter. This is the leg Phase 19
+left open.
+
+**The operator routes.** Three route files under `apps/web/src/app/api/intelligence/retention/`
+answer four routes:
+
+| The route                                  | What it does                                                                                                                                     |
+| ------------------------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------ |
+| `POST /api/intelligence/retention`         | runs a prune now: `{"before": <epoch ms>, "limit": <rows>}`, both optional                                                                       |
+| `GET /api/intelligence/retention`          | the current state: the two windows, the bound, the deletion ledger and every account's seed checkpoint                                           |
+| `POST /api/intelligence/retention/reset`   | resets one account: `{"accountId": "..."}` — the checkpoint becomes `suppressed`, the ledger records it                                          |
+| `POST /api/intelligence/retention/rebuild` | asks for the rebuild: `{"accountId": "..."}` — the checkpoint moves back to `pending`, the seed job is enqueued and the ledger forgets the reset |
+
+**Where the proof lives.** The worker's retention run and the deferred workflow resume are proven
+in `apps/web/tests/intelligence-retention.test.ts`: the worker claims the job, the job ends
+`completed` with no `last_error`, and no `unhandled_job` dead letter is written. The operator routes
+are proven in `apps/web/tests/intelligence-acceptance.test.ts`: the gate (no session, a foreign
+origin, a body the route cannot read), the prune the route runs, the reset and the rebuild.
+
 ## What this phase leaves to the next one
 
-- **The retention job does not run.** The `retention` payload type exists (`contracts/jobs.ts:54`),
-  but the worker resolves a handler for `seed_account`, `evaluate_trade` and `schedule_trigger` only
-  (`worker.ts:214-222`), and `worker.ts` and `composition.ts` are not this phase's files. The prune
-  is therefore a directly callable server function in this phase, and registering a retention
-  handler needs the coordinator's allocation of `worker.ts` and `composition.ts`.
-- **The API routes** that expose the reset, the rebuild request and the retention run to the
-  operator are not in this phase's file list. The server-side commands in `trading/commands.ts` are
-  the whole of this phase's behaviour.
+- **Nothing of the granted repair.** The retention job runs, the deferred workflow resumes and the
+  operator has routes for the retention run, the reset and the rebuild: the coordinator granted
+  `worker.ts`, `composition.ts` and the directory `apps/web/src/app/api/intelligence/` after the
+  candidate was committed, and **The granted repair** above records what was wired there. The
+  prune is no longer a directly callable server function only — it is the worker's job and the
+  operator's route.
+- **The persisted home of an AI-assisted insight.** The chain's AI leg has no table of its own: an
+  opportunity carries no text, and a provider call may not happen inside a write transaction. No
+  phase in this run owns the migration that would give it one, and the leg itself is optional, so
+  this is a next-milestone item and not a hole in this gate. The gate of this phase is the
+  retention, the deletion, the backup and the restore, and all four are proven.
 - The benchmark, the full CI sequence, the Docker and Windows smoke and the package audit are
   Phase 21's release half.

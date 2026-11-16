@@ -1,4 +1,4 @@
-import { and, eq, inArray, lt, notInArray } from "drizzle-orm";
+import { and, eq, inArray, isNotNull, lt, notInArray, sql } from "drizzle-orm";
 import Database from "better-sqlite3";
 import { createCipheriv, createDecipheriv, randomBytes } from "node:crypto";
 import { copyFileSync, existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
@@ -19,6 +19,7 @@ import {
   knowledgeHypotheses,
   knowledgePatterns,
   knowledgeSources,
+  trades,
 } from "@/db/schema";
 import { dataDir, db, openConnection } from "@/db/connection";
 import {
@@ -27,6 +28,7 @@ import {
   type JournalTx,
 } from "@/db/transaction";
 import { newUuid } from "@/server/ids";
+import { decryptJson } from "@/server/crypto";
 import { liveReferenceIndex } from "./experience-store";
 import { createJobStore, deleteTerminalJobsForEventInTx } from "./jobs";
 import { pruneKnowledgeInTx, pruneObservationsInTx } from "./knowledge-store";
@@ -61,6 +63,15 @@ const eachChunk = (ids: readonly string[], fn: (chunk: string[]) => void): void 
 
 /** The file the deletion ledger is written to, beside the database. */
 export const PURGE_LEDGER_FILE = "purge-ledger.json";
+
+/** The retention window of the transport and the diagnostics classes: 30 days. */
+export const RETENTION_WINDOW_MS = 30 * 86_400_000;
+
+/** The retention window of the knowledge class: 90 days. */
+export const KNOWLEDGE_RETENTION_WINDOW_MS = 90 * 86_400_000;
+
+/** The largest number of rows one retention run may remove. */
+export const RETENTION_PRUNE_LIMIT = 500;
 
 /** The name of the journal's single worker lease. */
 const WORKER_LEASE_NAME = "journal-worker";
@@ -407,12 +418,35 @@ export const requestAccountIntelligenceRebuildInTx = (
     })
     .run();
 
-  createJobStore(db).enqueue(
-    tx,
-    JSON.stringify(["seed_account", accountId, baselineOperationId, null]),
-    { type: "seed_account", accountId },
-    now,
-  );
+  // The seed job's key is the one the historical seed uses for its own
+  // continuation, so a rebuild after a completed one must **re-arm** the
+  // existing job rather than collide with it: an enqueue that finds a
+  // finished job would leave the account with a pending checkpoint and no
+  // runnable work.
+  const seedKey = JSON.stringify(["seed_account", accountId, baselineOperationId, null]);
+  const existing = tx
+    .select({ id: intelligenceJobs.id })
+    .from(intelligenceJobs)
+    .where(eq(intelligenceJobs.idempotencyKey, seedKey))
+    .get();
+  if (existing) {
+    tx.update(intelligenceJobs)
+      .set({
+        status: "pending",
+        attempts: 0,
+        availableAt: now,
+        owner: null,
+        fence: sql`${intelligenceJobs.fence} + 1`,
+        leaseUntil: null,
+        cancelRequested: false,
+        lastError: null,
+        updatedAt: now,
+      })
+      .where(eq(intelligenceJobs.id, existing.id))
+      .run();
+  } else {
+    createJobStore(db).enqueue(tx, seedKey, { type: "seed_account", accountId }, now);
+  }
 };
 
 /* ---------------------------------------------------------------------------
@@ -442,11 +476,13 @@ export const pruneIntelligenceInTx = (
   const now = Date.now();
   let removed = 0;
 
-  // The transport class: an event whose whole subtree is finished.
+  // The transport class: an event whose whole subtree is finished. An event
+  // that was **never dispatched** is the backlog: the worker was disabled or
+  // behind, and deleting it would destroy work the journal still owes.
   const candidates = tx
     .select({ id: domainOutbox.id })
     .from(domainOutbox)
-    .where(lt(domainOutbox.recordedAt, before))
+    .where(and(lt(domainOutbox.recordedAt, before), isNotNull(domainOutbox.dispatchedAt)))
     .limit(Math.max(0, limit))
     .all();
   for (const candidate of candidates) {
@@ -456,6 +492,9 @@ export const pruneIntelligenceInTx = (
       .from(eventDeliveries)
       .where(eq(eventDeliveries.eventId, candidate.id))
       .all();
+    // An event with no delivery yet was never handed to a handler: it is
+    // unfinished work, not a finished subtree.
+    if (deliveries.length === 0) continue;
     // A pending or failed delivery is live or an unacknowledged failure: the
     // event stays, and with it the failure's diagnostic.
     if (
@@ -612,6 +651,41 @@ const readKeyFile = (directory: string): Buffer | null => {
   }
 };
 
+/**
+ * Whether the key opens every encrypted setting of a journal.
+ *
+ * A credential envelope is a JSON value with three dot-separated parts, so a
+ * settings row that carries one is an encrypted credential the journal needs
+ * its key to read. A journal with no encrypted setting has nothing to open.
+ */
+const opensEncryptedSettings = (directory: string, key: Buffer): boolean => {
+  const file = join(directory, "journal.db");
+  if (!existsSync(file)) return true;
+  const journal = new Database(file, { fileMustExist: true, readonly: true });
+  try {
+    const rows = journal.prepare("SELECT value FROM settings WHERE value LIKE '%.%.%'").all() as {
+      value?: string;
+    }[];
+    for (const row of rows) {
+      if (typeof row.value !== "string" || row.value.split(".").length !== 3) continue;
+      try {
+        decryptJson(row.value);
+      } catch {
+        // The key does not open this credential, so the backup could not be
+        // read back.
+        return false;
+      }
+    }
+    return true;
+  } catch {
+    // A journal whose settings table cannot be read holds no credential that
+    // the key must open.
+    return true;
+  } finally {
+    journal.close();
+  }
+};
+
 /** Encrypts the key probe under the journal's key, in the journal's envelope. */
 const sealProbe = (key: Buffer, label: string): string => {
   const iv = randomBytes(12);
@@ -706,6 +780,13 @@ export const backupJournal = (request: BackupRequest): BackupResult => {
       "The backup source does not hold the journal's own key material; back up the journal's own data directory.",
     );
   }
+  if (liveKey && !opensEncryptedSettings(request.source, liveKey)) {
+    // The journal holds encrypted settings the live key cannot open: a
+    // backup of it could never be read back.
+    throw new Error(
+      "The journal holds encrypted settings its key cannot open; the backup could not be read back.",
+    );
+  }
   const key = liveKey;
 
   mkdirSync(request.destination, { recursive: true });
@@ -729,7 +810,10 @@ export const backupJournal = (request: BackupRequest): BackupResult => {
   let keyProbe: string | null = null;
   if (key) {
     keyFile = ".secret";
-    writeFileSync(join(request.destination, ".secret"), `${key.toString("hex")}\n`, "utf8");
+    writeFileSync(join(request.destination, ".secret"), `${key.toString("hex")}\n`, {
+      encoding: "utf8",
+      mode: 0o600,
+    });
     keyProbe = sealProbe(key, KEY_PROBE_LABEL);
   }
 
@@ -805,7 +889,9 @@ export const restoreJournal = (request: RestoreRequest): RestoreResult => {
 
   // The key travels beside the database, and the probe proves it is the key the
   // journal wrote with.
-  let keyVerified = true;
+  // The key is verified only when a probe opened under it. A restore that
+  // checked nothing must not claim it did.
+  let keyVerified = false;
   if (manifest.keyFile) {
     copyFileSync(
       join(request.source, manifest.keyFile),
@@ -818,8 +904,6 @@ export const restoreJournal = (request: RestoreRequest): RestoreResult => {
     if (!keyVerified) {
       throw new Error("The restored key material does not open the backup's key probe.");
     }
-  } else if (readKeyFile(request.destination)) {
-    keyVerified = false;
   }
 
   // The copy is verified before it is opened: the checks judge the backup.
@@ -843,6 +927,11 @@ export const restoreJournal = (request: RestoreRequest): RestoreResult => {
           // account row goes last, and its cascade takes the seed checkpoint
           // with it, so the seed finds no account to seed.
           purgeAccountIntelligence(tx, accountId);
+          // The trades and the fills of a deleted account go with it, exactly
+          // as the live delete path removes them: neither table has a
+          // foreign key to the account, so nothing else would take them.
+          tx.delete(trades).where(eq(trades.accountId, accountId)).run();
+          tx.delete(executions).where(eq(executions.accountId, accountId)).run();
           tx.delete(accounts).where(eq(accounts.id, accountId)).run();
         } else {
           resetAccountIntelligenceInTx(tx, accountId, Date.now());

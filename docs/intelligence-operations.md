@@ -9,15 +9,15 @@ journal they own.
 
 ## What the runtime is made of
 
-| Part                    | Where it lives                                                                       | What it holds                                                                    |
-| ----------------------- | ------------------------------------------------------------------------------------ | -------------------------------------------------------------------------------- |
-| the **worker**          | a separate process, supervised by the web process                                    | claims jobs, runs the handlers, acknowledges the effects                         |
-| the **backlog**         | `intelligence_jobs`                                                                  | durable work: observations, seeds, schedule triggers                             |
-| the **outbox**          | `domain_outbox` and `event_deliveries`                                               | the committed change events and what each handler did with them                  |
-| the **observations**    | `intelligence_observations` and `observation_evidence`                               | what the journal concluded about a trade, and the revisions it rests on          |
-| the **knowledge**       | `knowledge_sources`, `knowledge_hypotheses`, `knowledge_patterns`                    | what the journal concluded about the operator's own notes and rules              |
-| the **experience**      | `intelligence_workflows`, `intelligence_opportunities`, `intelligence_conversations` | the interactions the operator still has open                                     |
-| the **background runs** | `intelligence_runs` and `intelligence_budget_reservations`                           | the background AI attempts, their pinned configuration and their daily allowance |
+| Part                    | Where it lives                                                                       | What it holds                                                                          |
+| ----------------------- | ------------------------------------------------------------------------------------ | -------------------------------------------------------------------------------------- |
+| the **worker**          | a separate process, supervised by the web process                                    | claims jobs, runs the handlers, acknowledges the effects                               |
+| the **backlog**         | `intelligence_jobs`                                                                  | durable work: observations, seeds, schedule triggers, retention runs, workflow effects |
+| the **outbox**          | `domain_outbox` and `event_deliveries`                                               | the committed change events and what each handler did with them                        |
+| the **observations**    | `intelligence_observations` and `observation_evidence`                               | what the journal concluded about a trade, and the revisions it rests on                |
+| the **knowledge**       | `knowledge_sources`, `knowledge_hypotheses`, `knowledge_patterns`                    | what the journal concluded about the operator's own notes and rules                    |
+| the **experience**      | `intelligence_workflows`, `intelligence_opportunities`, `intelligence_conversations` | the interactions the operator still has open                                           |
+| the **background runs** | `intelligence_runs` and `intelligence_budget_reservations`                           | the background AI attempts, their pinned configuration and their daily allowance       |
 
 ## The worker
 
@@ -31,6 +31,7 @@ competing.
 | `idle`            | it holds the lease and has no work                     | nothing; this is the healthy idle state                                        |
 | `working`         | it holds the lease and is running a job                | nothing; a job takes a moment                                                  |
 | `blocked`         | it cannot take the lease                               | another worker holds it, or the lease expired mid-run — see **lease recovery** |
+| `stopped`         | it was asked to stop, or its loop broke on a fault     | start it again to move the backlog                                             |
 
 The web process cannot observe the worker: it serves `worker: null`. Read the worker's own health
 record, or the journal itself, to know its state.
@@ -78,7 +79,10 @@ ORDER BY updated_at DESC;
 acknowledged — which happens when a later attempt for the same
 `(event, handler, handlerVersion)` succeeds, because that attempt updates the same rows.
 
-To retry a dead letter, replay its event:
+### Retrying a dead letter
+
+A dead letter can be retried only when its work belongs to a **committed event** — a trade
+observation. Then replay its event:
 
 ```sql
 -- The event and the handler of a dead job.
@@ -91,11 +95,34 @@ whose account was reset or purged. Replaying an event whose handler already deli
 no-op for the delivery but re-runs the handler's effect — which is what you want when the handler
 itself was at fault.
 
+**A workflow effect job has no event to replay.** Its payload names a workflow and a transition
+revision — `{"type": "workflow_effect", "workflowId": "...", "transitionRevision": n}` — and its
+handler is `workflow-effect` (version 1). The worker resolves that handler, so a deferred workflow
+resumes by itself: a workflow that waits for you comes back when the worker wakes it, without the
+operator doing anything.
+
+A workflow effect job that is dead therefore failed for another reason. Read `last_error`:
+`validation_failed` will never succeed on a retry, `handler_failed` may. The job row stays
+inspectable and the workflow stays where it was — a user command is legal only from
+`waiting_for_user`, so a workflow that never presented itself cannot be pushed forward by a
+command. To have the effect run again, the workflow must record a new transition: from
+`waiting_for_user`, a `defer` command schedules it again and enqueues a fresh effect job, which the
+worker runs when the workflow wakes.
+
+A dead letter whose `last_error` is `unhandled_job` is a deployment problem, not an operator
+problem: the worker did not know the job's kind. Deploy the build that resolves it.
+
 ### An unsupported event schema
 
-The journal stores events with a `schemaVersion`. A handler that does not understand the version
-refuses the event: the delivery stays `pending` and the job waits. Nothing is lost, and nothing is
-guessed.
+The journal stores events with a `schemaVersion`. The write path validates an event against the
+strict contract, so an event of a version the journal does not know never enters the outbox at
+all: the change that would have carried it is refused before it is committed.
+
+A row that got in another way — a restored backup from a newer build, a row written by hand — is
+refused by the handler that reads it: the strict contract rejects it, the job ends `failed` with
+the code `validation_failed`, and the delivery of that event ends `failed` with the same code.
+Nothing is guessed, and nothing is lost: the event stays in the outbox and the failure stays
+inspectable.
 
 ```sql
 -- The event versions the journal holds.
@@ -184,11 +211,99 @@ delivery, or a failure nobody has acknowledged.
 The prune is bounded: one call removes at most the number of rows you give it, so a retention run
 cannot hold the write lock for an unbounded time.
 
+The same work runs on the worker's schedule. A retention job — `type: "retention"`, payload
+`{"before": <epoch ms>}` — is claimed by the worker and runs inside the **worker's** transaction:
+the transport and the diagnostics class at the cutoff the payload names, the knowledge class at its
+own 90-day window, and the whole run inside one bound of 500 rows. The windows are 30 days for the
+transport and the diagnostics class and 90 days for the knowledge class.
+
+Nothing in the journal enqueues that job by itself, so an operator puts one in the backlog and the
+worker claims it on its next tick:
+
+```sql
+-- A retention job for the worker to claim. The idempotency key is unique, so a
+-- second run of the same key is refused by the index.
+INSERT INTO intelligence_jobs
+  (id, idempotency_key, type, payload_json, status, attempts, available_at, fence,
+   cancel_requested, created_at, updated_at)
+VALUES
+  ('<uuid>', 'retention:<epoch ms>', 'retention', '{"before":<epoch ms>}', 'pending', 0,
+   <epoch ms>, 0, 0, <epoch ms>, <epoch ms>);
+```
+
 The dedup keys outlive the work they describe, so nothing is raised twice:
 
 - a delivery row stays as long as its event, so a handler never runs twice for one event;
 - a background run row stays forever, so an effect is never queued twice;
 - an opportunity row is never removed, so a dismissal outlives the thing it dismisses.
+
+### Running the prune, the reset and the rebuild
+
+The prune and the account commands are server functions, so the operator drives them through the
+journal's own routes. Every one of them obeys the same gate:
+
+| The request                                                           | The answer                |
+| --------------------------------------------------------------------- | ------------------------- |
+| no session, while the journal has a password                          | `401`                     |
+| a foreign origin                                                      | `403` (`origin_denied`)   |
+| a body that is not JSON, or carries a field the route does not accept | `400` (`invalid_request`) |
+| an account the journal does not know (the reset and the rebuild only) | `403` (`scope_denied`)    |
+
+The session is the `journal_session` cookie. A request that carries no origin at all is not a
+browser request, so it is allowed: a `curl` from the operator's own machine needs no origin
+header.
+
+#### `POST /api/intelligence/retention` — run the prune now
+
+The body is `{"before": <epoch ms>, "limit": <rows>}`. Both fields are optional, and both must be
+whole numbers when they are there.
+
+- `before` — the cutoff instant, in epoch milliseconds. It must not be negative. Nothing newer
+  than it is touched. The default is 30 days ago.
+- `limit` — the largest number of rows the run may remove, between 1 and 10 000. The default is
+  500, and a limit outside that range is refused.
+
+The answer is `{"removed": n, "knowledgeRemoved": m, "before": <cutoff>}`: the rows the transport
+and the diagnostics class removed, the rows the knowledge class removed, and the cutoff the run
+used. The knowledge class keeps its own 90-day window whatever the body names, and the two
+classes share the one bound.
+
+```sh
+curl -X POST http://localhost:3000/api/intelligence/retention \
+  -H 'content-type: application/json' \
+  -d '{"before": 1760000000000}'
+```
+
+#### `GET /api/intelligence/retention` — read the current state
+
+The answer is `{"retention": {...}}`:
+
+```jsonc
+{
+  "retention": {
+    "windows": { "transportDays": 30, "knowledgeDays": 90 },
+    "limit": 500,
+    "purgedAccounts": [{ "accountId": "…", "kind": "deleted" }],
+    "accounts": [{ "id": "…", "checkpoint": "suppressed" }],
+  },
+}
+```
+
+`windows.transportDays` covers the transport and the diagnostics class, which share one window. A
+`checkpoint` of `null` means the account has never been seeded — not that its seed is suppressed.
+
+#### `POST /api/intelligence/retention/reset` — reset one account
+
+The body is `{"accountId": "..."}`. It purges the intelligence of that account, writes its seed
+checkpoint as `suppressed` so the historical seed does not re-derive what was deleted, and records
+the reset in the deletion ledger with kind `reset`. The account itself survives. The answer is
+`{"accountId": "...", "checkpoint": "suppressed"}`.
+
+#### `POST /api/intelligence/retention/rebuild` — ask for a rebuild
+
+The body is `{"accountId": "..."}`. It moves the seed checkpoint back to `pending`, enqueues the
+seed job so the worker seeds the account again, and drops the reset from the deletion ledger: the
+reset has been undone. The answer is `{"accountId": "...", "checkpoint": "pending"}`.
 
 ## Deletion
 
@@ -206,6 +321,10 @@ purge that then fails takes its entry back.
 
 A restore applies the ledger again, so **a restore cannot bring a purged account back**.
 
+The operator's own levers on the intelligence of an account are the two routes of
+[Running the prune, the reset and the rebuild](#running-the-prune-the-reset-and-the-rebuild): the
+reset, and the rebuild that undoes it.
+
 ### An explicit reset
 
 A reset purges the intelligence of an account that **survives**. The seed checkpoint of that
@@ -214,6 +333,11 @@ replay seam refuses the account. The reset is recorded in the ledger with kind `
 
 A rebuild request moves the checkpoint back to `pending`, so the seed runs again, and the ledger
 forgets the reset — the reset has been undone.
+
+The operator does both through the journal's own routes: `POST /api/intelligence/retention/reset`
+with `{"accountId": "..."}` resets the account, and `POST /api/intelligence/retention/rebuild` with
+the same body asks for the rebuild. The rebuild enqueues the seed job, so the worker seeds the
+account again.
 
 ### Clear history
 
@@ -226,8 +350,10 @@ source-fill deletion.
 
 **A backup is only valid on a quiescent journal.** The command refuses anything it cannot vouch
 for: a missing or relative path, a source and a destination that are the same, a destination that
-already holds a journal, a journal whose worker lease is still live, and a journal whose key comes
-from `JOURNAL_SECRET` (that key cannot travel with a backup).
+already holds a journal, a journal whose worker lease is still live, a journal whose key comes
+from `JOURNAL_SECRET` (that key cannot travel with a backup), and a source that does not hold the
+journal's own key material (the key probe is sealed under the journal's live key, so a stale copy
+would verify against the wrong key).
 
 The operator acknowledges the quiescence. Two writers must be stopped:
 
@@ -268,12 +394,19 @@ synthetic value with the restored key. Never use a real key for a rehearsal.
 
 ### Promoting a restored journal
 
+The live `purge-ledger.json` is newer than the backup's copy, and it is what keeps a purge that
+happened after the backup from being undone. It must reach the restore **before** the restore
+runs, because the restore applies the ledger it finds in its destination.
+
 1. Stop the web process and the worker.
-2. Keep the live `purge-ledger.json` beside the restored journal: it is newer than the backup's
-   copy, and it is what keeps a purge that happened after the backup from being undone.
-3. Replace the journal's data directory with the restored one.
-4. Start the web process, then the worker.
-5. Confirm the journal opens, the ledger is present, and the backlog is what you expect.
+2. Copy the live `purge-ledger.json` into the **restore destination**, beside the backup's
+   `journal.db`. Do this before the restore: a restore that ran without it would bring a purged
+   account back.
+3. Run the restore into that destination. It applies the ledger it finds there, so the purged
+   account stays purged.
+4. Replace the journal's data directory with the restored one.
+5. Start the web process, then the worker.
+6. Confirm the journal opens, the ledger is present, and the backlog is what you expect.
 
 ## Rollback
 

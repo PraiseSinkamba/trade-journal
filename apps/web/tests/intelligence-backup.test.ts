@@ -1,5 +1,6 @@
 import { afterAll, beforeEach, describe, expect, it } from "vitest";
-import { copyFileSync, mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import { copyFileSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { createCipheriv, randomBytes } from "node:crypto";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { eq } from "drizzle-orm";
@@ -24,9 +25,11 @@ const {
   accounts,
   domainOutbox,
   eventDeliveries,
+  executions,
   intelligenceJobs,
   intelligenceWorkerLease,
   settings,
+  trades,
   withJournalTransaction,
 } = await import("../src/db");
 const { openConnection } = await import("../src/db/connection");
@@ -376,6 +379,142 @@ describe("the no resurrection guarantee", () => {
       ).not.toContain("evt-2");
       expect(restored.select().from(eventDeliveries).all()).toHaveLength(0);
       expect(restored.select().from(intelligenceJobs).all()).toHaveLength(0);
+    } finally {
+      restored.$client.close();
+    }
+  });
+
+  it("refuses a source whose encrypted settings have no key to read them with", () => {
+    // The journal holds an encrypted credential but no key file: a backup of
+    // it could never be read back.
+    // A journal whose credential was sealed under another key: the live key
+    // cannot open it, so a backup of it could never be read back.
+    const sealed = directory("sealed");
+    backupJournal({ source: scratch, destination: sealed, quiesced: true });
+    const sealedJournal = openConnection(sealed);
+    try {
+      const other = randomBytes(32);
+      const iv = randomBytes(12);
+      const cipher = createCipheriv("aes-256-gcm", other, iv);
+      const encrypted = Buffer.concat([
+        cipher.update(Buffer.from("sealed", "utf8")),
+        cipher.final(),
+      ]);
+      const envelope = [
+        iv.toString("base64"),
+        encrypted.toString("base64"),
+        cipher.getAuthTag().toString("base64"),
+      ].join(".");
+      sealedJournal
+        .insert(settings)
+        .values({ key: "openaiKeyEnc", value: envelope })
+        .onConflictDoUpdate({ target: settings.key, set: { value: envelope } })
+        .run();
+    } finally {
+      sealedJournal.$client.close();
+    }
+
+    expect(() =>
+      backupJournal({ source: sealed, destination: directory("out-sealed"), quiesced: true }),
+    ).toThrow(/could not be read back/);
+  });
+
+  it("reports a key as verified only when it verified one", () => {
+    // A backup of a journal without a key file carries no probe, so the
+    // restore verified nothing and must not claim it did.
+    const plain = directory("plain");
+    backupJournal({ source: scratch, destination: plain, quiesced: true });
+    // A backup whose manifest carries no probe: the restore verified no key,
+    // so it must not claim it did.
+    const manifestPath = join(plain, "manifest.json");
+    const manifest = JSON.parse(readFileSync(manifestPath, "utf8")) as Record<string, unknown>;
+    writeFileSync(
+      manifestPath,
+      JSON.stringify({ ...manifest, keyProbe: null, keyFile: null }, null, 2),
+      "utf8",
+    );
+
+    const restored = restoreJournal({
+      source: plain,
+      destination: directory("restored-plain"),
+    });
+    expect(restored.keyVerified).toBe(false);
+  });
+
+  it("takes the fills and the trades of a deleted account out of the restored journal", () => {
+    insertAccount("acct-3");
+    // The account owns a fill and a trade: neither table has a foreign key
+    // to the account, so nothing else takes them.
+    db.insert(executions)
+      .values({
+        id: "exec-3",
+        accountId: "acct-3",
+        symbol: "EURUSD",
+        side: "buy",
+        quantity: 1,
+        price: 1.1,
+        fee: 0,
+        executedAt: new Date(NOW).toISOString(),
+        assetClass: null,
+        source: "manual",
+        importMetadataJson: null,
+        contentHash: "hash-3",
+        createdAt: new Date(NOW).toISOString(),
+      })
+      .run();
+    db.insert(trades)
+      .values({
+        key: "trade-3",
+        accountId: "acct-3",
+        symbol: "EURUSD",
+        assetClass: null,
+        direction: "long",
+        status: "open",
+        openedAt: new Date(NOW).toISOString(),
+        closedAt: null,
+        quantity: 1,
+        openQuantity: 1,
+        avgEntry: 1.1,
+        avgExit: null,
+        grossPnl: 0,
+        fees: 0,
+        netPnl: 0,
+        executionCount: 1,
+        executionIdsJson: JSON.stringify(["exec-3"]),
+        exitsJson: "[]",
+        durationMs: null,
+        notes: null,
+        tagsJson: null,
+        mistakesJson: null,
+        playbookId: null,
+        rating: null,
+        stopLoss: null,
+        profitTarget: null,
+        reviewedAt: null,
+      })
+      .run();
+    recordPurgeLedger(scratch, "acct-3", "deleted");
+
+    backupJournal({ source: scratch, destination: directory("out-purge-fills"), quiesced: true });
+
+    restoreJournal({
+      source: directory("out-purge-fills"),
+      destination: directory("restored-purge-fills"),
+    });
+
+    const restored = openConnection(directory("restored-purge-fills"));
+    try {
+      // Neither table has a foreign key to the account, so nothing else
+      // would take them.
+      expect(restored.select().from(executions).all()).toHaveLength(0);
+      expect(restored.select().from(trades).all()).toHaveLength(0);
+      expect(
+        restored
+          .select()
+          .from(accounts)
+          .all()
+          .map((row) => row.id),
+      ).not.toContain("acct-3");
     } finally {
       restored.$client.close();
     }

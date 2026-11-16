@@ -76,35 +76,40 @@ journal that was purged is never restored without the ledger that says so.
 
 ## The tests
 
-| File                                             | Cases | What it proves                                                                                                                         |
-| ------------------------------------------------ | ----- | -------------------------------------------------------------------------------------------------------------------------------------- |
-| `apps/web/tests/intelligence-retention.test.ts`  | 22    | the reference-safe prune, the compact dedup keys, the bound, the windows, the purge, the reset and the rebuild, the cancellation fence |
-| `apps/web/tests/intelligence-backup.test.ts`     | 14    | the explicit inputs, the quiescence check, the key travel, the restore verification, no resurrection                                   |
-| `apps/web/tests/intelligence-acceptance.test.ts` | 3     | the phase gate end to end, and the two migration failure cases                                                                         |
+| File                                             | Cases | What it proves                                                                                                                                               |
+| ------------------------------------------------ | ----- | ------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| `apps/web/tests/intelligence-retention.test.ts`  | 30    | the reference-safe prune, the compact dedup keys, the bound, the windows, the purge, the reset and the rebuild, the cancellation fence, the knowledge window |
+| `apps/web/tests/intelligence-backup.test.ts`     | 19    | the explicit inputs, the quiescence check, the key travel, the key verification, the restore verification, no resurrection                                   |
+| `apps/web/tests/intelligence-acceptance.test.ts` | 3     | the phase gate end to end, and the two migration failure cases                                                                                               |
 
 ### The proof of teeth
 
 Every protection was proved by breaking it and watching the test fail. Each row below is a
 deliberate break of the production behaviour, the test that failed, and the restoration.
 
-| What was broken                                                       | The test that failed                                                            |
-| --------------------------------------------------------------------- | ------------------------------------------------------------------------------- |
-| a live workflow no longer protects its observation                    | `keeps an observation a live workflow names`                                    |
-| a live opportunity no longer protects its observation                 | `keeps an observation a live opportunity names`                                 |
-| an open conversation no longer protects its observation               | `keeps an observation an open conversation names`                               |
-| a dismissal of a revision no longer protects the observation it names | `keeps an observation a dismissed revision names`                               |
-| the failed-delivery protection was narrowed to pending only           | `keeps the event of a failed delivery, with its diagnostic`                     |
-| the job liveness check was removed                                    | `keeps the event of a running job`                                              |
-| a failed run's diagnostics were emptied                               | `keeps a failed run with its diagnostics`                                       |
-| the purge left the rows that are not account bound                    | `removes the rows that are not account bound but talk about its observations`   |
-| the reset wrote `completed` instead of `suppressed`                   | `purges the intelligence and suppresses the seed`                               |
-| the purge kept the deleted account in a run's scope                   | `takes the account id out of the scope of its background runs`                  |
-| the backup stopped checking the worker lease                          | `refuses a journal that still holds a worker lease`                             |
-| the restore stopped applying the ledger                               | `keeps a purged account out of the restored journal`, and the phase gate        |
-| the knowledge prune stopped reading the evidence a live record cites  | `keeps a knowledge record a live workflow cites`                                |
-| the rebuild stopped enqueueing the seed job                           | `enqueues the seed job when a rebuild is requested`                             |
-| the restore's deleted branch stopped running the purge                | `takes the whole intelligence of a deleted account out of the restored journal` |
-| the backup accepted a source with a foreign key                       | `refuses a source that does not hold the journal's own key`                     |
+| What was broken                                                       | The test that failed                                                              |
+| --------------------------------------------------------------------- | --------------------------------------------------------------------------------- |
+| a live workflow no longer protects its observation                    | `keeps an observation a live workflow names`                                      |
+| a live opportunity no longer protects its observation                 | `keeps an observation a live opportunity names`                                   |
+| an open conversation no longer protects its observation               | `keeps an observation an open conversation names`                                 |
+| a dismissal of a revision no longer protects the observation it names | `keeps an observation a dismissed revision names`                                 |
+| the failed-delivery protection was narrowed to pending only           | `keeps the event of a failed delivery, with its diagnostic`                       |
+| the job liveness check was removed                                    | `keeps the event of a running job`                                                |
+| a failed run's diagnostics were emptied                               | `keeps a failed run with its diagnostics`                                         |
+| the purge left the rows that are not account bound                    | `removes the rows that are not account bound but talk about its observations`     |
+| the reset wrote `completed` instead of `suppressed`                   | `purges the intelligence and suppresses the seed`                                 |
+| the purge kept the deleted account in a run's scope                   | `takes the account id out of the scope of its background runs`                    |
+| the backup stopped checking the worker lease                          | `refuses a journal that still holds a worker lease`                               |
+| the restore stopped applying the ledger                               | `keeps a purged account out of the restored journal`, and the phase gate          |
+| the knowledge prune stopped reading the evidence a live record cites  | `keeps a knowledge record a live workflow cites`                                  |
+| the rebuild stopped enqueueing the seed job                           | `enqueues the seed job when a rebuild is requested`                               |
+| the restore's deleted branch stopped running the purge                | `takes the whole intelligence of a deleted account out of the restored journal`   |
+| the backup accepted a source with a foreign key                       | `refuses a source that does not hold the journal's own key`                       |
+| the prune deleted an event that was never dispatched                  | `keeps an event that was never dispatched`                                        |
+| the rebuild enqueued nothing on a second cycle                        | `re-arms the seed job when the account is rebuilt again`                          |
+| the restore left the fills and the trades of a deleted account        | `takes the fills and the trades of a deleted account out of the restored journal` |
+| the restore reported a verified key it never verified                 | `reports a key as verified only when it verified one`                             |
+| the knowledge prune kept an invalidated record forever                | `removes a knowledge record a source deletion invalidated`                        |
 
 Two test bugs were found by the teeth work and fixed: several "keeps" cases used an event newer
 than the cutoff, so the prune never considered it, and the no-resurrection case purged the account
@@ -115,7 +120,7 @@ are now older than the cutoff, and the ledger is what removes the account from t
 
 | Command                                                                                                                                                                                                                                                                                          | Result                  |
 | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ | ----------------------- |
-| `npx vitest run apps/web/tests/intelligence-retention.test.ts apps/web/tests/intelligence-backup.test.ts apps/web/tests/intelligence-acceptance.test.ts`                                                                                                                                         | **39 passed** (3 files) |
+| `npx vitest run apps/web/tests/intelligence-retention.test.ts apps/web/tests/intelligence-backup.test.ts apps/web/tests/intelligence-acceptance.test.ts`                                                                                                                                         | **59 passed** (3 files) |
 | `npx vitest run apps/web/tests/trade-mutation-commands.test.ts apps/web/tests/intelligence-observations.test.ts apps/web/tests/intelligence-slice-a.test.ts apps/web/tests/intelligence-slice-b.test.ts apps/web/tests/intelligence-jobs.test.ts apps/web/tests/intelligence-migrations.test.ts` | **96 passed** (6 files) |
 | `npx tsc --noEmit -p apps/web/tsconfig.json`                                                                                                                                                                                                                                                     | exit 0                  |
 | `npx prettier --check` on the changed files                                                                                                                                                                                                                                                      | clean                   |
@@ -165,6 +170,16 @@ scope valid, and every class names its terminal set.
   jobs and its unbound rows came back. The restore now runs **the same purge the delete path runs**
   before it deletes the account row.
 
+A **follow-up review** of the committed candidate found nine more defects, all real and all fixed:
+the prune deleted an event that was **never dispatched** (the backlog the contract protects); a
+**second reset-and-rebuild cycle enqueued nothing**, because the seed job's key collided with the
+finished one; the restore left the **fills and the trades** of a deleted account behind, because
+neither table has a foreign key to the account; the backup wrote the copied key file
+**world-readable**; the restore reported a **verified key it never verified**; a knowledge record
+**invalidated by a source deletion** was never pruned, because the newest-of-subject protection
+kept it forever; the report contradicted the tree and the granted repair; and the runbook placed
+the live purge ledger **after** the restore that applies it.
+
 The review's four notes were addressed too: the diagnostics prune no longer counts a run whose
 diagnostics were already empty (and no longer rewrites `updatedAt` to the cutoff, which made it a
 candidate again on every later prune); a rebuild forgets only a **reset** in the ledger, so a
@@ -212,18 +227,25 @@ asserted only the checkpoint status. Both now exercise the behaviour they claim.
    is left whole rather than half-removed, because half-removed would leave a job without its
    delivery.
 
+## The granted repair
+
+The candidate was committed, and the coordinator then granted three areas this phase had declared
+out of scope: `infrastructure/worker.ts` (the handler resolver), `intelligence/composition.ts` (the
+handler registry) and `app/api/intelligence/` (the operator routes). The grant and what it wires are
+recorded in the phase plan under **The granted repair**:
+
+- the worker resolves a `retention` job to the retention handler and a `workflow_effect` job to the
+  workflow effect handler, and `composition.ts` registers both. The retention run and the deferred
+  workflow resume — the leg Phase 19 left open — now run in production.
+- the operator routes answer a retention run, the current retention state, a reset and a rebuild.
+
 ## The next phase's inputs
 
-- **The retention job handler.** The `retention` payload type exists in the shared contract, but
-  the worker resolves a handler for `seed_account`, `evaluate_trade` and `schedule_trigger` only
-  (`worker.ts:214-222`), and `worker.ts` and `composition.ts` are not this phase's files. The prune
-  is a directly callable server function in this phase; registering a retention handler needs the
-  coordinator's allocation of those two files.
-- **The API routes** that expose the reset, the rebuild request and the retention run to the
-  operator. The server-side commands in `trading/commands.ts` are the whole of this phase's
-  behaviour; the routes are the next phase's work.
-- **The deferred workflow resume** that Phase 19 left open (the `workflow_effect` handler) and the
-  **persisted home for an AI-assisted insight** stay where Phase 19 left them.
+- **The persisted home for an AI-assisted insight** stays where Phase 19 left it: the chain's AI
+  leg has no place to store its answer, and a restore of that place is a schema change this phase
+  does not make.
+- **The benchmark, the full CI sequence, the Docker and Windows smoke and the package audit** are
+  Phase 21's release half of Task 13.
 
 ## What Phase 21 gets
 

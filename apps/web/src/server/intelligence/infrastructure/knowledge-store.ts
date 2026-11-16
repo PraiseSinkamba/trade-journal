@@ -314,6 +314,7 @@ const knowledgeHypothesesInTx = (tx: JournalTx, before: number) =>
       subjectType: knowledgeHypotheses.subjectType,
       subjectId: knowledgeHypotheses.subjectId,
       version: knowledgeHypotheses.version,
+      status: knowledgeHypotheses.status,
       evidenceIdsJson: knowledgeHypotheses.evidenceIdsJson,
     })
     .from(knowledgeHypotheses)
@@ -333,6 +334,7 @@ const knowledgePatternsInTx = (tx: JournalTx, before: number) =>
       subjectType: knowledgePatterns.subjectType,
       subjectId: knowledgePatterns.subjectId,
       version: knowledgePatterns.version,
+      status: knowledgePatterns.status,
       evidenceIdsJson: knowledgePatterns.evidenceIdsJson,
     })
     .from(knowledgePatterns)
@@ -353,8 +355,20 @@ const knowledgePatternsInTx = (tx: JournalTx, before: number) =>
 const isNewestOfSubject = (
   tx: JournalTx,
   table: typeof knowledgeHypotheses | typeof knowledgePatterns,
-  record: { subjectType: string; subjectId: string; version: number },
+  record: {
+    subjectType: string;
+    subjectId: string;
+    version: number;
+    status: "active" | "stale" | "pending" | "superseded" | "invalidated";
+  },
 ): boolean => {
+  // A record that is still **live** is the current knowledge of its subject
+  // and stays whatever its version. A superseded or invalidated record is
+  // finished knowledge: an invalidated one raises no successor, so it would
+  // otherwise survive the 90-day window forever.
+  if (record.status !== "active" && record.status !== "stale" && record.status !== "pending") {
+    return false;
+  }
   const newest = tx
     .select({ version: sql<number>`max(${table.version})` })
     .from(table)

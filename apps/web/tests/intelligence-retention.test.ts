@@ -34,6 +34,7 @@ const {
   intelligenceSeedCheckpoints,
   intelligenceWorkflows,
   knowledgeHypotheses,
+  knowledgePatterns,
   observationEvidence,
 } = await import("../src/db");
 const {
@@ -48,10 +49,17 @@ const {
 } = await import("../src/server/intelligence/infrastructure/retention");
 const { createJobStore, createEffectStore, StaleClaimError } =
   await import("../src/server/intelligence/infrastructure/jobs");
+// The composition opens the journal when it is evaluated, so it is imported
+// dynamically for the same reason as the journal itself.
+const { createIntelligenceWorker, workflowEngine, interactiveExecutionContext } =
+  await import("../src/server/intelligence/composition");
 
 const NOW = 1_800_000_000_000;
 const DAY = 86_400_000;
 const OWNER = "retention-worker";
+// The instant the worker ticks at. It is at least NOW, because a job the
+// domain enqueued with the wall clock must still be claimable.
+const TICK = Math.max(NOW, Date.now() + 1000);
 
 const jobs = createJobStore(db);
 const effects = createEffectStore();
@@ -187,6 +195,8 @@ beforeEach(() => {
   db.delete(intelligenceJobs).run();
   db.delete(observationEvidence).run();
   db.delete(intelligenceObservations).run();
+  db.delete(knowledgeHypotheses).run();
+  db.delete(knowledgePatterns).run();
   db.delete(intelligenceWorkflows).run();
   db.delete(intelligenceConversations).run();
   db.delete(intelligenceOpportunities).run();
@@ -247,6 +257,34 @@ describe("the reference-safe prune", () => {
     pruneIntelligence(NOW - 40 * DAY, 100);
 
     expect(db.select().from(domainOutbox).all()).toHaveLength(1);
+  });
+
+  it("keeps an event that was never dispatched", () => {
+    insertAccount("acct-1");
+    // A committed event the worker never took: it is the backlog, and
+    // deleting it would destroy work the journal still owes.
+    db.insert(domainOutbox)
+      .values({
+        id: "evt-undispatched",
+        type: "trade.projection_changed",
+        schemaVersion: 1,
+        aggregateType: "trade",
+        aggregateId: "trade-evt-undispatched",
+        aggregateRevision: 1,
+        correlationId: "corr-evt-undispatched",
+        origin: "import",
+        accountId: "acct-1",
+        payloadJson: "{}",
+        recordedAt: NOW - 41 * DAY,
+        occurredAt: null,
+        dispatchedAt: null,
+      })
+      .run();
+
+    pruneIntelligence(NOW - 40 * DAY, 100);
+
+    const events = db.select().from(domainOutbox).all();
+    expect(events.map((event) => event.id)).toContain("evt-undispatched");
   });
 
   it("removes the event of a finished subtree", () => {
@@ -550,6 +588,65 @@ describe("the knowledge prune", () => {
     expect(records.map((record) => record.id).sort()).toEqual(["hyp-1", "hyp-2"]);
   });
 
+  it("removes a knowledge record a source deletion invalidated", () => {
+    insertAccount("acct-1");
+    // A source deletion invalidates the record and raises no successor, so
+    // the record is the newest of its subject and still finished knowledge: it
+    // must not survive the window forever.
+    db.insert(knowledgeHypotheses)
+      .values({
+        id: "hyp-invalidated",
+        subjectType: "note",
+        subjectId: "note-1",
+        version: 1,
+        status: "invalidated",
+        payloadSchemaVersion: 1,
+        payloadJson: "{}",
+        evidenceIdsJson: "[]",
+        evaluatorId: "evaluator",
+        evaluatorVersion: "1",
+        sourceKind: "note",
+        sourceId: "note-1",
+        sourceRevision: 1,
+        accountId: null,
+        createdAt: NOW - 100 * DAY,
+        updatedAt: NOW - 100 * DAY,
+      })
+      .run();
+
+    pruneSupersededKnowledge(NOW - 90 * DAY, 100);
+
+    expect(db.select().from(knowledgeHypotheses).all()).toHaveLength(0);
+  });
+
+  it("keeps a live knowledge record that is the newest of its subject", () => {
+    insertAccount("acct-1");
+    db.insert(knowledgeHypotheses)
+      .values({
+        id: "hyp-active",
+        subjectType: "note",
+        subjectId: "note-2",
+        version: 1,
+        status: "active",
+        payloadSchemaVersion: 1,
+        payloadJson: "{}",
+        evidenceIdsJson: "[]",
+        evaluatorId: "evaluator",
+        evaluatorVersion: "1",
+        sourceKind: "note",
+        sourceId: "note-2",
+        sourceRevision: 1,
+        accountId: null,
+        createdAt: NOW - 100 * DAY,
+        updatedAt: NOW - 100 * DAY,
+      })
+      .run();
+
+    pruneSupersededKnowledge(NOW - 90 * DAY, 100);
+
+    expect(db.select().from(knowledgeHypotheses).all()).toHaveLength(1);
+  });
+
   it("removes a superseded observation nobody names", () => {
     insertAccount("acct-1");
     insertObservation("obs-1", "acct-1", { status: "superseded", updatedAt: NOW - 100 * DAY });
@@ -744,6 +841,41 @@ describe("the reset and its reseed suppression", () => {
     });
   });
 
+  it("re-arms the seed job when the account is rebuilt again", () => {
+    insertAccount("acct-1");
+    recordPurgeLedger(scratch, "acct-1", "reset");
+
+    // The first rebuild runs the seed.
+    withJournalTransaction((tx) => {
+      resetAccountIntelligenceInTx(tx, "acct-1", NOW);
+      requestAccountIntelligenceRebuildInTx(tx, "acct-1", NOW);
+    });
+    const first = db.select().from(intelligenceJobs).all();
+    expect(first).toHaveLength(1);
+    expect(first[0]!.status).toBe("pending");
+
+    // The seed runs and finishes.
+    withJournalTransaction((tx) => {
+      tx.update(intelligenceJobs)
+        .set({ status: "completed", updatedAt: NOW })
+        .where(eq(intelligenceJobs.id, first[0]!.id))
+        .run();
+    });
+
+    // A second reset and rebuild must run the seed again: a job key that
+    // collides with the finished one would leave the account with a pending
+    // checkpoint and no runnable work.
+    withJournalTransaction((tx) => {
+      resetAccountIntelligenceInTx(tx, "acct-1", NOW);
+      requestAccountIntelligenceRebuildInTx(tx, "acct-1", NOW);
+    });
+
+    const second = db.select().from(intelligenceJobs).all();
+    expect(second).toHaveLength(1);
+    expect(second[0]!.status).toBe("pending");
+    expect(second[0]!.attempts).toBe(0);
+  });
+
   it("moves the checkpoint back to pending when a rebuild is requested", () => {
     insertAccount("acct-1");
     recordPurgeLedger(scratch, "acct-1", "reset");
@@ -788,5 +920,373 @@ describe("the cancellation fence", () => {
     }
     expect(fenced).toBeInstanceOf(StaleClaimError);
     expect((fenced as InstanceType<typeof StaleClaimError>).reason).toBe("stale");
+  });
+});
+
+describe("the retention job", () => {
+  it("prunes through the worker's retention handler", async () => {
+    insertAccount("acct-1");
+    // The finished subtree nobody names: the transport prune may take it.
+    insertEvent("evt-gone", "acct-1", {
+      recordedAt: NOW - 42 * DAY,
+      deliveryState: "delivered",
+      jobStatus: "completed",
+    });
+    // The pending delivery is live, so its event stays.
+    insertEvent("evt-pending", "acct-1", {
+      recordedAt: NOW - 42 * DAY,
+      deliveryState: "pending",
+      jobStatus: "pending",
+    });
+    // The failed delivery and its failed job are unacknowledged failures, so
+    // the event and the job stay.
+    insertEvent("evt-failed", "acct-1", {
+      recordedAt: NOW - 42 * DAY,
+      deliveryState: "failed",
+      jobStatus: "failed",
+    });
+    // The running job still has work to do, so its event stays.
+    insertEvent("evt-running", "acct-1", {
+      recordedAt: NOW - 42 * DAY,
+      deliveryState: "delivered",
+      jobStatus: "running",
+    });
+    // The pending job of the live event must not be claimed by the worker
+    // before the retention job: it belongs to a later attempt.
+    db.update(intelligenceJobs)
+      .set({ availableAt: NOW + DAY })
+      .where(eq(intelligenceJobs.id, "job-evt-pending"))
+      .run();
+
+    // A finished run loses its diagnostics but keeps its effect key, and a
+    // failed run keeps both.
+    db.insert(intelligenceRuns)
+      .values({
+        id: "run-done",
+        effectKey: "effect-done",
+        status: "completed",
+        provider: "openai",
+        model: "gpt",
+        endpointFingerprint: "fp",
+        policyRevision: 1,
+        scopeJson: JSON.stringify({
+          accountIds: ["acct-1"],
+          filters: {},
+          timeZone: "UTC",
+          dataSources: ["observations"],
+          requiredFeatures: [],
+          inputCharacters: 100,
+        }),
+        metaJson: JSON.stringify({ attempts: 2 }),
+        createdAt: NOW - 42 * DAY,
+        updatedAt: NOW - 42 * DAY,
+      })
+      .run();
+    db.insert(intelligenceRuns)
+      .values({
+        id: "run-failed",
+        effectKey: "effect-failed",
+        status: "failed",
+        provider: "openai",
+        model: "gpt",
+        endpointFingerprint: "fp",
+        policyRevision: 1,
+        scopeJson: JSON.stringify({
+          accountIds: ["acct-1"],
+          filters: {},
+          timeZone: "UTC",
+          dataSources: ["observations"],
+          requiredFeatures: [],
+          inputCharacters: 100,
+        }),
+        metaJson: JSON.stringify({ attempts: 5 }),
+        createdAt: NOW - 42 * DAY,
+        updatedAt: NOW - 42 * DAY,
+      })
+      .run();
+
+    // The knowledge class: an active observation, one a live record names,
+    // and one nobody names.
+    insertObservation("obs-active", "acct-1", { status: "active", updatedAt: NOW - 100 * DAY });
+    insertObservation("obs-workflow", "acct-1", {
+      status: "superseded",
+      updatedAt: NOW - 100 * DAY,
+    });
+    insertObservation("obs-opportunity", "acct-1", {
+      status: "superseded",
+      updatedAt: NOW - 100 * DAY,
+    });
+    insertObservation("obs-conversation", "acct-1", {
+      status: "superseded",
+      updatedAt: NOW - 100 * DAY,
+    });
+    insertObservation("obs-stale", "acct-1", {
+      status: "superseded",
+      updatedAt: NOW - 100 * DAY,
+    });
+    db.insert(intelligenceWorkflows)
+      .values({
+        id: "wf-live",
+        definitionKey: "review_observation",
+        definitionVersion: 1,
+        revision: 1,
+        status: "waiting_for_user",
+        subjectType: "observation",
+        subjectId: "obs-workflow",
+        accountId: "acct-1",
+        evidenceIdsJson: "[]",
+        selfReportJson: null,
+        deferUntil: null,
+        effectRevision: 0,
+        createdAt: NOW - 100 * DAY,
+        updatedAt: NOW - 100 * DAY,
+      })
+      .run();
+    db.insert(intelligenceOpportunities)
+      .values({
+        id: "opp-live",
+        dedupKey: "opportunity/observation/obs-opportunity",
+        subjectType: "observation",
+        subjectId: "obs-opportunity",
+        accountId: "acct-1",
+        status: "pending",
+        eligibleAt: NOW - 100 * DAY,
+        expiresAt: NOW + DAY,
+        evidenceIdsJson: "[]",
+        createdAt: NOW - 100 * DAY,
+        updatedAt: NOW - 100 * DAY,
+      })
+      .run();
+    db.insert(intelligenceConversations)
+      .values({
+        id: "conv-live",
+        subjectType: "observation",
+        subjectId: "obs-conversation",
+        accountId: "acct-1",
+        status: "open",
+        createdAt: NOW - 100 * DAY,
+        updatedAt: NOW - 100 * DAY,
+      })
+      .run();
+
+    const retentionJobId = withJournalTransaction((tx) =>
+      jobs.enqueue(tx, "retention:run-1", { type: "retention", before: NOW - 41 * DAY }, NOW),
+    );
+    const worker = createIntelligenceWorker({ db, clock: () => NOW, owner: OWNER });
+    for (let tick = 0; tick < 5; tick += 1) {
+      const row = db
+        .select()
+        .from(intelligenceJobs)
+        .where(eq(intelligenceJobs.id, retentionJobId))
+        .get();
+      if (row?.status !== "pending") break;
+      await worker.tick(TICK);
+    }
+
+    // The job itself ran: the handler was found, so the job is not a dead
+    // letter.
+    const retentionJob = db
+      .select()
+      .from(intelligenceJobs)
+      .where(eq(intelligenceJobs.id, retentionJobId))
+      .get();
+    expect(retentionJob?.status).toBe("completed");
+    expect(retentionJob?.lastError).toBeNull();
+    expect(
+      db
+        .select()
+        .from(intelligenceJobs)
+        .all()
+        .filter((job) => job.status === "failed" && job.lastError === "unhandled_job"),
+    ).toHaveLength(0);
+
+    // The transport class: the unreferenced finished subtree is gone, with
+    // its job row.
+    expect(
+      db
+        .select()
+        .from(domainOutbox)
+        .all()
+        .map((event) => event.id),
+    ).not.toContain("evt-gone");
+    expect(
+      db
+        .select()
+        .from(intelligenceJobs)
+        .all()
+        .map((job) => job.id),
+    ).not.toContain("job-evt-gone");
+    // The live and the failed delivery keep their events.
+    expect(
+      db
+        .select()
+        .from(domainOutbox)
+        .all()
+        .map((event) => event.id),
+    ).toContain("evt-pending");
+    expect(
+      db
+        .select()
+        .from(domainOutbox)
+        .all()
+        .map((event) => event.id),
+    ).toContain("evt-failed");
+    expect(
+      db
+        .select()
+        .from(intelligenceJobs)
+        .all()
+        .map((job) => job.id),
+    ).toContain("job-evt-failed");
+    expect(
+      db
+        .select()
+        .from(domainOutbox)
+        .all()
+        .map((event) => event.id),
+    ).toContain("evt-running");
+    const failedDelivery = db
+      .select()
+      .from(eventDeliveries)
+      .where(eq(eventDeliveries.eventId, "evt-failed"))
+      .get();
+    expect(failedDelivery?.lastError).toBe("handler_exploded");
+    const failedRun = db
+      .select()
+      .from(intelligenceRuns)
+      .where(eq(intelligenceRuns.id, "run-failed"))
+      .get();
+    expect(failedRun?.metaJson).toBe(JSON.stringify({ attempts: 5 }));
+
+    // The compact dedup keys survive: the delivery of the surviving event,
+    // the run row with its effect key, and the opportunity row.
+    expect(
+      db
+        .select()
+        .from(eventDeliveries)
+        .where(eq(eventDeliveries.eventId, "evt-pending"))
+        .all()
+        .map((delivery) => [delivery.eventId, delivery.handlerId, delivery.handlerVersion]),
+    ).toEqual([["evt-pending", "trade-observation", "1"]]);
+    const doneRun = db
+      .select()
+      .from(intelligenceRuns)
+      .where(eq(intelligenceRuns.id, "run-done"))
+      .get();
+    expect(doneRun?.effectKey).toBe("effect-done");
+    expect(doneRun?.metaJson).toBe("{}");
+    const opportunity = db
+      .select()
+      .from(intelligenceOpportunities)
+      .where(eq(intelligenceOpportunities.id, "opp-live"))
+      .get();
+    expect(opportunity?.dedupKey).toBe("opportunity/observation/obs-opportunity");
+
+    // The knowledge class: the active observation is untouched, the live
+    // records keep theirs, and the unreferenced one is gone.
+    const observations = db
+      .select()
+      .from(intelligenceObservations)
+      .all()
+      .map((row) => row.id);
+    expect(observations).toContain("obs-active");
+    expect(observations).toContain("obs-workflow");
+    expect(observations).toContain("obs-opportunity");
+    expect(observations).toContain("obs-conversation");
+    expect(observations).not.toContain("obs-stale");
+  });
+});
+
+describe("the deferred workflow", () => {
+  it("resumes through the worker's workflow effect handler", async () => {
+    insertAccount("acct-1");
+    insertObservation("obs-1", "acct-1");
+
+    const started = workflowEngine.startWorkflow(
+      {
+        subjectType: "observation",
+        subjectId: "obs-1",
+        accountId: "acct-1",
+        evidenceIds: [],
+      },
+      interactiveExecutionContext(["acct-1"]),
+    );
+    const worker = createIntelligenceWorker({ db, clock: () => NOW, owner: OWNER });
+
+    // The first effect hands the workflow to the user.
+    const firstJob = db
+      .select()
+      .from(intelligenceJobs)
+      .where(eq(intelligenceJobs.idempotencyKey, `workflow-effect:${started.workflowId}:1`))
+      .get();
+    expect(firstJob?.status).toBe("pending");
+    for (let tick = 0; tick < 5; tick += 1) {
+      const row = db
+        .select()
+        .from(intelligenceJobs)
+        .where(eq(intelligenceJobs.idempotencyKey, `workflow-effect:${started.workflowId}:1`))
+        .get();
+      if (row?.status !== "pending") break;
+      await worker.tick(TICK);
+    }
+    const presented = db
+      .select()
+      .from(intelligenceWorkflows)
+      .where(eq(intelligenceWorkflows.id, started.workflowId))
+      .get();
+    expect(presented?.status).toBe("waiting_for_user");
+
+    // The user defers the workflow; the deferral enqueues the wake-up.
+    const deferred = workflowEngine.transitionWorkflow(
+      {
+        commandId: "cmd-defer-1",
+        workflowId: started.workflowId,
+        expectedRevision: presented!.revision,
+        action: "defer",
+        deferUntil: NOW,
+      },
+      interactiveExecutionContext(["acct-1"]),
+    );
+    expect(deferred.kind).toBe("applied");
+    const scheduled = db
+      .select()
+      .from(intelligenceWorkflows)
+      .where(eq(intelligenceWorkflows.id, started.workflowId))
+      .get();
+    expect(scheduled?.status).toBe("scheduled");
+
+    // The wake-up runs on the worker's schedule.
+    for (let tick = 0; tick < 5; tick += 1) {
+      const row = db
+        .select()
+        .from(intelligenceJobs)
+        .where(eq(intelligenceJobs.idempotencyKey, `workflow-effect:${started.workflowId}:3`))
+        .get();
+      if (row?.status !== "pending") break;
+      await worker.tick(TICK);
+    }
+    const wakeJob = db
+      .select()
+      .from(intelligenceJobs)
+      .where(eq(intelligenceJobs.idempotencyKey, `workflow-effect:${started.workflowId}:3`))
+      .get();
+    expect(wakeJob?.status).toBe("completed");
+
+    // The workflow waits for the user again, and the dead letter never
+    // accumulated.
+    const resumed = db
+      .select()
+      .from(intelligenceWorkflows)
+      .where(eq(intelligenceWorkflows.id, started.workflowId))
+      .get();
+    expect(resumed?.status).toBe("waiting_for_user");
+    expect(resumed?.effectRevision).toBe(3);
+    expect(
+      db
+        .select()
+        .from(intelligenceJobs)
+        .all()
+        .filter((job) => job.status === "failed" && job.lastError === "unhandled_job"),
+    ).toHaveLength(0);
   });
 });
