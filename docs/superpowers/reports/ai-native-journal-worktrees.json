@@ -1,7 +1,7 @@
 {
   "schemaVersion": 1,
   "feature": "ai-native-journal",
-  "updatedAt": "2026-11-16T23:05:58Z",
+  "updatedAt": "2026-11-16T23:09:46Z",
   "owner": "parent OMP coordinator (exclusive owner of this record)",
   "repository": {
     "name": "trade-journal",
@@ -35,8 +35,8 @@
     },
     "featureBranch": "codex/ai-native-journal",
     "featureBootstrapSha": "0a278503fd67c0f9e82138dfecb744f4bfd307ad",
-    "featureHeadSha": "2aae5031edb7c4030aaca131ac9dd9005540405f",
-    "featureHeadShaNote": "feature branch HEAD at the Phase 20 integration and the exact base of the Phase 21 worktree; the coordinator record commit advances the branch by one commit",
+    "featureHeadSha": "697da39df21000b6defadd8d5e952e48d54234d3",
+    "featureHeadShaNote": "feature branch HEAD at the Phase 21 dispatch and the exact base of the Phase 21 worktree; the coordinator record commit advances the branch by one commit",
     "featureCheckpointCommits": [
       "0a278503fd67c0f9e82138dfecb744f4bfd307ad",
       "80d53ccb62fda801897852a6f4e5d2aab8b0d58b",
@@ -86,7 +86,8 @@
       "468d931042d95c14d6ed3e3ab88b4b7afe527588",
       "ab5af9661636575c5aec06acfc08952bc780d6c7",
       "3afad4bf473c2e9ad2e7d26620f1c2ad8b84eb11",
-      "2aae5031edb7c4030aaca131ac9dd9005540405f"
+      "2aae5031edb7c4030aaca131ac9dd9005540405f",
+      "697da39df21000b6defadd8d5e952e48d54234d3"
     ],
     "featureBranchNote": "Orca slugified the requested name to codex-ai-native-journal at creation; the coordinator renamed the newly created, exclusively owned branch to the contract-required codex/ai-native-journal. Orca reads the renamed ref live (refs/heads/codex/ai-native-journal). No pre-existing branch was overwritten."
   },
@@ -366,6 +367,18 @@
         "setup": "pnpm install --frozen-lockfile completed in the worker checkout; working tree clean; Node v24.20.0, pnpm 11.0.8; own node_modules and own pnpm virtual store",
         "state": "integrated into codex/ai-native-journal at 33e1fce and verified on the destination branch (destination gate green on the destination branch after the merge: pnpm install --frozen-lockfile, pnpm --filter web typecheck, the core and importers typecheck, pnpm --filter web migrations:check, node scripts/check-licenses.mjs, prettier --check on every merged file and pnpm build all exit 0; pnpm test 116 test files, 1372 tests passed, 146.02s). The worktree, the git worktree registration, the branch and the leftover directory remain until the user requests cleanup.",
         "note": "Phase 20 is the storage and operations half of detailed plan Task 13: reference-aware retention, the account purge of persistent intelligence, the backup and restore path, the reset behaviour and the operations runbook. It owns NO migration - the allocation is no new schema expected - and it is the phase that finally implements the two things Phase 19 named as its own Phase 20 inputs: the deletion of persistent intelligence and the storage for an AI-assisted insight. The benchmark, the full CI sequence, the Docker and Windows packaged smoke and the Dockerfile and CI workflow changes are Phase 21 and are excluded, and the brief forbids starting Docker on this host. After the dispatch the coordinator read the Phase 19 worker_done, which named a third Phase 20 input: the workflow_effect job handler. The coordinator confirmed it and it is a real production defect: experience/workflows.ts already exports effectHandler() with the id workflow-effect, it is used only in a Phase 16 test, and it is NEVER registered with the worker, so a deferred workflow enqueues a wake-up job that the worker claims, cannot resolve a handler for, and fails TERMINALLY as unhandled_job. The deferred workflow therefore never resumes and every deferral leaves a dead-lettered job behind. The coordinator granted Phase 20 apps/web/src/server/intelligence/composition.ts for exactly that registration and sent the worker a follow-up requiring an end-to-end proof that a deferred workflow resumes and that the dead letter does not accumulate, with the explicit alternative that if the worker judges it out of contract it records it as a Phase 21 input and says the deferral leg stays broken until then. The implementation-diff review returned 1 BLOCK and 1 FAIL, both from the same root: backupJournal and restoreJournal had NO caller but the two test files, no route, no CLI script and no package script, while the operations runbook promised a backup, restore and rollback procedure and opened by claiming that every command in it is one an operator can run, and docs/database-migrations.md named a journal backup command that does not exist. An operator following the runbook would believe their journal was backed up when nothing had been taken. The coordinator verified this in the code before acting on it, and granted the operator entry point: apps/web/scripts/intelligence-operations.mjs as the primary shape, with apps/web/package.json for a script entry and the two retention backup and restore routes as the alternative. The shipped backupJournal and restoreJournal must be CALLED rather than reimplemented, so the shipped refusals still hold, and the runbook must then be true end to end rather than only in the retention sections. The destination gate FAILED: every command before pnpm test exited 0, and the full suite then failed 2 of 1372 tests, both in the repository own architecture test. Rule 4: the retention module opened the concrete better-sqlite3 driver directly in four places, and only apps/web/src/db/ may wire that driver. Rule 5: the infrastructure worker imported two handler constants from the sibling experience domain private file, and the shared vocabulary belongs in the contracts layer. Both violations are the phase own and both are real. The coordinator granted the two database-layer files the repair needs and dispatched it. The lesson is recorded in the phase brief: the phase verification command ran only the three Phase 20 suites and omitted apps/web/tests/intelligence-boundaries.test.ts, which is the test that caught the violations, so every later phase must run the boundary test as part of its targeted command."
+      },
+      {
+        "phase": "21",
+        "stableTask": "T-021",
+        "orcaWorktreeId": "aa54a522-a9af-4cb4-9de7-f1d9a349c0fd::E:/4004/orca/workspaces/trade-journal/codex-ai-native-journal-p21",
+        "path": "E:/4004/orca/workspaces/trade-journal/codex-ai-native-journal-p21",
+        "branch": "codex/ai-native-journal-p21",
+        "startSha": "4628a57",
+        "orcaParentWorktreeId": "aa54a522-a9af-4cb4-9de7-f1d9a349c0fd::E:/4004/orca/workspaces/trade-journal/codex-ai-native-journal",
+        "setup": "pnpm install --frozen-lockfile completed in the worker checkout; working tree clean; Node v24.20.0, pnpm 11.0.8; own node_modules and own pnpm virtual store",
+        "state": "dispatched: ctx_18590f1337ef, worker handle term_31fe8115-bbb1-4673-995a-f061b29909b7",
+        "note": "Phase 21 is the LAST phase: performance, complete packaging and the CI release acceptance, the remainder of detailed plan Task 13. It owns the two defects that have blocked the desktop checks since Phase 10: desktop/scripts/run-sidecar-setup.js uses CommonJS require inside a package whose package.json says type module, and desktop/src-tauri/scripts/gen_icons/src/main.rs writes an invalid ICO. It owns the benchmark script, the CI and release workflows, the Dockerfile, the package-content results and the release acceptance record. The brief requires the Docker scratch-volume smoke to be ATTEMPTED and reported as observed: the daemon is not running on this host and starting it is the operator call, so a blocked item recorded truthfully is the expected outcome and a passed item that was not run is not."
       }
     ]
   },
@@ -763,8 +776,11 @@
       "wave": 21,
       "branch": "codex/ai-native-journal-p21",
       "deps": ["task_16692d8c9708"],
-      "status": "pending",
-      "state": "created"
+      "status": "dispatched",
+      "state": "dispatched",
+      "outcome": null,
+      "nativeDispatch": "ctx_18590f1337ef",
+      "note": "the last phase: performance, complete packaging and the CI release acceptance. The brief requires the two long-standing desktop defects to be fixed so the desktop cargo check and the Windows packaged smoke can run at all, the benchmark with the 1k, 10k and 100k synthetic fills and the p50 and p95 latency, the package-content results, the CI and release workflows, the Dockerfile, and the release acceptance record with the blocked items stated separately from the passed ones. The Docker smoke must be attempted and reported as observed, never mocked and never claimed as passed."
     }
   ],
   "dispatches": [
@@ -1336,6 +1352,22 @@
       "worktree": "aa54a522-a9af-4cb4-9de7-f1d9a349c0fd::E:/4004/orca/workspaces/trade-journal/codex-ai-native-journal-p20",
       "base": "5741264",
       "purpose": "Phase 20 boundary repair - move the concrete driver behind apps/web/src/db/ and the handler constants into the contracts layer, without changing any behaviour",
+      "state": "dispatched",
+      "candidate": [],
+      "reviewed": false,
+      "integrated": false,
+      "verified": false,
+      "outcome": null
+    },
+    {
+      "task": "T-021",
+      "native": "task_d136aa634289",
+      "dispatch": "ctx_18590f1337ef",
+      "agent": "omp",
+      "provider": "omp",
+      "worktree": "aa54a522-a9af-4cb4-9de7-f1d9a349c0fd::E:/4004/orca/workspaces/trade-journal/codex-ai-native-journal-p21",
+      "base": "4628a57",
+      "purpose": "Phase 21 - performance, complete packaging and the CI release acceptance; the last phase",
       "state": "dispatched",
       "candidate": [],
       "reviewed": false,
