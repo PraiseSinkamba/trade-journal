@@ -2303,7 +2303,9 @@
           "apps/web/src/server/trading/commands.ts",
           "docs/database-migrations.md",
           "docs/intelligence-operations.md",
-          "apps/web/src/server/intelligence/composition.ts"
+          "apps/web/src/server/intelligence/composition.ts",
+          "apps/web/src/server/intelligence/infrastructure/worker.ts",
+          "apps/web/src/app/api/intelligence/"
         ],
         "exclusive": true,
         "sharedFilesPolicy": "Single phase owner; see integration-plan.md. No edits outside task subset without coordinator allocation."
@@ -2349,7 +2351,7 @@
           "status": "planned"
         }
       ],
-      "note": "undefined The coordinator granted one more file, apps/web/src/server/intelligence/composition.ts, for exactly one registration. The Phase 19 report named the workflow_effect job handler a Phase 20 input, and the coordinator confirmed the defect: experience/workflows.ts already exports effectHandler() with the id workflow-effect, it is used only in a test, and it is NEVER registered with the worker. A deferred workflow therefore enqueues a workflow_effect wake-up job that the worker claims, cannot resolve a handler for, and fails TERMINALLY as unhandled_job, so the deferred workflow never resumes and every deferred workflow leaves a dead-lettered job behind. That would also make Phase 20 own operations runbook, which must document dead-letter retry, misleading."
+      "note": "undefined The coordinator granted one more file, apps/web/src/server/intelligence/composition.ts, for exactly one registration. The Phase 19 report named the workflow_effect job handler a Phase 20 input, and the coordinator confirmed the defect: experience/workflows.ts already exports effectHandler() with the id workflow-effect, it is used only in a test, and it is NEVER registered with the worker. A deferred workflow therefore enqueues a workflow_effect wake-up job that the worker claims, cannot resolve a handler for, and fails TERMINALLY as unhandled_job, so the deferred workflow never resumes and every deferred workflow leaves a dead-lettered job behind. That would also make Phase 20 own operations runbook, which must document dead-letter retry, misleading. The coordinator granted three further paths after the candidate was reviewed: apps/web/src/server/intelligence/infrastructure/worker.ts, because the worker resolves a handler for seed_account, evaluate_trade and schedule_trigger only, so the retention job the phase delivered could never run; apps/web/src/server/intelligence/composition.ts, where the handlers are registered; and apps/web/src/app/api/intelligence/ as a directory, so the operator can reach the reset, the rebuild request and the retention run. The coordinator grants these because the phase acceptance cannot be demonstrated in production without them: a retention that never runs and an operator with no way to run it would leave the operations runbook describing something the operator cannot do."
     },
     {
       "id": "T-021",
