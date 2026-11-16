@@ -1,7 +1,7 @@
 {
   "schemaVersion": 1,
   "feature": "ai-native-journal",
-  "updatedAt": "2026-11-16T21:56:32Z",
+  "updatedAt": "2026-11-16T23:05:58Z",
   "owner": "parent OMP coordinator (exclusive owner of this record)",
   "repository": {
     "name": "trade-journal",
@@ -35,8 +35,8 @@
     },
     "featureBranch": "codex/ai-native-journal",
     "featureBootstrapSha": "0a278503fd67c0f9e82138dfecb744f4bfd307ad",
-    "featureHeadSha": "3afad4bf473c2e9ad2e7d26620f1c2ad8b84eb11",
-    "featureHeadShaNote": "feature branch HEAD at the Phase 20 dispatch and the exact base of the Phase 20 worktree; the coordinator record commit advances the branch by one commit",
+    "featureHeadSha": "2aae5031edb7c4030aaca131ac9dd9005540405f",
+    "featureHeadShaNote": "feature branch HEAD at the Phase 20 integration and the exact base of the Phase 21 worktree; the coordinator record commit advances the branch by one commit",
     "featureCheckpointCommits": [
       "0a278503fd67c0f9e82138dfecb744f4bfd307ad",
       "80d53ccb62fda801897852a6f4e5d2aab8b0d58b",
@@ -85,7 +85,8 @@
       "d0605c8fa611f1a2b55e512912cd2927dec2eeae",
       "468d931042d95c14d6ed3e3ab88b4b7afe527588",
       "ab5af9661636575c5aec06acfc08952bc780d6c7",
-      "3afad4bf473c2e9ad2e7d26620f1c2ad8b84eb11"
+      "3afad4bf473c2e9ad2e7d26620f1c2ad8b84eb11",
+      "2aae5031edb7c4030aaca131ac9dd9005540405f"
     ],
     "featureBranchNote": "Orca slugified the requested name to codex-ai-native-journal at creation; the coordinator renamed the newly created, exclusively owned branch to the contract-required codex/ai-native-journal. Orca reads the renamed ref live (refs/heads/codex/ai-native-journal). No pre-existing branch was overwritten."
   },
@@ -363,7 +364,7 @@
         "startSha": "036fd3f83e63018d38160dd5138949d5aa7ce86d",
         "orcaParentWorktreeId": "aa54a522-a9af-4cb4-9de7-f1d9a349c0fd::E:/4004/orca/workspaces/trade-journal/codex-ai-native-journal",
         "setup": "pnpm install --frozen-lockfile completed in the worker checkout; working tree clean; Node v24.20.0, pnpm 11.0.8; own node_modules and own pnpm virtual store",
-        "state": "merged into codex/ai-native-journal at 85ee9bc, but the destination gate FAILED on the repository own boundary test; a repair is in flight as ctx_2fa07a915285",
+        "state": "integrated into codex/ai-native-journal at 33e1fce and verified on the destination branch (destination gate green on the destination branch after the merge: pnpm install --frozen-lockfile, pnpm --filter web typecheck, the core and importers typecheck, pnpm --filter web migrations:check, node scripts/check-licenses.mjs, prettier --check on every merged file and pnpm build all exit 0; pnpm test 116 test files, 1372 tests passed, 146.02s). The worktree, the git worktree registration, the branch and the leftover directory remain until the user requests cleanup.",
         "note": "Phase 20 is the storage and operations half of detailed plan Task 13: reference-aware retention, the account purge of persistent intelligence, the backup and restore path, the reset behaviour and the operations runbook. It owns NO migration - the allocation is no new schema expected - and it is the phase that finally implements the two things Phase 19 named as its own Phase 20 inputs: the deletion of persistent intelligence and the storage for an AI-assisted insight. The benchmark, the full CI sequence, the Docker and Windows packaged smoke and the Dockerfile and CI workflow changes are Phase 21 and are excluded, and the brief forbids starting Docker on this host. After the dispatch the coordinator read the Phase 19 worker_done, which named a third Phase 20 input: the workflow_effect job handler. The coordinator confirmed it and it is a real production defect: experience/workflows.ts already exports effectHandler() with the id workflow-effect, it is used only in a Phase 16 test, and it is NEVER registered with the worker, so a deferred workflow enqueues a wake-up job that the worker claims, cannot resolve a handler for, and fails TERMINALLY as unhandled_job. The deferred workflow therefore never resumes and every deferral leaves a dead-lettered job behind. The coordinator granted Phase 20 apps/web/src/server/intelligence/composition.ts for exactly that registration and sent the worker a follow-up requiring an end-to-end proof that a deferred workflow resumes and that the dead letter does not accumulate, with the explicit alternative that if the worker judges it out of contract it records it as a Phase 21 input and says the deferral leg stays broken until then. The implementation-diff review returned 1 BLOCK and 1 FAIL, both from the same root: backupJournal and restoreJournal had NO caller but the two test files, no route, no CLI script and no package script, while the operations runbook promised a backup, restore and rollback procedure and opened by claiming that every command in it is one an operator can run, and docs/database-migrations.md named a journal backup command that does not exist. An operator following the runbook would believe their journal was backed up when nothing had been taken. The coordinator verified this in the code before acting on it, and granted the operator entry point: apps/web/scripts/intelligence-operations.mjs as the primary shape, with apps/web/package.json for a script entry and the two retention backup and restore routes as the alternative. The shipped backupJournal and restoreJournal must be CALLED rather than reimplemented, so the shipped refusals still hold, and the runbook must then be true end to end rather than only in the retention sections. The destination gate FAILED: every command before pnpm test exited 0, and the full suite then failed 2 of 1372 tests, both in the repository own architecture test. Rule 4: the retention module opened the concrete better-sqlite3 driver directly in four places, and only apps/web/src/db/ may wire that driver. Rule 5: the infrastructure worker imported two handler constants from the sibling experience domain private file, and the shared vocabulary belongs in the contracts layer. Both violations are the phase own and both are real. The coordinator granted the two database-layer files the repair needs and dispatched it. The lesson is recorded in the phase brief: the phase verification command ran only the three Phase 20 suites and omitted apps/web/tests/intelligence-boundaries.test.ts, which is the test that caught the violations, so every later phase must run the boundary test as part of its targeted command."
       }
     ]
@@ -735,13 +736,25 @@
       "wave": 20,
       "branch": "codex/ai-native-journal-p20",
       "deps": ["task_9eb1b8b7ab2f"],
-      "status": "dispatched",
-      "state": "repair in flight",
-      "outcome": null,
+      "status": "completed",
+      "state": "integrated",
+      "outcome": "succeeded",
       "nativeDispatch": "ctx_2fa07a915285",
       "note": "the storage and operations half of detailed plan Task 13; the brief pins the reference-aware retention with compact dedup preservation, the cancel and purge racing a leased completion, the reset without reseed, the restore with synthetic encrypted settings, the migration failure recovery, the quiescent backup, the pending and unacknowledged failures staying inspectable, the operations runbook, and the exclusion of the benchmark, the CI sequence and the Docker and Windows smoke that belong to Phase 21. The coordinator additionally granted the workflow effect handler registration after the dispatch, because the handler already existed and was simply never registered, so every deferred workflow dead-lettered its wake-up job and never resumed. The coordinator granted the worker wiring, the operator routes and the workflow effect registration after the candidate was reviewed, because a retention that never runs and an operator with no way to run it would leave the phase acceptance undemonstrable in production and the operations runbook describing an action the operator cannot take. The implementation-diff review found that the backup and restore shipped with no caller but the tests, so the documented procedure was unperformable; the coordinator granted an operator entry point and required the runbook to be true end to end. The destination gate failed on the repository own architecture test after the merge, because the phase verification command omitted apps/web/tests/intelligence-boundaries.test.ts. The repair moves the driver behind the db layer and the handler constants into the contracts, changing no behaviour.",
       "priorDispatch": "ctx_9fe9c3769da6",
-      "verified": "NOT VERIFIED YET: merged at 85ee9bc, but the destination gate failed on the repository own boundary test (rule 4, the concrete driver outside apps/web/src/db/, and rule 5, a sibling domain private import). A repair is in flight."
+      "verified": "destination gate green on the destination branch after the merge: pnpm install --frozen-lockfile, pnpm --filter web typecheck, the core and importers typecheck, pnpm --filter web migrations:check, node scripts/check-licenses.mjs, prettier --check on every merged file and pnpm build all exit 0; pnpm test 116 test files, 1372 tests passed, 146.02s",
+      "commits": [
+        "0e0eddc",
+        "59d3661",
+        "f4c5767",
+        "4e8e503",
+        "c5da090",
+        "3acfee8",
+        "af84455",
+        "80c8a4f",
+        "33e1fce6d21d739e280e9b85c2fe2bd25f76e57e"
+      ],
+      "evidence": "The implementation-diff review raised 1 BLOCK and 1 FAIL, both from the same root: backupJournal and restoreJournal shipped with no caller but the two test files, so the runbook promised a backup, restore and rollback procedure that no operator could perform, and an operator would have believed the journal was backed up when nothing had been taken. The coordinator verified this in the code before acting on it, granted the operator entry point, and required the shipped functions to be CALLED rather than reimplemented so the shipped refusals still hold. The coordinator ran a nine-mutation teeth proof: the live-workflow, live-opportunity, open-conversation and dismissal reference legs of liveReferenceIndex, the retention job handler registration, the workflow effect handler registration, the backup quiescence acknowledgement, the operator command accepting a relative path and the operator command defaulting the acknowledgement - every one broke exactly its own test. Evidence: docs/superpowers/plans/ai-native-journal/phase-20.md, docs/superpowers/reports/ai-native-journal-phase-20.md, docs/superpowers/reports/ai-native-journal-integration-20.md"
     },
     {
       "stable": "T-021",
@@ -1306,12 +1319,13 @@
       "worktree": "aa54a522-a9af-4cb4-9de7-f1d9a349c0fd::E:/4004/orca/workspaces/trade-journal/codex-ai-native-journal-p20",
       "base": "036fd3f",
       "purpose": "Phase 20 repair - ship the operator entry point that reaches backupJournal and restoreJournal, and make the operations runbook true end to end",
-      "state": "dispatched",
-      "candidate": [],
+      "state": "completed; the repair shipped the operator entry point and made the operations runbook true end to end",
+      "candidate": ["80c8a4f"],
       "reviewed": false,
-      "integrated": false,
-      "verified": false,
-      "outcome": null
+      "integrated": true,
+      "verified": true,
+      "outcome": "verified by the coordinator with an independent nine-mutation teeth proof, merged and verified on the destination branch",
+      "tip": "80c8a4f"
     },
     {
       "task": "T-020",
@@ -1749,6 +1763,31 @@
       "review": "one implementation-diff review, then one repair round and one coordinator re-verification; the worker found the workflow pairing defect and the leaked row in its own review, and the coordinator granted the two Phase 18 route files to fix it. The coordinator ran an independent five-mutation teeth proof.",
       "note": "no schema change: nothing under apps/web/src/db/ moved and migrations 0001 through 0007 are byte-unchanged. The proactive opt-in and the pause flag persist in the existing settings key/value table and the producer reads them, so the toggle is a real control. The opportunity producer makes the Slice B chain a running path, with the effect applied exactly once across a restart and the no-provider path usable. The deletion of PERSISTENT intelligence is deferred to Phase 20 and the phase report names it. No dependency and no lockfile change. No push, no pull request and no merge into main.",
       "report": "docs/superpowers/reports/ai-native-journal-integration-19.md"
+    },
+    {
+      "phase": "20",
+      "stable": "T-020",
+      "native": "task_16692d8c9708",
+      "branch": "codex/ai-native-journal-p20",
+      "merge": "33e1fce6d21d739e280e9b85c2fe2bd25f76e57e",
+      "destinationBefore": "0ca8dd4a0331a4505b20f309dddbf75fc35d8369",
+      "head": "80c8a4f",
+      "commits": [
+        "0e0eddc",
+        "59d3661",
+        "f4c5767",
+        "4e8e503",
+        "c5da090",
+        "3acfee8",
+        "af84455",
+        "80c8a4f"
+      ],
+      "files": 19,
+      "schema": "none - this phase owns no migration",
+      "verification": "destination gate green on the destination branch after the merge: pnpm install --frozen-lockfile, pnpm --filter web typecheck, the core and importers typecheck, pnpm --filter web migrations:check, node scripts/check-licenses.mjs, prettier --check on every merged file and pnpm build all exit 0; pnpm test 116 test files, 1372 tests passed, 146.02s",
+      "review": "one implementation-diff review, then two coordinator-granted repairs and one coordinator re-verification; the review found that the delivered behaviour was not wired and that the backup and restore had no operator entry point at all. The coordinator ran an independent nine-mutation teeth proof.",
+      "note": "no schema change: nothing under apps/web/src/db/ moved and migrations 0001 through 0007 are byte-unchanged. The prune removes only finished and unreferenced rows, the compact dedup keys survive it, the deletion ledger is written before the purge and survives a restore, a rebuild undoes a reset but never a deletion, and the backup demands the quiescence acknowledgement while the restore verifies the copy before migrating it. The operator entry point calls the shipped functions and adds no dependency. The persisted home for an AI-assisted insight stays a next-milestone item: no phase in this run owns a migration for it and the Slice B AI leg is optional. No push, no pull request and no merge into main.",
+      "report": "docs/superpowers/reports/ai-native-journal-integration-20.md"
     }
   ],
   "recordShape": "This file is the index and the authoritative stable-to-native task mapping: stable/native task mapping, worktree and dispatch identifiers, and one compact entry per integrated phase. Narrative, findings, deviations and command output live in the per-phase reports under docs/superpowers/reports/. Keep this file compact - one entry per phase, no duplicated prose. Resolve a native task id from taskMap here or from the native task list, never from a chat summary: a transcription slip once named T-019 as T-005, and the near miss was caught because the native task list disagreed with the prose.",
