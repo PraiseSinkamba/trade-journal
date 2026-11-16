@@ -2,14 +2,15 @@
 
 Phase guide row 19 · detailed-plan Task 12 · milestone M5 · schema allocation: **None**
 
-|                       |                                                                                           |
-| --------------------- | ----------------------------------------------------------------------------------------- |
-| Branch                | `codex/ai-native-journal-p19` (child of the feature worktree)                             |
-| Base                  | `14f8ec3aa0451c53c91d9503c2b79425232cdfaf` (verified feature HEAD)                        |
-| Plan commit           | `f8f0525c11` — "docs: plan the native inbox and the Slice B gate"                         |
-| Implementation commit | `c9849963bb` — "feat: expose controlled intelligence interactions and user settings"      |
-| Repair commit         | `148f2c6df6` — "fix: pair the actionable workflow and refuse a duplicate review"          |
-| Migrations            | none. `0001`–`0007` are byte-unchanged; no schema, registry or checksum file was touched. |
+|                       |                                                                                                         |
+| --------------------- | ------------------------------------------------------------------------------------------------------- |
+| Branch                | `codex/ai-native-journal-p19` (child of the feature worktree)                                           |
+| Base                  | `14f8ec3aa0451c53c91d9503c2b79425232cdfaf` (verified feature HEAD)                                      |
+| Plan commit           | `f8f0525c11` — "docs: plan the native inbox and the Slice B gate"                                       |
+| Implementation commit | `c9849963bb` — "feat: expose controlled intelligence interactions and user settings"                    |
+| Repair commit         | `148f2c6df6` — "fix: pair the actionable workflow and refuse a duplicate review"                        |
+| Repair follow-up      | `8ac2572229` — "fix: make the observation review pairing deterministic and keep its rules in the route" |
+| Migrations            | none. `0001`–`0007` are byte-unchanged; no schema, registry or checksum file was touched.               |
 
 ## What was built
 
@@ -90,16 +91,17 @@ and a visible focus ring.
 
 ## The commands, and what they proved
 
-| Command                                                                                                                                                                                                                                                        | Exit | Result                                                            |
-| -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ---- | ----------------------------------------------------------------- |
-| `pnpm exec vitest run apps/web/tests/intelligence-ui.test.ts apps/web/tests/intelligence-slice-b.test.ts`                                                                                                                                                      | 0    | 2 files, 23 tests passed (10 UI, 13 gate)                         |
-| `pnpm --filter web typecheck`                                                                                                                                                                                                                                  | 0    | `next typegen` + `tsc --noEmit` clean                             |
-| `pnpm exec vitest run apps/web/tests/intelligence-boundaries.test.ts apps/web/tests/intelligence-routes.test.ts apps/web/tests/intelligence-workflows.test.ts apps/web/tests/intelligence-engagement.test.ts apps/web/tests/intelligence-observations.test.ts` | 0    | 5 files, 107 tests passed                                         |
-| `pnpm exec vitest run apps/web/tests`                                                                                                                                                                                                                          | 0    | 101 files, 1131 tests passed, run against the committed tree      |
-| `pnpm exec vitest run apps/web/tests/intelligence-ui.test.ts apps/web/tests/intelligence-slice-b.test.ts` (after the repair)                                                                                                                                   | 0    | 2 files, 27 tests passed                                          |
-| `pnpm --filter web typecheck` (after the repair)                                                                                                                                                                                                               | 0    | `next typegen` + `tsc --noEmit` clean                             |
-| `pnpm exec vitest run apps/web/tests/intelligence-routes.test.ts` (after the repair)                                                                                                                                                                           | 0    | 1 file, 21 tests passed — the Phase 18 route contract still holds |
-| `pnpm exec prettier --check <the 13 phase files>`                                                                                                                                                                                                              | 0    | every phase file is Prettier-clean                                |
+| Command                                                                                                                                                                                                                                                                                   | Exit | Result                                                            |
+| ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ---- | ----------------------------------------------------------------- |
+| `pnpm exec vitest run apps/web/tests/intelligence-ui.test.ts apps/web/tests/intelligence-slice-b.test.ts`                                                                                                                                                                                 | 0    | 2 files, 23 tests passed (10 UI, 13 gate)                         |
+| `pnpm --filter web typecheck`                                                                                                                                                                                                                                                             | 0    | `next typegen` + `tsc --noEmit` clean                             |
+| `pnpm exec vitest run apps/web/tests/intelligence-boundaries.test.ts apps/web/tests/intelligence-routes.test.ts apps/web/tests/intelligence-workflows.test.ts apps/web/tests/intelligence-engagement.test.ts apps/web/tests/intelligence-observations.test.ts`                            | 0    | 5 files, 107 tests passed                                         |
+| `pnpm exec vitest run apps/web/tests`                                                                                                                                                                                                                                                     | 0    | 101 files, 1131 tests passed, run against the committed tree      |
+| `pnpm exec vitest run apps/web/tests/intelligence-ui.test.ts apps/web/tests/intelligence-slice-b.test.ts` (after the repair)                                                                                                                                                              | 0    | 2 files, 28 tests passed                                          |
+| `pnpm --filter web typecheck` (after the repair)                                                                                                                                                                                                                                          | 0    | `next typegen` + `tsc --noEmit` clean                             |
+| `pnpm exec vitest run apps/web/tests/intelligence-routes.test.ts` (after the repair)                                                                                                                                                                                                      | 0    | 1 file, 21 tests passed — the Phase 18 route contract still holds |
+| `pnpm exec vitest run apps/web/tests/intelligence-boundaries.test.ts apps/web/tests/intelligence-observations.test.ts apps/web/tests/intelligence-workflows.test.ts apps/web/tests/intelligence-engagement.test.ts apps/web/tests/intelligence-jobs.test.ts` (after the repair follow-up) | 0    | 5 files, 103 tests passed                                         |
+| `pnpm exec prettier --check <the 13 phase files>`                                                                                                                                                                                                                                         | 0    | every phase file is Prettier-clean                                |
 
 The repository-root `pnpm typecheck` still fails in the `desktop` Rust package on this host (the
 Tauri sidecar binary is not tracked); `pnpm --filter web typecheck` — the scope of this phase — is
@@ -145,7 +147,9 @@ accepting an unknown key. Each break failed its test and nothing else.
 
 The pairing repair is broken the same way: the route's pairing of the review that waits was reverted to
 the first review of the observation — the defect itself — and the gate was run. The broken run exited
-`1`; the restored run exited `0`, and the file was restored byte-for-byte before the second run.
+`1` ("expected [] to have a length of 1 but got +0": the surface served no intent). The refusal was broken
+the same way: the `409` guard was removed and the gate exited `1` ("expected 200 to be 409": a second
+review was started). Both were restored and the gate exited `0` again — 15 tests passed.
 
 ## The review and its findings
 
@@ -175,6 +179,28 @@ One implementation review, per the phase budget. The report is `.omp/reviewer-re
   counted re-engagements, two switches written in two statements, and two unformatted files — are all
   fixed.
 
+- **The review of the repair itself.** The repair was reviewed again, read-only, against the contract of
+  the grant. It reported five MINOR findings; four are fixed in `8ac2572229` and one is recorded as a
+  residual:
+  - a client test that could not fail — the two review states were asserted in one loop, and the
+    second render reused the first read, so the "reviewed" half asserted the "live" payload. The loop
+    is split into two cases now;
+  - the read model decided scope policy — it dropped the account filter and stated in its own comment
+    that a scope may not hide a review. The query reads rows by the ids the caller resolved again, and
+    the route says why: the GET reads the reviews of the scope's own observations, the POST reads the
+    reviews of an observation whose account the scope already admits;
+  - the read model re-encoded a domain rule — it filtered on the review definition key, a rule the
+    intent builder owns. The query is definition-agnostic now;
+  - the order of the reviews was not a total one — the sort key was the creation instant alone, so two
+    reviews created in the same millisecond were ordered by whatever the database returned. The order
+    is `ORDER BY created_at, id` now;
+  - **residual — the refusal is read outside the write transaction.** Two overlapping requests on two
+    web processes against one journal file could both read "unreviewed" and both write a workflow row.
+    The journal transactions are synchronous by contract and there is no `await` between the check and
+    the write, so one web process cannot interleave them, and the deployed shape is one web process. A
+    guard inside the transaction that starts the workflow needs an in-transaction variant of
+    `startWorkflow`: a Phase 20 input.
+
 ## Deviations from the plan
 
 1. **The optional-AI node of the design chain is not wired.** The chain's AI leg has no persisted
@@ -199,6 +225,8 @@ One implementation review, per the phase budget. The report is `.omp/reviewer-re
 - A persisted home for an AI-assisted insight, so the optional-AI node of the design chain can be
   wired.
 - The deletion of persistent intelligence (the retention phase).
+- An in-transaction variant of `startWorkflow`, so the refusal of a second review can be decided
+  inside the transaction that starts the workflow — the last residual of the pairing repair.
 
 ## What Phase 20 gets
 
@@ -215,3 +243,6 @@ One implementation review, per the phase budget. The report is `.omp/reviewer-re
 - The observation surface pairs the review that waits for the operator and serves each observation's
   review state, so a later surface never offers a review that already exists and never leaks a
   workflow row for one.
+- The rules of that surface live in the surface itself: which workflow is a review, which one is
+  actionable, what state an observation is in and when a second review is refused. The read model
+  (`app/api/intelligence/queries.ts`) only reads rows, ordered by the creation instant and the id.
