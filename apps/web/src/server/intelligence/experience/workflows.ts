@@ -5,6 +5,8 @@ import type { ExecutionContext } from "../contracts/execution";
 import {
   REVIEW_OBSERVATION_DEFINITION,
   REVIEW_OBSERVATION_VERSION,
+  WORKFLOW_EFFECT_HANDLER_ID,
+  WORKFLOW_EFFECT_HANDLER_VERSION,
   nextSystemStatus,
   nextWorkflowStatus,
   workflowCommandSchema,
@@ -73,11 +75,6 @@ export interface WorkflowEffectHandler {
   readonly version: string;
   run(tx: JournalTx, job: JobRecord): void;
 }
-
-/** The id of the workflow effect handler. */
-export const WORKFLOW_EFFECT_HANDLER_ID = "workflow-effect";
-/** The version of the workflow effect handler. */
-export const WORKFLOW_EFFECT_HANDLER_VERSION = "1";
 
 /**
  * The digest of a command payload.

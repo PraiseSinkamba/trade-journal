@@ -4,11 +4,11 @@ import type { JournalDb } from "@/db/connection";
 import { withConnectionTransaction, type JournalTx } from "@/db/transaction";
 import { intelligenceWorkerLease } from "@/db/schema";
 import { newUuid } from "@/server/ids";
-import type { EffectStore, JobRecord, JobStore } from "../contracts/jobs";
 import {
   WORKFLOW_EFFECT_HANDLER_ID,
   WORKFLOW_EFFECT_HANDLER_VERSION,
-} from "../experience/workflows";
+} from "../contracts/experience";
+import type { EffectStore, JobRecord, JobStore } from "../contracts/jobs";
 import {
   DISPATCH_LIMIT,
   POLL_INTERVAL_MS,
