@@ -2302,7 +2302,8 @@
           "apps/web/src/server/intelligence/infrastructure/jobs.ts",
           "apps/web/src/server/trading/commands.ts",
           "docs/database-migrations.md",
-          "docs/intelligence-operations.md"
+          "docs/intelligence-operations.md",
+          "apps/web/src/server/intelligence/composition.ts"
         ],
         "exclusive": true,
         "sharedFilesPolicy": "Single phase owner; see integration-plan.md. No edits outside task subset without coordinator allocation."
@@ -2347,7 +2348,8 @@
           "path": "apps/web/tests/intelligence-acceptance.test.ts",
           "status": "planned"
         }
-      ]
+      ],
+      "note": "undefined The coordinator granted one more file, apps/web/src/server/intelligence/composition.ts, for exactly one registration. The Phase 19 report named the workflow_effect job handler a Phase 20 input, and the coordinator confirmed the defect: experience/workflows.ts already exports effectHandler() with the id workflow-effect, it is used only in a test, and it is NEVER registered with the worker. A deferred workflow therefore enqueues a workflow_effect wake-up job that the worker claims, cannot resolve a handler for, and fails TERMINALLY as unhandled_job, so the deferred workflow never resumes and every deferred workflow leaves a dead-lettered job behind. That would also make Phase 20 own operations runbook, which must document dead-letter retry, misleading."
     },
     {
       "id": "T-021",
