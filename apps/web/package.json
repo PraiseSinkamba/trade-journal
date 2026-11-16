@@ -11,7 +11,8 @@
     "start": "node .next/standalone/apps/web/scripts/run-journal.mjs --mode production",
     "typecheck": "next typegen && tsc --noEmit",
     "migrations:build": "node scripts/build-migration-manifest.mjs",
-    "migrations:check": "node scripts/build-migration-manifest.mjs --check"
+    "migrations:check": "node scripts/build-migration-manifest.mjs --check",
+    "intelligence:operations": "node scripts/intelligence-operations.mjs"
   },
   "dependencies": {
     "@ai-sdk/anthropic": "^4.0.41",

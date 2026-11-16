@@ -6,6 +6,10 @@ import { intelligenceWorkerLease } from "@/db/schema";
 import { newUuid } from "@/server/ids";
 import type { EffectStore, JobRecord, JobStore } from "../contracts/jobs";
 import {
+  WORKFLOW_EFFECT_HANDLER_ID,
+  WORKFLOW_EFFECT_HANDLER_VERSION,
+} from "../experience/workflows";
+import {
   DISPATCH_LIMIT,
   POLL_INTERVAL_MS,
   StaleClaimError,
@@ -14,6 +18,12 @@ import {
   WORKER_RENEW_INTERVAL_MS,
 } from "./jobs";
 import type { OutboxDispatcher } from "./outbox";
+
+/** The handler that runs the retention prune. */
+export const RETENTION_HANDLER_ID = "retention";
+
+/** The version of that handler. */
+export const RETENTION_HANDLER_VERSION = "1";
 
 /**
  * The durable worker (Phase 04).
@@ -216,6 +226,21 @@ export const createWorkerService = (deps: {
     if (payload.type === "seed_account") {
       return deps.handlers.find(
         (handler) => handler.id === "seed-account" && handler.version === "1",
+      );
+    }
+    // The retention and the workflow effect name their handler by their kind:
+    // neither payload carries a handler id of its own.
+    if (payload.type === "retention") {
+      return deps.handlers.find(
+        (handler) =>
+          handler.id === RETENTION_HANDLER_ID && handler.version === RETENTION_HANDLER_VERSION,
+      );
+    }
+    if (payload.type === "workflow_effect") {
+      return deps.handlers.find(
+        (handler) =>
+          handler.id === WORKFLOW_EFFECT_HANDLER_ID &&
+          handler.version === WORKFLOW_EFFECT_HANDLER_VERSION,
       );
     }
     if (payload.type !== "evaluate_trade" && payload.type !== "schedule_trigger") return undefined;

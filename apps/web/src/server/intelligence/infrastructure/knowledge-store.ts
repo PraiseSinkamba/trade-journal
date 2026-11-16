@@ -1,8 +1,10 @@
-import { and, eq, ne } from "drizzle-orm";
+import { and, eq, inArray, lt, ne, sql } from "drizzle-orm";
 import {
   accounts,
   intelligenceObservations,
   intelligenceSeedCheckpoints,
+  knowledgeHypotheses,
+  knowledgePatterns,
   observationEvidence,
   tradeIdentities,
   tradeProjectionRevisions,
@@ -11,6 +13,7 @@ import type { JournalTx } from "@/db/transaction";
 import { newUuid } from "@/server/ids";
 import type { TradeChanged } from "@/server/domain-events";
 import type { JobClaim } from "../contracts/jobs";
+import type { LiveReferenceIndex } from "./experience-store";
 import {
   OBSERVATION_EVALUATOR_ID,
   OBSERVATION_EVALUATOR_VERSION,
@@ -185,4 +188,202 @@ export const persistObservationInTx = (
     .values({ observationId: stored.id, revisionId: result.evidence.revisionId })
     .onConflictDoNothing()
     .run();
+};
+
+/**
+ * Prunes the superseded and invalidated knowledge records nothing refers to.
+ *
+ * A record is prunable when it is not the newest version of its subject — a
+ * newer version says what the subject is now — and when it is older than the
+ * cutoff. A record that is still the newest of its subject stays only while
+ * it is live: an invalidated record raises no successor, so nothing would
+ * ever replace it.
+ *
+ * Returns how many rows were removed.
+ */
+export const pruneKnowledgeInTx = (
+  tx: JournalTx,
+  before: number,
+  limit: number,
+  live: LiveReferenceIndex,
+): number => {
+  if (limit <= 0) return 0;
+  let removed = 0;
+
+  for (const record of knowledgeHypothesesInTx(tx, before)) {
+    if (removed >= limit) break;
+    if (isNewestOfSubject(tx, knowledgeHypotheses, record)) continue;
+    if (isCitedByLive(record, live)) continue;
+    tx.delete(knowledgeHypotheses).where(eq(knowledgeHypotheses.id, record.id)).run();
+    removed += 1;
+  }
+
+  for (const record of knowledgePatternsInTx(tx, before)) {
+    if (removed >= limit) break;
+    if (isNewestOfSubject(tx, knowledgePatterns, record)) continue;
+    if (isCitedByLive(record, live)) continue;
+    tx.delete(knowledgePatterns).where(eq(knowledgePatterns.id, record.id)).run();
+    removed += 1;
+  }
+
+  return removed;
+};
+
+/**
+ * Whether a live record still cites a knowledge record.
+ *
+ * A knowledge record has its own id, but the live records name **observations**
+ * and **projection revisions** — never a knowledge id. A record is therefore
+ * cited when its subject is an observation a live record names, or when its
+ * evidence names a revision a live record rests on.
+ */
+const isCitedByLive = (
+  record: { subjectType: string; subjectId: string; evidenceIdsJson: string },
+  live: LiveReferenceIndex,
+): boolean => {
+  if (record.subjectType === "observation" && live.observationIds.has(record.subjectId)) {
+    return true;
+  }
+  return evidenceIdsOf(record.evidenceIdsJson).some((id) => live.revisionIds.has(id));
+};
+
+/**
+ * Reads the ids of a stored evidence list.
+ *
+ * A list that cannot be read names nothing: a record with unreadable evidence
+ * rests on no evidence, so nothing has to survive for it.
+ */
+const evidenceIdsOf = (raw: string): string[] => {
+  try {
+    const parsed: unknown = JSON.parse(raw);
+    if (!Array.isArray(parsed)) return [];
+    return parsed.filter((entry): entry is string => typeof entry === "string");
+  } catch {
+    return [];
+  }
+};
+
+/**
+ * Prunes the superseded and invalidated observations nothing refers to.
+ *
+ * An observation is prunable when it is not `active`, when it is older than
+ * the cutoff, and when no live record names it — neither the observation
+ * itself nor one of the revisions it carries.
+ */
+export const pruneObservationsInTx = (
+  tx: JournalTx,
+  before: number,
+  limit: number,
+  live: LiveReferenceIndex,
+): number => {
+  if (limit <= 0) return 0;
+  let removed = 0;
+
+  const candidates = tx
+    .select({ id: intelligenceObservations.id })
+    .from(intelligenceObservations)
+    .where(
+      and(
+        inArray(intelligenceObservations.status, ["superseded", "invalidated"]),
+        lt(intelligenceObservations.updatedAt, before),
+      ),
+    )
+    .limit(limit)
+    .all();
+
+  for (const candidate of candidates) {
+    if (removed >= limit) break;
+    if (live.observationIds.has(candidate.id)) continue;
+    const links = tx
+      .select({ revisionId: observationEvidence.revisionId })
+      .from(observationEvidence)
+      .where(eq(observationEvidence.observationId, candidate.id))
+      .all();
+    if (links.some((link) => live.revisionIds.has(link.revisionId))) continue;
+    tx.delete(intelligenceObservations).where(eq(intelligenceObservations.id, candidate.id)).run();
+    removed += 1;
+  }
+
+  return removed;
+};
+
+/** The superseded and invalidated hypotheses older than the cutoff. */
+const knowledgeHypothesesInTx = (tx: JournalTx, before: number) =>
+  tx
+    .select({
+      id: knowledgeHypotheses.id,
+      subjectType: knowledgeHypotheses.subjectType,
+      subjectId: knowledgeHypotheses.subjectId,
+      version: knowledgeHypotheses.version,
+      evidenceIdsJson: knowledgeHypotheses.evidenceIdsJson,
+    })
+    .from(knowledgeHypotheses)
+    .where(
+      and(
+        inArray(knowledgeHypotheses.status, ["superseded", "invalidated"]),
+        lt(knowledgeHypotheses.updatedAt, before),
+      ),
+    )
+    .all();
+
+/** The superseded and invalidated patterns older than the cutoff. */
+const knowledgePatternsInTx = (tx: JournalTx, before: number) =>
+  tx
+    .select({
+      id: knowledgePatterns.id,
+      subjectType: knowledgePatterns.subjectType,
+      subjectId: knowledgePatterns.subjectId,
+      version: knowledgePatterns.version,
+      evidenceIdsJson: knowledgePatterns.evidenceIdsJson,
+    })
+    .from(knowledgePatterns)
+    .where(
+      and(
+        inArray(knowledgePatterns.status, ["superseded", "invalidated"]),
+        lt(knowledgePatterns.updatedAt, before),
+      ),
+    )
+    .all();
+
+/**
+ * Whether a record is the newest version of its subject, and still live.
+ *
+ * The newest version of a subject is the current knowledge of that subject,
+ * so it survives the window — but only while it is **live**
+ * (`active`, `stale` or `pending`). A superseded or invalidated record is
+ * finished knowledge: an invalidated one raises no successor, so it would
+ * otherwise survive the 90-day window forever.
+ *
+ * The newest row of the subject is the record itself once the versions
+ * match, so the record's own status is that newest row's status.
+ */
+const isNewestOfSubject = (
+  tx: JournalTx,
+  table: typeof knowledgeHypotheses | typeof knowledgePatterns,
+  record: {
+    subjectType: string;
+    subjectId: string;
+    version: number;
+  },
+): boolean => {
+  const subject = and(
+    eq(table.subjectType, record.subjectType),
+    eq(table.subjectId, record.subjectId),
+  );
+  const newest = tx
+    .select({ version: sql<number>`max(${table.version})` })
+    .from(table)
+    .where(subject)
+    .get();
+  // A record that is not the newest of its subject is superseded knowledge.
+  if ((newest?.version ?? record.version) !== record.version) return false;
+  // The newest version of a subject survives the window only while it is
+  // live: an invalidated record raises no successor, so it would otherwise
+  // survive the window forever.
+  const row = tx
+    .select({ status: table.status })
+    .from(table)
+    .where(and(subject, eq(table.version, record.version)))
+    .get();
+  return row?.status === "active" || row?.status === "stale" || row?.status === "pending";
 };

@@ -1,6 +1,7 @@
 import { and, eq, inArray } from "drizzle-orm";
 import type { ImportedExecution } from "@luxalgo/journal-importers";
-import { accounts, executions, trades, tradeIdentities } from "@/db/schema";
+import { accounts, executionEvidence, executions, trades, tradeIdentities } from "@/db/schema";
+import { dataDir } from "@/db/connection";
 import { withJournalTransaction } from "@/db/transaction";
 import { AI_PROVIDERS, isAiProvider, type AiProvider } from "@/lib/ai-settings";
 import type { CurrencyConversion } from "@/lib/currencies";
@@ -12,7 +13,13 @@ import {
 } from "../executions";
 import { nowIso } from "../ids";
 import { ibkrTransferTimeZone, isIbkrSyncAccount } from "../ibkr-sync-timezone";
-import { purgeAccountIntelligence } from "../intelligence/infrastructure/retention";
+import {
+  forgetPurgeLedger,
+  purgeAccountIntelligence,
+  recordPurgeLedger,
+  requestAccountIntelligenceRebuildInTx,
+  resetAccountIntelligenceInTx,
+} from "../intelligence/infrastructure/retention";
 import { requireValue } from "../request-error";
 import {
   aiModelSetting,
@@ -147,12 +154,31 @@ export const deleteTrades = (keys: readonly string[], context: ChangeContext): v
  * Empties one account: its fills go, its projections become removal tombstones.
  *
  * The account itself survives, and so do the annotations on other objects.
+ *
+ * The evidence of the deleted fills is invalidated, not deleted: the evidence
+ * sidecar has no foreign key to the fill, so its rows would otherwise survive
+ * and claim a source quality for a fill that no longer exists. The membership
+ * evidence is untouched — it must survive ordinary source-fill deletion.
  */
 export const clearAccount = (id: string, context: ChangeContext): void => {
   withJournalTransaction((tx) => {
     const account = tx.select().from(accounts).where(eq(accounts.id, id)).get();
     requireValue(account, "Account not found.");
+    const fillIds = tx
+      .select({ id: executions.id })
+      .from(executions)
+      .where(eq(executions.accountId, id))
+      .all()
+      .map((row) => row.id);
     deleteAccountExecutionsInTx(tx, id);
+    // The evidence of a fill that is gone can no longer claim what the source
+    // proved about it.
+    for (const fillId of fillIds) {
+      tx.update(executionEvidence)
+        .set({ timingQuality: "unknown", sourceKind: "cleared" })
+        .where(eq(executionEvidence.executionId, fillId))
+        .run();
+    }
     // The projections disappear, so their identities are retired and their
     // removals are recorded.
     reconcileAccountInTx(tx, id, context);
@@ -168,24 +194,89 @@ export const clearAccount = (id: string, context: ChangeContext): void => {
  * fills is found through them. The identities, revisions, memberships and
  * links of the account go with the account row's own cascade.
  *
+ * The deletion is recorded in the ledger, so a restore of an older backup
+ * cannot bring the account back: the ledger lives beside the database and
+ * survives the database being replaced.
+ *
  * Deleting an account that does not exist does nothing.
  */
 export const deleteAccount = (id: string, context: ChangeContext): void => {
   // The account's events are purged with the account, so this context names
   // no event that outlives the deletion.
   void context;
-  withJournalTransaction((tx) => {
-    const account = tx.select().from(accounts).where(eq(accounts.id, id)).get();
-    if (!account) return;
-    purgeAccountIntelligence(tx, id);
-    tx.delete(trades).where(eq(trades.accountId, id)).run();
-    deleteAccountExecutionsInTx(tx, id);
-    tx.delete(accounts).where(eq(accounts.id, id)).run();
-    // Clear the persisted default if it pointed at the deleted account, so the
-    // next picker's auto-fill falls back to the single-account rule instead of
-    // a stale id.
-    if (getSettingInTx(tx, "currentAccountId") === id) setCurrentAccountIdInTx(tx, null);
-  });
+  const account = withJournalTransaction((tx) =>
+    tx.select({ id: accounts.id }).from(accounts).where(eq(accounts.id, id)).get(),
+  );
+  if (!account) return;
+
+  // The ledger entry is written before the purge, so a journal that was purged
+  // is never restored without the ledger that says so. A purge that then
+  // fails takes its entry back.
+  recordPurgeLedger(dataDir(), id, "deleted");
+  try {
+    withJournalTransaction((tx) => {
+      purgeAccountIntelligence(tx, id);
+      tx.delete(trades).where(eq(trades.accountId, id)).run();
+      deleteAccountExecutionsInTx(tx, id);
+      tx.delete(accounts).where(eq(accounts.id, id)).run();
+      // Clear the persisted default if it pointed at the deleted account, so
+      // the next picker's auto-fill falls back to the single-account rule
+      // instead of a stale id.
+      if (getSettingInTx(tx, "currentAccountId") === id) setCurrentAccountIdInTx(tx, null);
+    });
+  } catch (error) {
+    forgetPurgeLedger(dataDir(), id, "deleted");
+    throw error;
+  }
+};
+
+/**
+ * Purges one account's intelligence and suppresses its automatic reseed.
+ *
+ * The account survives; what the journal knew about it does not. The seed
+ * checkpoint becomes `suppressed`, so the historical seed does not re-derive
+ * the deleted observations and the replay seam refuses the account for the
+ * same reason.
+ *
+ * The purge is recorded in the ledger with kind `reset`, so a restore of an
+ * older backup purges the account's intelligence again instead of bringing it
+ * back.
+ */
+export const resetAccountIntelligence = (id: string): void => {
+  const account = withJournalTransaction((tx) =>
+    tx.select({ id: accounts.id }).from(accounts).where(eq(accounts.id, id)).get(),
+  );
+  requireValue(account, "Account not found.");
+
+  // The ledger entry is written before the purge, so a journal that was purged
+  // is never restored without the ledger that says so. A purge that then
+  // fails takes its entry back.
+  recordPurgeLedger(dataDir(), id, "reset");
+  try {
+    withJournalTransaction((tx) => resetAccountIntelligenceInTx(tx, id, Date.now()));
+  } catch (error) {
+    forgetPurgeLedger(dataDir(), id, "reset");
+    throw error;
+  }
+};
+
+/**
+ * Asks for the intelligence of one account to be rebuilt.
+ *
+ * The seed checkpoint moves back to `pending` and the rebuild **enqueues the
+ * seed job**, so the historical seed runs again and the account's observations
+ * come back. The ledger forgets the reset: the reset has been undone.
+ */
+export const requestAccountIntelligenceRebuild = (id: string): void => {
+  const account = withJournalTransaction((tx) =>
+    tx.select({ id: accounts.id }).from(accounts).where(eq(accounts.id, id)).get(),
+  );
+  requireValue(account, "Account not found.");
+  withJournalTransaction((tx) => requestAccountIntelligenceRebuildInTx(tx, id, Date.now()));
+  // The reset has been undone, so the ledger forgets it: the account's
+  // intelligence is meant to come back. A deletion keeps its protection, so an
+  // older backup still cannot bring a deleted account back.
+  forgetPurgeLedger(dataDir(), id, "reset");
 };
 
 /**

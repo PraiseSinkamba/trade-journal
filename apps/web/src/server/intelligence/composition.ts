@@ -9,7 +9,11 @@ import {
   observationEvidence,
   tradeProjectionRevisions,
 } from "@/db/schema";
-import { withJournalTransaction, type JournalTx } from "@/db/transaction";
+import {
+  withConnectionTransaction,
+  withJournalTransaction,
+  type JournalTx,
+} from "@/db/transaction";
 import { parseTradeChanged, type SourceChange, type TradeChanged } from "@/server/domain-events";
 import {
   aiProviderConfigured,
@@ -76,7 +80,15 @@ import {
 } from "./infrastructure/policy-store";
 import { evaluateBackgroundAuthorization } from "./runtime/model-policy";
 import {
+  KNOWLEDGE_RETENTION_WINDOW_MS,
+  RETENTION_PRUNE_LIMIT,
+  pruneIntelligenceInTx,
+  pruneSupersededKnowledgeInTx,
+} from "./infrastructure/retention";
+import {
   createWorkerService,
+  RETENTION_HANDLER_ID,
+  RETENTION_HANDLER_VERSION,
   type JobHandler,
   type WorkerService,
   type WorkerStatus,
@@ -281,6 +293,22 @@ export const createIntelligenceServices = (deps: {
       backfill.seedAccountInTx(tx, job.payload.accountId, job.id);
     },
   };
+  // The retention run: the transport and the diagnostics class at the cutoff
+  // the payload names, and the knowledge class at its own, longer window. The
+  // whole run stays inside one bound.
+  const retentionHandler: JobHandler = {
+    id: RETENTION_HANDLER_ID,
+    version: RETENTION_HANDLER_VERSION,
+    run: (tx, job): void => {
+      if (job.payload.type !== "retention") return;
+      const removed = pruneIntelligenceInTx(tx, job.payload.before, RETENTION_PRUNE_LIMIT);
+      pruneSupersededKnowledgeInTx(
+        tx,
+        clock() - KNOWLEDGE_RETENTION_WINDOW_MS,
+        RETENTION_PRUNE_LIMIT - removed.removed,
+      );
+    },
+  };
   const handlers: readonly JobHandler[] = [createTradeObservationHandler({ clock }), seedHandler];
   const outboxHandlers: readonly OutboxHandler[] = [
     { id: OBSERVATION_HANDLER_ID, version: OBSERVATION_HANDLER_VERSION },
@@ -289,12 +317,22 @@ export const createIntelligenceServices = (deps: {
   const schedules = deps.schedules ?? [];
   const scheduler = createScheduler({ db: deps.db, jobs, definitions: schedules });
   const scheduleHandler = createScheduleHandler({ definitions: schedules, clock });
+  // The workflow engine of this journal: the deferred workflow resumes
+  // through its effect handler, on the journal this worker serves.
+  const workflows = createWorkflowEngine({
+    runInTransaction: <T>(fn: (tx: JournalTx) => T extends PromiseLike<unknown> ? never : T): T =>
+      withConnectionTransaction(deps.db, fn) as T,
+    jobs,
+    store: createExperienceStore(),
+    clock,
+  });
   return {
     seedAccount: backfill.seedAccount,
     requestReplay: replay.requestReplay,
-    handlers: [...handlers, scheduleHandler],
+    handlers: [...handlers, scheduleHandler, retentionHandler, workflows.effectHandler()],
     outboxHandlers,
     scheduler,
+    workflows,
   };
 };
 
@@ -665,11 +703,7 @@ export const experienceStore = createExperienceStore();
 export const jobStore = createJobStore(db);
 
 /** The workflow engine on the default journal. */
-export const workflowEngine = createWorkflowEngine({
-  runInTransaction: withJournalTransaction,
-  jobs: jobStore,
-  store: experienceStore,
-});
+export const workflowEngine = defaultServices.workflows;
 
 /** The engagement coordinator on the default journal. */
 export const engagementCoordinator = createEngagementCoordinator({

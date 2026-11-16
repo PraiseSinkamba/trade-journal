@@ -500,3 +500,45 @@ export const createEffectStore = (): EffectStore => ({
       .run();
   },
 });
+
+/**
+ * Deletes the finished jobs of one outbox event.
+ *
+ * The jobs go before the event: the event's deliveries cascade with it, and a
+ * job whose delivery is gone has no dedup key left to keep. A job that is
+ * still running, waiting or retrying stays — it has work to do, and its
+ * completion would otherwise find no row.
+ *
+ * Returns how many rows were removed.
+ */
+export const deleteTerminalJobsForEventInTx = (
+  tx: JournalTx,
+  eventId: string,
+  before: number,
+): number => {
+  const jobIds = tx
+    .selectDistinct({ jobId: eventDeliveries.jobId })
+    .from(eventDeliveries)
+    .where(eq(eventDeliveries.eventId, eventId))
+    .all()
+    .map((row) => row.jobId)
+    .filter((jobId): jobId is string => jobId !== null);
+  if (jobIds.length === 0) return 0;
+
+  const removable = tx
+    .select({ id: intelligenceJobs.id })
+    .from(intelligenceJobs)
+    .where(
+      and(
+        inArray(intelligenceJobs.id, jobIds),
+        inArray(intelligenceJobs.status, ["completed", "cancelled"]),
+        lt(intelligenceJobs.updatedAt, before),
+      ),
+    )
+    .all();
+
+  for (const job of removable) {
+    tx.delete(intelligenceJobs).where(eq(intelligenceJobs.id, job.id)).run();
+  }
+  return removable.length;
+};

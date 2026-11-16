@@ -1,124 +1,117 @@
 ## Verdict: PASS
 
-# Reviewer Report — Phase 19 repair: the observations pairing fix
+## Reviewer Report — Phase 20 repair (the operator entry point)
 
-Slice reviewed: the Phase 19 observations pairing repair on top of `b3ed0a14a6` ("docs: report the web
-suite run against the committed tree"), the coordinator's option-A grant of
-`apps/web/src/app/api/intelligence/observations/route.ts` and
-`apps/web/src/app/api/intelligence/queries.ts`.
+Contract: `docs/orchestration/ai-native-journal/tasks/T-020.md`. Plan of record:
+`docs/superpowers/plans/ai-native-journal/phase-20.md`.
 
-The finding this repair closes is the MAJOR of the implementation review (see the report above, kept for
-the record): the observation surface paired the FIRST workflow of an observation instead of the
-ACTIONABLE one, so after an acknowledgement the served intent vanished, the still-active observation was
-offered a review again, the newly started workflow was never rendered because the stale completed one won
-the pairing, and every cycle leaked a workflow row. The coordinator confirmed the finding and granted
-the ownership to fix it server-side.
+This report covers the granted repair of the committed candidate: the coordinator's review found
+that `backupJournal` and `restoreJournal` were **reachable by nobody** — no route, no script and no
+package script called them — while the runbook described the backup and the restore as procedures
+an operator performs, and `docs/database-migrations.md` named "the journal's own backup command",
+which did not exist. Every finding of that review and of the follow-up review of this repair is
+fixed on the final tree.
 
-## What the repair does
+### PASS / FAIL
 
-1. **The actionable workflow is paired.** `listObservationWorkflows` reads the workflows of the given
-   observations, ordered by the creation instant and the id — a total order, so two reads pair the same
-   review. The route keeps the review rules: only the review definition counts, and the review that is
-   paired is the one that WAITS for the operator (`waiting_for_user`), not the first one. A review the
-   operator already gave no longer hides the review that is due.
-2. **The review state is served.** Every observation answers with a `reviewState`: `unreviewed` (no
-   review), `live` (a review waits, runs or is deferred) or `reviewed` (the operator gave the review).
-   The client reads it and never offers a review of an observation that already carries one, so the
-   answer survives a reload.
-3. **A second review is refused.** `POST /api/intelligence/observations` answers `409
-   review_already_started` when the observation carries a review that is live or already given, and
-   writes nothing. An ABANDONED review (cancelled or failed) holds nothing: the observation may be
-   reviewed again.
+PASS — the operator can now run the backup and the restore, and the runbook is true end to end.
 
-Nothing else changed. The same-origin validation, the authentication gate, the status codes, the
-sanitised unexpected errors, the scope checks and the active-observation filter that refuses a
-superseded or invalidated observation with `400` are exactly as they were; the client-side mitigation
-(the session's list of the observations it put up for review, and the intent the POST answered with) is
-kept, and the two agree.
+### The granted repair
 
-## The test that pins it
+- [PASS] `apps/web/scripts/intelligence-operations.mjs` (new) — the operator command. A `backup`
+  operation and a `restore` operation, each of which calls the shipped `backupJournal` and
+  `restoreJournal` **unchanged**. Nothing is reimplemented: no backup, no restore, no checksum
+  verification and no purge-ledger handling is duplicated. The module is bundled with the same
+  toolchain the worker bundle uses (`build-worker.mjs` resolves esbuild through `tsup`), and the
+  bundle is refused if it pulls in `next`, `react` or `src/app`.
+- [PASS] `apps/web/package.json` (extended) — one script entry, `intelligence:operations`, and
+  nothing else. No dependency, no version, no other script touched.
+- [PASS] The entry point runs **from the repository root** with the repo's own toolchain:
+  `pnpm --filter web intelligence:operations backup --source <dir> --destination <dir>
+  --acknowledge-quiescence`, and the same command with `restore`. Both invocations were run from
+  the repository root against disposable journals.
+- [PASS] **Nothing is defaulted.** The operator types the source, the destination and the
+  quiescence acknowledgement (`--acknowledge-quiescence`). An omitted flag is a refusal, not a
+  quiet default.
+- [PASS] **Every shipped refusal is reachable through the entry point**, each with the shipped
+  message: a relative path, a missing source or destination, a source and a destination that are
+  the same, a missing quiescence acknowledgement, a journal that still holds a worker lease, a
+  source that does not hold the journal's own key, a destination that already holds a journal, and
+  a source that does not hold a backup manifest.
+- [PASS] The command adds two preconditions of its own, and the script header says so rather than
+  claiming every refusal is shipped: `JOURNAL_DATA_DIR` must name the journal the operator owns,
+  because that is where the key that travels with the backup comes from.
+- [PASS] **The command never opens the journal it copies.** The bundled module opens a journal when
+  it is evaluated, so the command loads it against a scratch directory and points
+  `JOURNAL_DATA_DIR` at the operator's journal only for the call itself. A journal too broken to
+  open therefore does not stop a restore — the case the rollback table tells an operator to
+  recover from.
+- [PASS] The proof is end to end: `apps/web/tests/intelligence-backup.test.ts` drives the command
+  as a child process — it backs a journal up, it refuses a relative path, it refuses a missing
+  acknowledgement, it refuses a destination that already holds a journal, it carries the key beside
+  the snapshot and nowhere else, it leaves the journal it copies untouched, and it restores a backup
+  into scratch storage.
 
-`apps/web/tests/intelligence-slice-b.test.ts` — "the observation reviews" — takes one observation
-through repeated review cycles:
+### The follow-up review's findings, resolved
 
-- "pairs the review that waits, refuses a second one and leaks no row": the inbox starts the review;
-  the surface serves that review's intent and the observation reports `live`; exactly one workflow row
-  exists and it waits for the operator; a second start is refused with `409 review_already_started` and
-  writes nothing; the operator gives the review; the surface then serves no intent, the observation
-  reports `reviewed`, and the start is refused again — no row leaked.
-- "serves the review that waits after an abandoned one was replaced": the first review is abandoned, a
-  fresh review starts, and the surface serves the NEW review rather than the abandoned one. Exactly one
-  live workflow remains; the abandoned row is the only other one.
+- [PASS] **BLOCK — the documented quiescence procedure could not work — FIXED.** The worker lease
+  row outlives the stopped worker: nothing deletes it, and it stays valid for up to
+  `WORKER_LEASE_MS` (30 seconds), so a backup run immediately after stopping the supervisor was
+  refused with "The journal still holds a worker lease". Both documents now say to wait until
+  `intelligence_worker_lease.lease_until` is in the past and run it again, and never to delete the
+  row — a live lease is the journal's own record of who was writing to it.
+- [PASS] **FAIL — the migration guide's command list named a command that could not succeed —
+  FIXED.** The `pnpm --filter web intelligence:operations backup` line carried no
+  `JOURNAL_DATA_DIR`, and the command refuses without it. The list now carries it, and says that
+  the restore does not need it.
+- [PASS] The six smaller corrections — the command's own preconditions are distinguished from the
+  shipped refusals; the supervisor command the operator stops is named (`pnpm start` in production,
+  `pnpm --filter web dev:journal` in development, which starts no worker unless
+  `--worker enabled`); the restore's steps follow the order the code performs them and the last
+  verification judges the migrated journal; the backup's refusal list no longer reads as
+  exhaustive; the destination is described as created when absent and refused when it already holds
+  a journal; and the lease check is said to read the source journal's own database.
+- [PASS] The manual copy of a whole data directory is now described accurately: it carries no
+  manifest, so the restore command refuses it, and the WAL warning is kept.
 
-`apps/web/tests/intelligence-ui.test.ts` — the client half: an observation the server says is under
-review or already reviewed is never offered a review again, and a `409` refusal is reported as "already
-under review" with the list refreshed.
+### The runbook, re-read against the shipped code
 
-### The proof that the test has teeth
+- [PASS] The worker is forked by the **journal supervisor**, not by the web process
+  (`run-journal.mjs` forks the http child and the worker child; `http-child.mjs` starts no
+  consumer).
+- [PASS] The retention job's payload carries the `type` the worker's payload schema discriminates
+  on (`contracts/jobs.ts` is a strict discriminated union), so the `INSERT` the runbook shows
+  produces a job the worker can read.
+- [PASS] The **prune**, not the purge, is what leaves the delivery, run and opportunity rows
+  alone; the runbook says so.
+- [PASS] The `curl` example carries the `journal_session` cookie the gate requires, and says that
+  a journal without a password needs none.
+- [PASS] The account deletion names `DELETE /api/accounts/{id}` and the clear history names
+  `POST /api/accounts/{id}/actions` with `{"action": "clear"}`.
+- [PASS] The deletion list names the background runs scoped to the account and what happens to a
+  run that no longer has an account.
+- [PASS] The replay seam and the job cancel say plainly that **no operator surface calls them
+  yet**, rather than implying they can be performed.
+- [PASS] Both documents name the **same** entry point with the **same** exact invocation.
 
-Each break was made deliberately, the gate was run, and the file was restored before the next run:
+### The checks
 
-| Break | Result |
-| --- | --- |
-| The pairing — `ofRow.filter((review) => review.status === "waiting_for_user").at(-1)` became `ofRow[0]`, the defect itself | **exit 1** — "expected [] to have a length of 1 but got +0": the surface served no intent |
-| The refusal — the `409` guard was removed | **exit 1** — "expected 200 to be 409": a second review was started |
-| Both restored | **exit 0** — 15 tests passed |
+- [PASS] `pnpm exec vitest run apps/web/tests/intelligence-retention.test.ts
+  apps/web/tests/intelligence-backup.test.ts apps/web/tests/intelligence-acceptance.test.ts` —
+  **73 tests, 3 files, all passed**, exit 0, 21 s (32 retention, 31 backup, 10 acceptance).
+- [PASS] `pnpm --filter web typecheck` — exit 0, 96 s.
+- [PASS] `npx prettier --check` over every touched path — clean.
+- [PASS] No new dependency, no schema change, no migration, no change outside the granted files:
+  the script, one package script entry, the backup suite, the two documents, the phase plan and
+  the phase report. `0001`–`0007` are byte-unchanged.
 
-## The review of this repair and its findings
+### Gaps noted, not failures
 
-An independent review of the diff (read-only, against the contract of the repair) reported five MINOR
-findings. Four are fixed in `8ac2572229` ("fix: make the observation review pairing deterministic and
-keep its rules in the route"):
+- The replay seam and the job cancel still have no operator surface. The runbook says so plainly
+  and the phase report records them as a next-milestone item.
+- The persisted home for an AI-assisted insight remains Phase 19's open item, and the benchmark, the
+  full CI sequence, the Docker and Windows smoke and the package audit are Phase 21's release half.
 
-1. **The client test could not fail for the "reviewed" state.** The two states were asserted in one
-   loop, and the second render reused the first read (the hook's deps are the url and the tick), so the
-   "reviewed" half asserted the "live" payload. The loop is split into two cases, each with its own
-   read.
-2. **The read model decided scope policy.** The query dropped the account filter and stated in its own
-   comment that a scope may not hide a review. The module's rule is that the queries decide nothing, so
-   the query reads rows by the ids the caller resolved and the route says why: the GET reads the reviews
-   of the scope's own observations, and the POST reads the reviews of an observation whose account the
-   scope already admits.
-3. **The read model re-encoded a domain rule.** The query filtered on the review definition key, a rule
-   the intent builder owns. The query is definition-agnostic now; the route keeps the rule.
-4. **The order was not a total one.** The sort key was the creation instant alone, so two reviews
-   created in the same millisecond were ordered by whatever the database returned. The order is
-   `ORDER BY created_at, id` now.
+### Summary
 
-The fifth finding is recorded, not fixed:
-
-5. **The refusal is read outside the write transaction.** Two overlapping requests on two web processes
-   against one journal file could both read "unreviewed" and both write a workflow row. The journal
-   transactions are synchronous by contract (`apps/web/src/db/transaction.ts`) and there is no `await`
-   between the check and the write, so one web process cannot interleave them; the deployed shape is one
-   web process. A guard inside the transaction that starts the workflow needs an in-transaction variant
-   of `startWorkflow` — a Phase 20 input.
-
-## Commands run
-
-| Command | Exit | Result |
-| --- | --- | --- |
-| `pnpm exec vitest run apps/web/tests/intelligence-ui.test.ts apps/web/tests/intelligence-slice-b.test.ts` | **0** | 2 files, 28 tests passed |
-| `pnpm --filter web typecheck` | **0** | `next typegen` + `tsc --noEmit` clean |
-| `pnpm exec vitest run apps/web/tests/intelligence-routes.test.ts` | **0** | 1 file, 21 tests passed — the Phase 18 route contract still holds |
-| `pnpm exec vitest run apps/web/tests/intelligence-boundaries.test.ts apps/web/tests/intelligence-observations.test.ts apps/web/tests/intelligence-workflows.test.ts apps/web/tests/intelligence-engagement.test.ts apps/web/tests/intelligence-jobs.test.ts` | **0** | 5 files, 103 tests passed |
-| `pnpm exec prettier --check <the changed files>` | **0** | every changed file is Prettier-clean |
-
-The whole-project `pnpm test` suite was not run: the coordinator runs the destination gate once, alone,
-after the merge.
-
-## Verified as correct (no action)
-
-- **The Phase 18 contract is intact.** The route keeps its same-origin validation, its authentication
-  gate, its `400 invalid_request`, its `403 scope_denied`, its sanitised `500` and its refusal to
-  review a superseded or invalidated observation. The Phase 18 route suite passes unchanged apart from
-  one fixture line: the authentication gate now starts its review on an observation that carries no
-  review, because an observation that already carries one is refused by the new rule.
-- **Boundaries.** The client layer imports no `@/server` and no `@/db`; the new `reviewState` is a
-  public DTO in `apps/web/src/lib/intelligence-interactions.ts`. No schema change, no migration, no new
-  dependency, no change to the Phase 13 background policy.
-- **The review state is truthful.** `live` covers a review that waits, runs or is deferred;
-  `reviewed` means the operator gave the review; a cancelled or failed review is `unreviewed`, so the
-  observation may be reviewed again.
-- **The refusal leaves no trace.** The check runs before the workflow is started, so a refused start
-  writes no workflow row, no transition and no command.
+24 PASS, 0 FAIL, 0 BLOCK.
