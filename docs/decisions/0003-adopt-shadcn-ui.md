@@ -19,3 +19,16 @@ Adopt shadcn/ui as the source of shared primitives in `apps/web`. Run `pnpm dlx 
 - Forbidden: any new dep without its own ADR (0004, 0005); any visual refresh beyond "swap with official primitives, same look"; a Tailwind v3 downgrade; any new telemetry endpoint.
 
 This decision is reversible without cost — removing the registry and reverting to the backup directory restores the pre-migration state.
+
+## Implementation note (Phase 19)
+
+Phase 19 adds the native inbox and the journal controls without touching the primitive set:
+
+- The three new components (`components/intelligence/{inbox,interaction-card,controls}.tsx`) are built
+  from the existing primitives — `Button`, `Card`, `Badge`, `Checkbox`, `Label`, `Input`, `Textarea`
+  and the `Sheet` — so no primitive was added, swapped or restyled.
+- The privacy overlay stays a domain primitive: the interaction card renders every monetary value
+  through `MonetaryValue` and never renders the server's composed observation text, which carries the
+  net P&L in plain characters that the overlay cannot mask.
+- The inbox mounts from the shell through the existing `Sheet`, so the navigation keeps its current
+  behaviour.

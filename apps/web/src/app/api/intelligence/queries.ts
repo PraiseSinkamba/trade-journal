@@ -1,4 +1,4 @@
-import { and, eq, gt, inArray, isNull, or, type SQL } from "drizzle-orm";
+import { and, asc, eq, gt, inArray, isNull, or, type SQL } from "drizzle-orm";
 import type { AnySQLiteColumn } from "drizzle-orm/sqlite-core";
 import {
   db,
@@ -132,9 +132,16 @@ export const observationOfRevision = (revisionId: string) =>
     .where(eq(observationEvidence.revisionId, revisionId))
     .get()?.observation ?? null;
 
-/** The workflows of the scope that act on the given subjects. */
-export const listWorkflows = (scope: RequestScope, subjectIds: readonly string[]) =>
-  subjectIds.length === 0
+/**
+ * The workflows of the given observations, oldest first.
+ *
+ * The rows are read by the ids the caller already resolved, so the scope and
+ * the definition rules stay with the caller. The order is a total one — the
+ * creation instant and the id — so a caller that reads the same rows twice
+ * reads them in the same order.
+ */
+export const listObservationWorkflows = (observationIds: readonly string[]) =>
+  observationIds.length === 0
     ? []
     : db
         .select()
@@ -142,10 +149,10 @@ export const listWorkflows = (scope: RequestScope, subjectIds: readonly string[]
         .where(
           and(
             eq(intelligenceWorkflows.subjectType, "observation"),
-            inArray(intelligenceWorkflows.subjectId, [...subjectIds]),
-            inScope(intelligenceWorkflows.accountId, scope),
+            inArray(intelligenceWorkflows.subjectId, [...observationIds]),
           ),
         )
+        .orderBy(asc(intelligenceWorkflows.createdAt), asc(intelligenceWorkflows.id))
         .all();
 
 /** One workflow by id. */

@@ -3,6 +3,7 @@ import {
   observationReviewRequestSchema,
   type EvidenceReference,
   type InteractionIntent,
+  type ObservationReviewState,
 } from "@/lib/intelligence-interactions";
 import {
   interactiveExecutionContext,
@@ -10,11 +11,15 @@ import {
   workflowEngine,
 } from "@/server/intelligence/composition";
 import {
+  REVIEW_OBSERVATION_DEFINITION,
+  type WorkflowRow,
+} from "@/server/intelligence/contracts/experience";
+import {
   evidenceOf,
   findActiveObservation,
   findWorkflow,
+  listObservationWorkflows,
   listObservations,
-  listWorkflows,
   observationText,
   resolveScope,
   scopeParam,
@@ -24,15 +29,47 @@ import {
  * The observation surface (Phase 18).
  *
  * `GET` answers `{ observations, intents }`: the active observations of the
- * scope, each with the review intent of the workflow that waits for it.
+ * scope, each with the review intent of the workflow that waits for it and
+ * the review state it carries.
  *
  * `POST` starts the review workflow of one active observation and answers
- * `{ workflowId, revision, intent }`.
+ * `{ workflowId, revision, intent }`. One observation carries one review: a
+ * review that waits, runs, is deferred or is already given is not started
+ * again.
  */
 
 /** The evidence references of one observation. */
 const referencesOf = (links: readonly { revisionId: string }[]): EvidenceReference[] =>
   links.map((link) => ({ revisionId: link.revisionId, kind: "projection_revision" }));
+
+/** The statuses that hold a review of an observation. */
+const LIVE_REVIEW_STATUSES: readonly WorkflowRow["status"][] = [
+  "running",
+  "waiting_for_user",
+  "scheduled",
+];
+
+/**
+ * The review state of an observation.
+ *
+ * A review that was abandoned (cancelled or failed) holds nothing: the
+ * observation may be reviewed again. A review that waits, runs or is
+ * deferred is live, and a review that completed is the operator's answer.
+ */
+const reviewStateOf = (reviews: readonly WorkflowRow[]): ObservationReviewState => {
+  if (reviews.some((review) => LIVE_REVIEW_STATUSES.includes(review.status))) return "live";
+  if (reviews.some((review) => review.status === "completed")) return "reviewed";
+  return "unreviewed";
+};
+
+/**
+ * The reviews of one observation, oldest first.
+ *
+ * Only the review definition counts: a workflow of another kind that acts on
+ * the same subject is not a review of it.
+ */
+const isReviewOf = (workflow: WorkflowRow, observationId: string): boolean =>
+  workflow.subjectId === observationId && workflow.definitionKey === REVIEW_OBSERVATION_DEFINITION;
 
 export const GET = handler(
   async (request: Request) => {
@@ -40,26 +77,29 @@ export const GET = handler(
     if (!scope) return bad("scope_denied", 403);
 
     const rows = listObservations(scope);
-    const workflows = listWorkflows(
-      scope,
-      rows.map((row) => row.id),
-    );
+    // The reviews are read by the ids of the scope's own observations, so a
+    // review can never widen what the scope sees.
+    const reviews = listObservationWorkflows(rows.map((row) => row.id));
     const links = evidenceOf(rows.map((row) => row.id));
 
     const intents: InteractionIntent[] = [];
-    for (const row of rows) {
-      const workflow = workflows.find((candidate) => candidate.subjectId === row.id);
-      if (!workflow) continue;
-      const intent = observationReviewIntent(
-        workflow,
-        referencesOf(links.filter((link) => link.observationId === row.id)),
-        observationText(row),
-      );
-      if (intent) intents.push(intent);
-    }
-
-    return ok({
-      observations: rows.map((row) => ({
+    const observations = rows.map((row) => {
+      const ofRow = reviews.filter((review) => isReviewOf(review, row.id));
+      // The review the operator can act on is the one that waits for them,
+      // not the first workflow of the observation: a review the operator
+      // already gave is finished, and pairing that one would hide the review
+      // that is due. The reviews arrive oldest first, so the newest one that
+      // waits wins.
+      const workflow = ofRow.filter((review) => review.status === "waiting_for_user").at(-1);
+      if (workflow) {
+        const intent = observationReviewIntent(
+          workflow,
+          referencesOf(links.filter((link) => link.observationId === row.id)),
+          observationText(row),
+        );
+        if (intent) intents.push(intent);
+      }
+      return {
         id: row.id,
         subjectId: row.subjectId,
         accountId: row.accountId,
@@ -72,9 +112,11 @@ export const GET = handler(
         timingQuality: row.timingQuality,
         recordedAt: row.recordedAt,
         updatedAt: row.updatedAt,
-      })),
-      intents,
+        reviewState: reviewStateOf(ofRow),
+      };
     });
+
+    return ok({ observations, intents });
   },
   { sanitize: true },
 );
@@ -93,6 +135,16 @@ export const POST = handler(
     const observation = findActiveObservation(parsed.data.observationId);
     if (!observation) return bad("invalid_request", 400);
     if (!scope.accountIds.includes(observation.accountId)) return bad("scope_denied", 403);
+
+    // One observation carries one review. A review that waits, runs, is
+    // deferred or is already given is refused, so a repeated start cannot
+    // leak a workflow row for an observation the operator already reviewed.
+    // The reviews are read by the observation's own id, so a narrow scope
+    // cannot hide a review that is already there.
+    const reviews = listObservationWorkflows([observation.id]).filter((workflow) =>
+      isReviewOf(workflow, observation.id),
+    );
+    if (reviewStateOf(reviews) !== "unreviewed") return bad("review_already_started", 409);
 
     const links = evidenceOf([observation.id]);
     const started = workflowEngine.startWorkflow(

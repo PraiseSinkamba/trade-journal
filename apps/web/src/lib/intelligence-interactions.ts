@@ -205,3 +205,166 @@ export const observationReviewRequestSchema = z
     scope: z.array(z.string().min(1)).max(64).optional(),
   })
   .strict();
+
+/* ------------------------------------------------------------------------ *
+ * The client-side response DTOs (Phase 19).
+ *
+ * The summaries the surfaces serve, so the client reads them without
+ * inventing a shape of its own. They hold no server code: the client imports
+ * this module and the server imports it too.
+ * ------------------------------------------------------------------------ */
+
+/**
+ * The review state of one observation.
+ *
+ * `unreviewed` — the observation carries no review, so the operator may start
+ * one. `live` — a review is in progress: it waits for the operator, it runs,
+ * or it is deferred. `reviewed` — the operator already gave the review.
+ */
+export const OBSERVATION_REVIEW_STATES = ["unreviewed", "live", "reviewed"] as const;
+
+/** The review state of one observation. */
+export type ObservationReviewState = (typeof OBSERVATION_REVIEW_STATES)[number];
+
+/** The summary of one observation the observation surface serves. */
+export interface ObservationSummary {
+  readonly id: string;
+  readonly subjectId: string;
+  readonly accountId: string | null;
+  readonly type: string;
+  readonly status: string;
+  readonly currency: string;
+  readonly netPnl: number;
+  readonly fees: number;
+  readonly tradeStatus: string;
+  readonly timingQuality: string;
+  readonly recordedAt: number;
+  readonly updatedAt: number;
+  /** The review the observation carries, so the client never re-offers one. */
+  readonly reviewState: ObservationReviewState;
+}
+
+/** The summary of one opportunity the opportunity surface serves. */
+export interface OpportunitySummary {
+  readonly id: string;
+  readonly subjectType: string;
+  readonly subjectId: string;
+  readonly accountId: string | null;
+  readonly status: string;
+  readonly eligibleAt: number;
+  readonly expiresAt: number;
+  readonly evidenceIds: readonly string[];
+  readonly createdAt: number;
+  readonly updatedAt: number;
+}
+
+/** The two journal switches the operator controls. */
+export interface IntelligenceControls {
+  readonly proactiveOptIn: boolean;
+  readonly paused: boolean;
+}
+
+/** What the observation surface answers. */
+export interface ObservationsResponse {
+  readonly observations: readonly ObservationSummary[];
+  readonly intents: readonly InteractionIntent[];
+}
+
+/** What the opportunity surface answers. */
+export interface OpportunitiesResponse {
+  readonly opportunities: readonly OpportunitySummary[];
+  readonly intents: readonly InteractionIntent[];
+}
+
+/** What the controls surface answers. */
+export interface ControlsResponse {
+  readonly controls: IntelligenceControls;
+}
+
+/** The engagement defaults the status surface serves. */
+export interface EngagementDefaultsView {
+  readonly proactiveCooldownMs: number;
+  readonly proactivePerDay: number;
+  readonly opportunityExpiryMs: number;
+  readonly neverExpires: number;
+}
+
+/** The background policy the status surface serves. */
+export interface BackgroundPolicyView {
+  readonly enabled: boolean;
+  readonly accounts: readonly string[];
+  readonly capabilities: { readonly tools: boolean; readonly structuredOutput: boolean };
+  readonly maxInputCharacters: number;
+  readonly revision: number;
+}
+
+/** What the status surface answers. */
+export interface IntelligenceStatusResponse {
+  readonly status: {
+    readonly backgroundPolicy: BackgroundPolicyView;
+    readonly worker: WorkerStatusView | null;
+    readonly engagementDefaults: EngagementDefaultsView;
+  };
+}
+
+/** The sanitized state of the journal's worker. */
+export interface WorkerStatusView {
+  readonly state: string;
+  readonly owner: string;
+  readonly leaseHeld: boolean;
+  readonly leaseUntil: number | null;
+  readonly lastHeartbeatAt: number | null;
+  readonly processed: number;
+  readonly failed: number;
+  readonly lastErrorCode: string | null;
+}
+
+/** The body the command route accepts. */
+export type CommandRequestBody = z.infer<typeof interactionCommandRequestSchema>;
+
+/** The body the dismissal route accepts. */
+export type DismissRequestBody = z.infer<typeof dismissRequestSchema>;
+
+/**
+ * The command body one action descriptor asks for.
+ *
+ * The action id, the action and the revision all come from the server: the
+ * client never assembles a handle of its own. The status intent carries no
+ * revision and never sends a command, so the body is null for it.
+ */
+export const commandRequestBody = (
+  intent: InteractionIntent,
+  descriptor: IntentActionDescriptor,
+  opts: { commandId: string; correction?: string; deferUntil?: number },
+): CommandRequestBody | null => {
+  if (!("expectedRevision" in intent)) return null;
+  if (!(WORKFLOW_INTERACTION_ACTIONS as readonly string[]).includes(descriptor.action)) return null;
+  const body: CommandRequestBody = {
+    actionId: descriptor.actionId,
+    commandId: opts.commandId,
+    expectedRevision: intent.expectedRevision,
+    action: descriptor.action as WorkflowInteractionAction,
+  };
+  // The correction and the instant are the operator's: the intent carries
+  // neither, so the card asks for them instead of inventing them.
+  if (opts.correction !== undefined) body.correction = opts.correction;
+  if (opts.deferUntil !== undefined) body.deferUntil = opts.deferUntil;
+  return body;
+};
+
+/**
+ * The dismissal body one server-issued action id asks for.
+ *
+ * The scope and the target are parsed out of the action id the server issued:
+ * the client never builds a handle of its own, and an action id that names
+ * nothing dismissable yields no body at all.
+ */
+export const dismissalRequestBody = (actionId: string): DismissRequestBody | null => {
+  const parsed = parseInteractionActionId(actionId);
+  if (!parsed) return null;
+  if (parsed.kind === "opportunity-dismiss")
+    return { actionId, scope: "opportunity", target: parsed.opportunityId };
+  if (parsed.kind === "evidence-dismiss")
+    return { actionId, scope: "evidence", target: parsed.revisionId };
+  return null;
+};
