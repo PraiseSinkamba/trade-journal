@@ -1,5 +1,6 @@
 import { and, count, eq, gte, inArray, like, max } from "drizzle-orm";
 import {
+  intelligenceConversations,
   intelligenceJobs,
   intelligenceOpportunities,
   intelligenceWorkflows,
@@ -237,3 +238,101 @@ export const createExperienceStore = (): ExperienceStore => ({
     return latest?.at ?? null;
   },
 });
+
+/**
+ * The live reference index the retention prune reads.
+ *
+ * A row that is still live points at the things it is about, and those things
+ * must survive a prune. The index names them in the two id spaces the
+ * experience layer uses: **observation ids** (the subject of a workflow, an
+ * opportunity or a conversation) and **projection revision ids** (the evidence
+ * a live row rests on, and the revision a dismissal names).
+ */
+export interface LiveReferenceIndex {
+  /** The observation ids a live record names. */
+  readonly observationIds: ReadonlySet<string>;
+  /** The projection revision ids a live record names. */
+  readonly revisionIds: ReadonlySet<string>;
+}
+
+/** The workflow statuses that are still live. */
+const LIVE_WORKFLOW_STATUSES = ["running", "waiting_for_user", "scheduled"] as const;
+
+/** The opportunity statuses that are still live. */
+const LIVE_OPPORTUNITY_STATUSES = ["pending", "eligible", "suppressed"] as const;
+
+/**
+ * Reads the ids of a stored evidence list.
+ *
+ * A list that cannot be read names nothing: a row with unreadable evidence
+ * rests on no evidence, so nothing has to survive for it.
+ */
+const evidenceIdsOf = (raw: string): string[] => {
+  try {
+    const parsed: unknown = JSON.parse(raw);
+    if (!Array.isArray(parsed)) return [];
+    return parsed.filter((entry): entry is string => typeof entry === "string");
+  } catch {
+    return [];
+  }
+};
+
+/**
+ * The observation ids and the revision ids the live records name.
+ *
+ * A live workflow, a live opportunity and an open conversation name the
+ * observation they are about; a live workflow and a live opportunity name the
+ * revisions they rest on; and a dismissal names the revision the operator
+ * dismissed, which keeps the observation that carries that revision alive.
+ */
+export const liveReferenceIndex = (tx: JournalTx): LiveReferenceIndex => {
+  const observationIds = new Set<string>();
+  const revisionIds = new Set<string>();
+
+  for (const workflow of tx
+    .select({
+      subjectId: intelligenceWorkflows.subjectId,
+      evidenceIdsJson: intelligenceWorkflows.evidenceIdsJson,
+    })
+    .from(intelligenceWorkflows)
+    .where(inArray(intelligenceWorkflows.status, [...LIVE_WORKFLOW_STATUSES]))
+    .all()) {
+    observationIds.add(workflow.subjectId);
+    for (const revisionId of evidenceIdsOf(workflow.evidenceIdsJson)) revisionIds.add(revisionId);
+  }
+
+  for (const opportunity of tx
+    .select({
+      subjectId: intelligenceOpportunities.subjectId,
+      evidenceIdsJson: intelligenceOpportunities.evidenceIdsJson,
+      dedupKey: intelligenceOpportunities.dedupKey,
+    })
+    .from(intelligenceOpportunities)
+    .where(inArray(intelligenceOpportunities.status, [...LIVE_OPPORTUNITY_STATUSES]))
+    .all()) {
+    observationIds.add(opportunity.subjectId);
+    for (const revisionId of evidenceIdsOf(opportunity.evidenceIdsJson))
+      revisionIds.add(revisionId);
+  }
+
+  for (const conversation of tx
+    .select({ subjectId: intelligenceConversations.subjectId })
+    .from(intelligenceConversations)
+    .where(eq(intelligenceConversations.status, "open"))
+    .all()) {
+    observationIds.add(conversation.subjectId);
+  }
+
+  // A dismissal outlives the thing it dismisses: the revision the operator
+  // dismissed keeps the observation that carries it alive.
+  for (const dismissal of tx
+    .select({ dedupKey: intelligenceOpportunities.dedupKey })
+    .from(intelligenceOpportunities)
+    .where(like(intelligenceOpportunities.dedupKey, "dismissal/evidence/%"))
+    .all()) {
+    const revisionId = dismissal.dedupKey.slice("dismissal/evidence/".length);
+    if (revisionId.length > 0) revisionIds.add(revisionId);
+  }
+
+  return { observationIds, revisionIds };
+};

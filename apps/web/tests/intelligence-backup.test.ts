@@ -1,0 +1,390 @@
+import { afterAll, beforeEach, describe, expect, it } from "vitest";
+import { copyFileSync, mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
+import { eq } from "drizzle-orm";
+
+/**
+ * The backup and restore suite (Phase 20).
+ *
+ * A backup is only worth having if it can be read again: the key material must
+ * travel with it, the copy must be verified before anything migrates it, and a
+ * restore must not bring a purged account back.
+ *
+ * Every case runs against disposable journals.
+ */
+
+const scratch = mkdtempSync(join(tmpdir(), "journal-backup-"));
+process.env.JOURNAL_DATA_DIR = scratch;
+
+// The journal module opens the database when it is first evaluated, so it can
+// only be imported after JOURNAL_DATA_DIR points at the scratch directory.
+const {
+  db,
+  accounts,
+  domainOutbox,
+  eventDeliveries,
+  intelligenceJobs,
+  intelligenceWorkerLease,
+  settings,
+  withJournalTransaction,
+} = await import("../src/db");
+const { openConnection } = await import("../src/db/connection");
+const { backupJournal, readPurgeLedger, recordPurgeLedger, restoreJournal } =
+  await import("../src/server/intelligence/infrastructure/retention");
+const { setAiKeyInTx } = await import("../src/server/settings");
+const { decryptJson } = await import("../src/server/crypto");
+
+const NOW = 1_800_000_000_000;
+
+/** A directory inside the scratch space. */
+const directory = (name: string): string => join(scratch, name);
+
+/** An account row, with the fields the journal points at. */
+const insertAccount = (id: string): void => {
+  db.insert(accounts)
+    .values({
+      id,
+      name: id,
+      broker: "test",
+      kind: "manual",
+      currency: "USD",
+      initialBalance: 0,
+      profitCalcMethod: "fifo",
+      credentialsEnc: null,
+      autoSync: false,
+      lastSyncAt: null,
+      ibkrSyncTimeZone: null,
+      snapshotJson: null,
+      archivedAt: null,
+      createdAt: new Date(NOW).toISOString(),
+    })
+    .run();
+};
+
+/** An outbox event with one delivery and one finished job. */
+const insertFinishedEvent = (eventId: string, accountId: string, recordedAt: number): void => {
+  db.insert(domainOutbox)
+    .values({
+      id: eventId,
+      type: "trade.projection_changed",
+      schemaVersion: 1,
+      aggregateType: "trade",
+      aggregateId: `trade-${eventId}`,
+      aggregateRevision: 1,
+      correlationId: `corr-${eventId}`,
+      origin: "import",
+      accountId,
+      payloadJson: "{}",
+      recordedAt,
+      occurredAt: null,
+      dispatchedAt: recordedAt,
+    })
+    .run();
+  db.insert(intelligenceJobs)
+    .values({
+      id: `job-${eventId}`,
+      idempotencyKey: `${eventId}:trade-observation:1`,
+      type: "evaluate_trade",
+      payloadJson: JSON.stringify({
+        type: "evaluate_trade",
+        eventId,
+        handlerId: "trade-observation",
+        handlerVersion: "1",
+      }),
+      status: "completed",
+      attempts: 1,
+      availableAt: recordedAt,
+      owner: null,
+      fence: 1,
+      leaseUntil: null,
+      cancelRequested: false,
+      lastError: null,
+      createdAt: recordedAt,
+      updatedAt: recordedAt,
+    })
+    .run();
+  db.insert(eventDeliveries)
+    .values({
+      eventId,
+      handlerId: "trade-observation",
+      handlerVersion: "1",
+      state: "delivered",
+      jobId: `job-${eventId}`,
+      lastError: null,
+      createdAt: recordedAt,
+      updatedAt: recordedAt,
+    })
+    .run();
+};
+
+beforeEach(() => {
+  db.delete(eventDeliveries).run();
+  db.delete(domainOutbox).run();
+  db.delete(intelligenceJobs).run();
+  db.delete(accounts).run();
+  insertAccount("acct-1");
+});
+
+afterAll(() => {
+  db.$client.close();
+  rmSync(scratch, { recursive: true, force: true });
+});
+
+describe("the explicit inputs", () => {
+  it("refuses a backup without a source", () => {
+    expect(() =>
+      backupJournal({ source: "", destination: directory("out-1"), quiesced: true }),
+    ).toThrow(/explicit source and destination/);
+  });
+
+  it("refuses a backup without a destination", () => {
+    expect(() => backupJournal({ source: scratch, destination: "", quiesced: true })).toThrow(
+      /explicit source and destination/,
+    );
+  });
+
+  it("refuses a relative path", () => {
+    expect(() =>
+      backupJournal({ source: "journal", destination: directory("out-2"), quiesced: true }),
+    ).toThrow(/absolute source and destination/);
+  });
+
+  it("refuses a source and a destination that are the same", () => {
+    expect(() => backupJournal({ source: scratch, destination: scratch, quiesced: true })).toThrow(
+      /that differ/,
+    );
+  });
+
+  it("refuses a backup without the quiescence acknowledgement", () => {
+    expect(() =>
+      backupJournal({ source: scratch, destination: directory("out-3"), quiesced: false }),
+    ).toThrow(/quiescent/);
+  });
+
+  it("refuses a source that does not hold a journal", () => {
+    expect(() =>
+      backupJournal({
+        source: directory("empty"),
+        destination: directory("out-4"),
+        quiesced: true,
+      }),
+    ).toThrow(/does not hold a journal/);
+  });
+});
+
+describe("the quiescence check", () => {
+  it("refuses a journal that still holds a worker lease", () => {
+    // A live lease means a worker is writing: the copy would not be a point in
+    // time.
+    db.insert(intelligenceWorkerLease)
+      .values({
+        name: "journal-worker",
+        owner: "worker-1",
+        fence: 1,
+        leaseUntil: NOW + 60_000,
+        heartbeatAt: NOW,
+      })
+      .run();
+
+    expect(() =>
+      backupJournal({ source: scratch, destination: directory("out-live"), quiesced: true }),
+    ).toThrow(/worker lease/);
+
+    db.delete(intelligenceWorkerLease).run();
+  });
+});
+
+describe("the key material", () => {
+  it("refuses a source that does not hold the journal's own key", () => {
+    // A copy of the data directory whose key file is not the journal's own
+    // would seal the probe under the wrong key, and the restored journal could
+    // not read its own encrypted settings.
+    const foreign = directory("foreign");
+    mkdirSync(foreign, { recursive: true });
+    copyFileSync(join(scratch, "journal.db"), join(foreign, "journal.db"));
+    writeFileSync(join(foreign, ".secret"), `${"ab".repeat(32)}\n`, "utf8");
+
+    expect(() =>
+      backupJournal({ source: foreign, destination: directory("out-foreign"), quiesced: true }),
+    ).toThrow(/own key material/);
+  });
+
+  it("carries the key beside the snapshot", () => {
+    // The synthetic credential is written under the journal's own key, so the
+    // backup proves the key travels without ever touching a real key.
+    withJournalTransaction((tx) => setAiKeyInTx(tx, "openai", "sk-synthetic-backup-key"));
+
+    const result = backupJournal({
+      source: scratch,
+      destination: directory("out-key"),
+      quiesced: true,
+    });
+
+    expect(result.keyFile).not.toBeNull();
+    expect(result.database.endsWith("journal.db")).toBe(true);
+  });
+
+  it("restores a journal that decrypts its synthetic credential", () => {
+    withJournalTransaction((tx) => setAiKeyInTx(tx, "openai", "sk-synthetic-restore-key"));
+
+    backupJournal({ source: scratch, destination: directory("out-restore"), quiesced: true });
+
+    const destination = directory("restored");
+    const result = restoreJournal({ source: directory("out-restore"), destination });
+
+    expect(result.keyVerified).toBe(true);
+
+    // The restored journal holds the encrypted credential, and the restored key
+    // material opens it. The credential is synthetic: no real key is touched.
+    const restored = openConnection(destination);
+    let envelope: string | null = null;
+    try {
+      envelope =
+        restored
+          .select({ value: settings.value })
+          .from(settings)
+          .all()
+          .find((row) => row.value.includes("."))?.value ?? null;
+      expect(restored.select().from(accounts).all()).toHaveLength(1);
+    } finally {
+      restored.$client.close();
+    }
+
+    const previous = process.env.JOURNAL_DATA_DIR;
+    process.env.JOURNAL_DATA_DIR = destination;
+    try {
+      expect(decryptJson<string>(envelope!)).toBe("sk-synthetic-restore-key");
+    } finally {
+      process.env.JOURNAL_DATA_DIR = previous;
+    }
+  });
+});
+
+describe("the restore", () => {
+  it("verifies the restored journal", () => {
+    backupJournal({ source: scratch, destination: directory("out-verify"), quiesced: true });
+
+    const result = restoreJournal({
+      source: directory("out-verify"),
+      destination: directory("restored-verify"),
+    });
+
+    expect(result.database.endsWith("journal.db")).toBe(true);
+  });
+
+  it("refuses a destination that already holds a journal", () => {
+    backupJournal({ source: scratch, destination: directory("out-dest"), quiesced: true });
+
+    // The scratch directory holds the live journal, so restoring into it would
+    // overwrite a journal that is in use.
+    expect(() => restoreJournal({ source: directory("out-dest"), destination: scratch })).toThrow(
+      /already holds a journal/,
+    );
+  });
+
+  it("refuses a source that does not hold a backup manifest", () => {
+    expect(() =>
+      restoreJournal({ source: directory("nothing"), destination: directory("restored-none") }),
+    ).toThrow(/does not hold a backup manifest/);
+  });
+});
+
+describe("the no resurrection guarantee", () => {
+  it("keeps a purged account out of the restored journal", () => {
+    // The account is in the backup: it exists when the snapshot is taken.
+    expect(db.select().from(accounts).all()).toHaveLength(1);
+
+    // The purge is recorded in the ledger, and the ledger file beside the
+    // database is what survives the database being replaced.
+    recordPurgeLedger(scratch, "acct-1", "deleted");
+
+    backupJournal({ source: scratch, destination: directory("out-purged"), quiesced: true });
+
+    const result = restoreJournal({
+      source: directory("out-purged"),
+      destination: directory("restored-purged"),
+    });
+
+    expect(result.purgedAccounts).toContain("acct-1");
+
+    // The restored journal holds the account of the snapshot, and the ledger
+    // takes it out again: a restore does not resurrect a purged account.
+    const restored = openConnection(directory("restored-purged"));
+    try {
+      expect(restored.select().from(accounts).all()).toHaveLength(0);
+    } finally {
+      restored.$client.close();
+    }
+  });
+
+  it("takes the whole intelligence of a deleted account out of the restored journal", () => {
+    // The account's events, their deliveries and jobs, and the rows that are
+    // not account bound but name its observations are part of what a delete
+    // removes: a restore that left them behind would partially resurrect what
+    // the purge deleted.
+    insertAccount("acct-2");
+    insertFinishedEvent("evt-2", "acct-2", NOW);
+    recordPurgeLedger(scratch, "acct-2", "deleted");
+
+    backupJournal({ source: scratch, destination: directory("out-purge-full"), quiesced: true });
+
+    // The snapshot holds the account and its event: the purge is only
+    // recorded in the ledger, so the backup was taken before the account was
+    // deleted.
+    const snapshot = openConnection(directory("out-purge-full"));
+    try {
+      expect(
+        snapshot
+          .select()
+          .from(accounts)
+          .all()
+          .map((row) => row.id),
+      ).toContain("acct-2");
+      expect(
+        snapshot
+          .select()
+          .from(domainOutbox)
+          .all()
+          .map((row) => row.id),
+      ).toContain("evt-2");
+    } finally {
+      snapshot.$client.close();
+    }
+
+    // The restore takes the account out again, with everything it owned: its
+    // events, their deliveries and jobs, and its unbound rows.
+    restoreJournal({
+      source: directory("out-purge-full"),
+      destination: directory("restored-purge-full"),
+    });
+    const restored = openConnection(directory("restored-purge-full"));
+    try {
+      expect(
+        restored
+          .select()
+          .from(accounts)
+          .all()
+          .map((row) => row.id),
+      ).not.toContain("acct-2");
+      expect(
+        restored
+          .select()
+          .from(domainOutbox)
+          .all()
+          .map((row) => row.id),
+      ).not.toContain("evt-2");
+      expect(restored.select().from(eventDeliveries).all()).toHaveLength(0);
+      expect(restored.select().from(intelligenceJobs).all()).toHaveLength(0);
+    } finally {
+      restored.$client.close();
+    }
+  });
+
+  it("records the purge in the ledger of the journal", () => {
+    recordPurgeLedger(scratch, "acct-2", "deleted");
+
+    const ledger = readPurgeLedger(scratch);
+    expect(ledger).toContainEqual({ accountId: "acct-2", kind: "deleted" });
+  });
+});

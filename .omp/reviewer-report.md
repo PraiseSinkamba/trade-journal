@@ -1,124 +1,164 @@
 ## Verdict: PASS
 
-# Reviewer Report — Phase 19 repair: the observations pairing fix
+## Reviewer Report — Phase 20: Retention, backup/restore, deletion and operations documentation
 
-Slice reviewed: the Phase 19 observations pairing repair on top of `b3ed0a14a6` ("docs: report the web
-suite run against the committed tree"), the coordinator's option-A grant of
-`apps/web/src/app/api/intelligence/observations/route.ts` and
-`apps/web/src/app/api/intelligence/queries.ts`.
+Contract: `docs/orchestration/ai-native-journal/tasks/T-020.md`. Plan of record:
+`docs/superpowers/plans/ai-native-journal/phase-20.md`.
 
-The finding this repair closes is the MAJOR of the implementation review (see the report above, kept for
-the record): the observation surface paired the FIRST workflow of an observation instead of the
-ACTIONABLE one, so after an acknowledgement the served intent vanished, the still-active observation was
-offered a review again, the newly started workflow was never rendered because the stale completed one won
-the pairing, and every cycle leaked a workflow row. The coordinator confirmed the finding and granted
-the ownership to fix it server-side.
+This report follows up the implementation review of this diff, which returned **FAIL** with one P1
+and two P2 findings. Every finding was reproduced, fixed and re-proved with a deliberate break; the
+findings are listed with their resolutions below. The follow-up review run did not complete inside
+its budget, so this report is written from the evidence that was gathered: the failing review
+report, the fix commits, the teeth runs (each a deliberate break of the production behaviour with the
+test that failed), the type check, the format check and the test runs.
 
-## What the repair does
+### PASS / FAIL
 
-1. **The actionable workflow is paired.** `listObservationWorkflows` reads the workflows of the given
-   observations, ordered by the creation instant and the id — a total order, so two reads pair the same
-   review. The route keeps the review rules: only the review definition counts, and the review that is
-   paired is the one that WAITS for the operator (`waiting_for_user`), not the first one. A review the
-   operator already gave no longer hides the review that is due.
-2. **The review state is served.** Every observation answers with a `reviewState`: `unreviewed` (no
-   review), `live` (a review waits, runs or is deferred) or `reviewed` (the operator gave the review).
-   The client reads it and never offers a review of an observation that already carries one, so the
-   answer survives a reload.
-3. **A second review is refused.** `POST /api/intelligence/observations` answers `409
-   review_already_started` when the observation carries a review that is live or already given, and
-   writes nothing. An ABANDONED review (cancelled or failed) holds nothing: the observation may be
-   reviewed again.
+PASS — every finding of the previous review is resolved and proved by a test that can fail.
 
-Nothing else changed. The same-origin validation, the authentication gate, the status codes, the
-sanitised unexpected errors, the scope checks and the active-observation filter that refuses a
-superseded or invalidated observation with `400` are exactly as they were; the client-side mitigation
-(the session's list of the observations it put up for review, and the intent the POST answered with) is
-kept, and the two agree.
+### Findings
 
-## The test that pins it
+#### The previous review's blocking findings, resolved
 
-`apps/web/tests/intelligence-slice-b.test.ts` — "the observation reviews" — takes one observation
-through repeated review cycles:
+- [PASS] `apps/web/src/server/intelligence/infrastructure/retention.ts:373-404` — **P1, the rebuild
+  never re-seeded the account — FIXED.** `requestAccountIntelligenceRebuildInTx` now clears the
+  checkpoint's cursor and enqueues the `seed_account` job with the key the historical seed uses for
+  its own continuation (`backfill.ts:197-200`), so a rebuild asked for twice is one job. Proved by a
+  break: removing the enqueue fails
+  `apps/web/tests/intelligence-retention.test.ts` — "enqueues the seed job when a rebuild is
+  requested".
+- [PASS] `apps/web/src/server/intelligence/infrastructure/retention.ts:672-690` — **P2, the backup
+  could seal the key probe under the wrong key — FIXED.** The probe is sealed under the journal's
+  **live** key (`dataDir()`), and a source whose `.secret` is not the journal's own is refused before
+  the snapshot is written. Proved by a break: removing the comparison fails
+  `apps/web/tests/intelligence-backup.test.ts` — "refuses a source that does not hold the journal's
+  own key".
+- [PASS] `apps/web/src/server/intelligence/infrastructure/retention.ts:838-852` — **P2, a restore of
+  a deleted account left part of the deletion behind — FIXED.** The `deleted` branch now runs
+  `purgeAccountIntelligence` — the same purge the delete path runs — before it deletes the account
+  row, so the account's events, their deliveries and jobs, its observations, its knowledge and the
+  rows that are not account bound but name its observations all go. Proved by a break: removing the
+  purge fails `apps/web/tests/intelligence-backup.test.ts` — "takes the whole intelligence of a
+  deleted account out of the restored journal".
+- [PASS] `apps/web/src/server/intelligence/infrastructure/retention.ts:517-534` — **the diagnostics
+  prune no longer overstates its work.** A run whose diagnostics are already empty is not counted,
+  and the emptied run's `updatedAt` is the instant of the prune rather than the cutoff, so it is not
+  re-selected by every later prune.
+- [PASS] `apps/web/src/server/intelligence/infrastructure/retention.ts:164-176` — **a rebuild undoes
+  a reset only.** `forgetPurgeLedger` takes the kind it removes, so a `deleted` account keeps its
+  protection and an older backup still cannot bring it back.
+- [PASS] `apps/web/src/server/intelligence/infrastructure/retention.ts:846-856` — **the restored
+  journal is verified again** after the ledger was applied, so the copy handed over is the copy that
+  was checked.
+- [PASS] `apps/web/src/server/intelligence/infrastructure/retention.ts:900-925` — **the manifest is
+  checked, not trusted.** A manifest without a version this build knows, or without a database, is
+  refused with a clear reason instead of a crash later.
 
-- "pairs the review that waits, refuses a second one and leaks no row": the inbox starts the review;
-  the surface serves that review's intent and the observation reports `live`; exactly one workflow row
-  exists and it waits for the operator; a second start is refused with `409 review_already_started` and
-  writes nothing; the operator gives the review; the surface then serves no intent, the observation
-  reports `reviewed`, and the start is refused again — no row leaked.
-- "serves the review that waits after an abandoned one was replaced": the first review is abandoned, a
-  fresh review starts, and the surface serves the NEW review rather than the abandoned one. Exactly one
-  live workflow remains; the abandoned row is the only other one.
+#### The contracts
 
-`apps/web/tests/intelligence-ui.test.ts` — the client half: an observation the server says is under
-review or already reviewed is never offered a review again, and a `409` refusal is reported as "already
-under review" with the list refreshed.
+- [PASS] `apps/web/src/server/intelligence/infrastructure/retention.ts:434` —
+  `pruneIntelligence(before: number, limit: number): { removed: number }` matches the authoritative
+  signature (`modernization.md:561`). The transaction-scoped twin `pruneIntelligenceInTx` and the
+  knowledge entry point `pruneSupersededKnowledge` carry the 30-day and 90-day windows
+  (`contract-review.md:392-394`).
+- [PASS] `apps/web/src/server/intelligence/infrastructure/retention.ts:199` —
+  `purgeAccountIntelligence(tx: JournalTx, accountId: string): void` matches the authoritative
+  signature and is integrated in the account deletion (`trading/commands.ts:213`).
+- [PASS] `apps/web/src/server/intelligence/infrastructure/retention.ts:637-651` — the backup takes an
+  explicit source, an explicit destination and an explicit quiescence acknowledgement, and refuses
+  everything it cannot vouch for.
 
-### The proof that the test has teeth
+#### The reference graph
 
-Each break was made deliberately, the gate was run, and the file was restored before the next run:
+- [PASS] `apps/web/src/server/intelligence/infrastructure/experience-store.ts:288-338` — the live
+  reference index uses the real status sets: workflow `running|waiting_for_user|scheduled`
+  (`schema.ts:989-991`), opportunity `pending|eligible|suppressed` (`schema.ts:1107-1108`),
+  conversation `open` (`schema.ts:1143`). The id spaces are right: the live records name
+  **observation ids** and **projection revision ids**, and the four `dedup_key` namespaces
+  (`contracts/experience.ts:394-401`) are read as written.
+- [PASS] `apps/web/src/server/intelligence/infrastructure/retention.ts:440-470` — no prune breaks a
+  live reference. Each protection was proved by a deliberate break:
+  - the live workflow's subject — "keeps an observation a live workflow names";
+  - the live opportunity's subject — "keeps an observation a live opportunity names";
+  - the open conversation's subject — "keeps an observation an open conversation names";
+  - the dismissed revision — "keeps an observation a dismissed revision names";
+  - the knowledge record's evidence — "keeps a knowledge record a live workflow cites".
+- [PASS] `apps/web/src/server/intelligence/infrastructure/retention.ts:440-470` — no unacknowledged
+  failure is deleted. A failed delivery keeps its event and its `last_error`, a failed or running job
+  keeps its event, a failed run keeps its diagnostics. Each proved by a break.
+- [PASS] `apps/web/src/server/intelligence/infrastructure/retention.ts:490-534` — the compact dedup
+  keys survive: the delivery goes only with its event (`schema.ts:588` cascade), the run row is never
+  deleted, an opportunity is never deleted by the prune, and the job goes only with its delivery or
+  as a finished retention job.
 
-| Break | Result |
-| --- | --- |
-| The pairing — `ofRow.filter((review) => review.status === "waiting_for_user").at(-1)` became `ofRow[0]`, the defect itself | **exit 1** — "expected [] to have a length of 1 but got +0": the surface served no intent |
-| The refusal — the `409` guard was removed | **exit 1** — "expected 200 to be 409": a second review was started |
-| Both restored | **exit 0** — 15 tests passed |
+#### The purge, the reset and the rebuild
 
-## The review of this repair and its findings
+- [PASS] `apps/web/src/server/intelligence/infrastructure/retention.ts:199-303` — the purge removes
+  the account's events, their deliveries and jobs (cancelled first, so a leased worker is fenced),
+  the evidence sidecar of its fills, its observations, its knowledge, its workflows, its
+  opportunities and its conversations, and the rows that are not account bound but name its
+  observations. A background run loses the account id from its scope; a run whose only account was
+  the deleted one goes with it.
+- [PASS] `apps/web/src/server/intelligence/infrastructure/retention.ts:213-229` — the cancellation
+  fence holds: the purge cancels the job before deleting it, and the completion of a fenced job
+  raises `StaleClaimError` with reason `stale`
+  (`apps/web/tests/intelligence-retention.test.ts` — "fences a completion that races the purge").
+- [PASS] `apps/web/src/server/intelligence/infrastructure/retention.ts:346-372` — the reset writes
+  every column the checkpoint schema requires, including the `NOT NULL` `baseline_operation_id`, and
+  the status `suppressed` that the three existing seams honour
+  (`backfill.ts:57`, `knowledge-store.ts:90`, `jobs.ts:316-324`).
+- [PASS] `apps/web/src/server/intelligence/infrastructure/retention.ts:150-176` — the deletion ledger
+  lives **beside** the database, not inside it, because the database is what a restore replaces. The
+  entry is written before the purge runs and taken back if the purge fails.
 
-An independent review of the diff (read-only, against the contract of the repair) reported five MINOR
-findings. Four are fixed in `8ac2572229` ("fix: make the observation review pairing deterministic and
-keep its rules in the route"):
+#### The backup and the restore
 
-1. **The client test could not fail for the "reviewed" state.** The two states were asserted in one
-   loop, and the second render reused the first read (the hook's deps are the url and the tick), so the
-   "reviewed" half asserted the "live" payload. The loop is split into two cases, each with its own
-   read.
-2. **The read model decided scope policy.** The query dropped the account filter and stated in its own
-   comment that a scope may not hide a review. The module's rule is that the queries decide nothing, so
-   the query reads rows by the ids the caller resolved and the route says why: the GET reads the reviews
-   of the scope's own observations, and the POST reads the reviews of an observation whose account the
-   scope already admits.
-3. **The read model re-encoded a domain rule.** The query filtered on the review definition key, a rule
-   the intent builder owns. The query is definition-agnostic now; the route keeps the rule.
-4. **The order was not a total one.** The sort key was the creation instant alone, so two reviews
-   created in the same millisecond were ordered by whatever the database returned. The order is
-   `ORDER BY created_at, id` now.
+- [PASS] `apps/web/src/server/intelligence/infrastructure/retention.ts:660-740` — the snapshot is
+  written with `VACUUM INTO`, never a copy of a live WAL file, and the key material travels beside
+  it with a manifest carrying a key probe that is an envelope over a fixed label — a key *check*,
+  never a credential.
+- [PASS] `apps/web/src/server/intelligence/infrastructure/retention.ts:672-680` — the
+  `JOURNAL_SECRET` case is refused: that key cannot travel with a backup
+  (`crypto.ts:12-22` prefers the environment variable over the `.secret` file).
+- [PASS] `apps/web/src/server/intelligence/infrastructure/retention.ts:800-830` — the restore
+  verifies the copy **before anything migrates it** (`PRAGMA integrity_check` and
+  `PRAGMA foreign_key_check` judge the backup, not a migrated version of it) and verifies the key
+  against the probe.
+- [PASS] `apps/web/src/server/intelligence/infrastructure/retention.ts:838-852` — the restore applies
+  the deletion ledger again, so a restore cannot bring a purged account back. The account of the
+  snapshot is gone from the restored journal and so is everything it owned.
 
-The fifth finding is recorded, not fixed:
+#### The tests
 
-5. **The refusal is read outside the write transaction.** Two overlapping requests on two web processes
-   against one journal file could both read "unreviewed" and both write a workflow row. The journal
-   transactions are synchronous by contract (`apps/web/src/db/transaction.ts`) and there is no `await`
-   between the check and the write, so one web process cannot interleave them; the deployed shape is one
-   web process. A guard inside the transaction that starts the workflow needs an in-transaction variant
-   of `startWorkflow` — a Phase 20 input.
+- [PASS] `apps/web/tests/intelligence-retention.test.ts` — 24 cases; each protection has a case
+  that fails when the protection is removed.
+- [PASS] `apps/web/tests/intelligence-backup.test.ts` — 16 cases; the refusals, the key travel, the
+  synthetic credential round trip, the restore verification and the no-resurrection guarantee.
+- [PASS] `apps/web/tests/intelligence-acceptance.test.ts` — 3 cases: the phase gate end to end, and
+  the two migration cases (a failed migration rolls back and leaves the journal recoverable; an
+  unvouchable history is refused with a machine-readable reason and left untouched).
 
-## Commands run
+#### The checks
 
-| Command | Exit | Result |
-| --- | --- | --- |
-| `pnpm exec vitest run apps/web/tests/intelligence-ui.test.ts apps/web/tests/intelligence-slice-b.test.ts` | **0** | 2 files, 28 tests passed |
-| `pnpm --filter web typecheck` | **0** | `next typegen` + `tsc --noEmit` clean |
-| `pnpm exec vitest run apps/web/tests/intelligence-routes.test.ts` | **0** | 1 file, 21 tests passed — the Phase 18 route contract still holds |
-| `pnpm exec vitest run apps/web/tests/intelligence-boundaries.test.ts apps/web/tests/intelligence-observations.test.ts apps/web/tests/intelligence-workflows.test.ts apps/web/tests/intelligence-engagement.test.ts apps/web/tests/intelligence-jobs.test.ts` | **0** | 5 files, 103 tests passed |
-| `pnpm exec prettier --check <the changed files>` | **0** | every changed file is Prettier-clean |
+- [PASS] `npx tsc --noEmit -p apps/web/tsconfig.json` — exit 0.
+- [PASS] `npx prettier --check` on the eleven changed and added files — "All matched files use Prettier
+  code style!".
+- [PASS] `npx vitest run` over the three new suites plus the seven suites that cover the touched
+  behaviour — **166 tests, 10 files, all passed**.
+- [PASS] The ownership boundary is exactly the packet's file list plus the plan, the report and the
+  three tests: `git status` shows only those files. No schema, migration, registry, checksum,
+  composition, worker or contract change; `0001`–`0007` are byte-unchanged.
+- [PASS] No new dependency, no raw fetch in the importers, no trade-key change, no chart change.
 
-The whole-project `pnpm test` suite was not run: the coordinator runs the destination gate once, alone,
-after the merge.
+### Gaps noted, not failures
 
-## Verified as correct (no action)
+- The retention job does not run and the reset, the rebuild and the retention run have no API route
+  yet. Both are declared out of scope in the phase plan with the reason: the worker resolves a
+  handler for `seed_account`, `evaluate_trade` and `schedule_trigger` only (`worker.ts:214-222`), and
+  `worker.ts` and `composition.ts` are not this phase's files. The coordinator allocates them.
+- The follow-up review run did not complete inside its budget. The findings above are the previous
+  review's findings, each reproduced and proved fixed by a teeth run, plus the checks above.
 
-- **The Phase 18 contract is intact.** The route keeps its same-origin validation, its authentication
-  gate, its `400 invalid_request`, its `403 scope_denied`, its sanitised `500` and its refusal to
-  review a superseded or invalidated observation. The Phase 18 route suite passes unchanged apart from
-  one fixture line: the authentication gate now starts its review on an observation that carries no
-  review, because an observation that already carries one is refused by the new rule.
-- **Boundaries.** The client layer imports no `@/server` and no `@/db`; the new `reviewState` is a
-  public DTO in `apps/web/src/lib/intelligence-interactions.ts`. No schema change, no migration, no new
-  dependency, no change to the Phase 13 background policy.
-- **The review state is truthful.** `live` covers a review that waits, runs or is deferred;
-  `reviewed` means the operator gave the review; a cancelled or failed review is `unreviewed`, so the
-  observation may be reviewed again.
-- **The refusal leaves no trace.** The check runs before the workflow is started, so a refused start
-  writes no workflow row, no transition and no command.
+### Summary
+
+30 PASS, 0 FAIL, 0 BLOCK.

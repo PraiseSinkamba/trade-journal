@@ -145,11 +145,54 @@ registered (regenerate the artifact).
 
 ### Backup before upgrading
 
-Stop the HTTP and worker writers first, then copy the **whole** data directory — the database,
-its WAL/SHM sidecars, the key file and the attachments. Never copy only `journal.db` while the
-WAL is live; the sidecar holds committed data that has not been checkpointed yet. Verify a
-restore in scratch storage with `PRAGMA integrity_check`, `PRAGMA foreign_key_check` and a
-credential decryption.
+See [Backing up before an upgrade](#backing-up-before-an-upgrade) below.
+
+## What the migrations mean to an operator
+
+The migration history is the journal's own record of how it got to its current shape. An operator
+reads it to answer two questions: _what does this journal contain_ and _can I open it_.
+
+| Version | Adds                                                                                 | What it means                                                                     |
+| ------- | ------------------------------------------------------------------------------------ | --------------------------------------------------------------------------------- |
+| `0001`  | the legacy baseline: the trading journal and its legacy repairs                      | every journal has it; it is the shape a fresh install starts from                 |
+| `0002`  | trade projections: identities, revisions, memberships, evidence                      | the journal's own memory of how it grouped fills into trades                      |
+| `0003`  | the durable runtime: outbox, deliveries, jobs, the worker lease                      | the journal can record a change and hand it to a worker                           |
+| `0004`  | observations, their evidence links and the seed checkpoints                          | the journal's own conclusions about the trades, and whether it may re-derive them |
+| `0005`  | the background runtime: runs, policies, budget reservations                          | the background AI attempts and the daily allowance they consume                   |
+| `0006`  | knowledge and scheduling: sources, hypotheses, patterns, schedules                   | what the journal concluded about your own notes, and when a schedule is due       |
+| `0007`  | the experience layer: workflows, transitions, commands, opportunities, conversations | the interactions you still have open                                              |
+
+```sql
+-- The history of this journal.
+SELECT version, name, applied_at FROM journal_migrations ORDER BY version;
+```
+
+The ledger holds the checksum of the source each migration was applied from. A row whose checksum
+no longer matches the build's manifest means the journal was migrated by a **different** source:
+stop and report it, never "fix" the journal.
+
+## Backing up before an upgrade
+
+Stop the writers first. Two of them write to the journal:
+
+1. the **HTTP writer** — the web process;
+2. the **worker** — the separate consumer process.
+
+The worker's lease tells you whether it is running: `intelligence_worker_lease.lease_until` in the
+future means a worker holds it.
+
+Then copy the **whole data directory** — the database, its WAL/SHM sidecars, the key file
+(`.secret`) and the deletion ledger (`purge-ledger.json`). Never copy only `journal.db` while the
+WAL is live: the sidecar holds committed data that has not been checkpointed yet.
+
+The journal's own backup command does this safely: it writes a consistent snapshot with SQLite's
+`VACUUM INTO`, copies the key material beside it and records a key probe in a manifest. It refuses
+a journal whose worker lease is still live, and it refuses a journal whose key comes from
+`JOURNAL_SECRET`, because that key cannot travel with the backup.
+
+Verify a restore in scratch storage before you need it: `PRAGMA integrity_check`,
+`PRAGMA foreign_key_check` and a credential decryption with **synthetic** credentials — never the
+operator's real ones.
 
 ## Commands
 
