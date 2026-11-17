@@ -11,6 +11,104 @@ mode=parser.add_mutually_exclusive_group(required=True)
 mode.add_argument('--base-url', help='URL of a disposable journal with a separate JOURNAL_DATA_DIR')
 mode.add_argument('--benchmark-result', help='Path to an intelligence benchmark JSON result')
 args=parser.parse_args()
+
+def benchmark_gate(path):
+    """Fail CI when a measured benchmark gate is missed or unreadable."""
+    try:
+        with open(path, encoding='utf-8') as source:
+            result=json.load(source)
+    except (OSError, json.JSONDecodeError) as error:
+        print(json.dumps({'passed':False,'error':f'Cannot read benchmark result: {error}'},indent=2))
+        return 1
+    gates=[]
+    if result.get('schemaVersion') != 1 or result.get('benchmark') != 'intelligence':
+        print(json.dumps({'passed':False,'error':'Unsupported benchmark result schema.'},indent=2))
+        return 1
+    volumes=result.get('volumes')
+    if not isinstance(volumes,list) or not volumes:
+        print(json.dumps({'passed':False,'error':'Benchmark result contains no volumes.'},indent=2))
+        return 1
+    for volume in volumes:
+        if volume.get('passed') is not True:
+            print(json.dumps({'passed':False,'error':f"Volume {volume.get('volume')} did not pass."},indent=2))
+            return 1
+        modes=volume.get('modes',{})
+        for mode_name in ('idle','active'):
+            run=modes.get(mode_name,{})
+            busy=run.get('sqliteBusyEscapes')
+            lost=run.get('lostEffects')
+            failed=run.get('ingest',{}).get('failedRequests')
+            gates.append({
+                'name':f"volume {volume.get('volume')} {mode_name} zero SQLITE_BUSY escapes",
+                'passed':isinstance(busy,dict) and busy.get('total')==0,
+                'measured':busy,
+            })
+            gates.append({
+                'name':f"volume {volume.get('volume')} {mode_name} zero lost effects",
+                'passed':isinstance(lost,dict) and lost.get('missing')==0 and lost.get('acceptedButNotStored')==0,
+                'measured':lost,
+            })
+            gates.append({
+                'name':f"volume {volume.get('volume')} {mode_name} zero failed ingest requests",
+                'passed':failed==0,
+                'measured':{'failedRequests':failed},
+            })
+        drained=modes.get('active',{}).get('queueDrained')
+        gates.append({
+            'name':f"volume {volume.get('volume')} the active worker drained its backlog",
+            'passed':drained is True,
+            'measured':{'queueDrained':drained},
+        })
+        overhead=volume.get('workerOverhead',{})
+        gates.append({
+            'name':f"volume {volume.get('volume')} worker overhead reported",
+            'passed':isinstance(overhead,dict) and overhead.get('percent') is not None,
+            'measured':overhead,
+        })
+        comparison=volume.get('comparison')
+        if comparison is None:
+            # Without a comparison build there is nothing to compare, so the
+            # p95 gate is not met: the volume fails it.
+            gates.append({
+                'name':f"volume {volume.get('volume')} p95 regression measured against a baseline build",
+                'passed':False,
+                'measured':None,
+            })
+        else:
+            rows=comparison.get('rows',[])
+            if not rows:
+                # A comparison with no rows compared nothing.
+                gates.append({
+                    'name':f"volume {volume.get('volume')} p95 regression rows measured",
+                    'passed':False,
+                    'measured':None,
+                })
+            for row in rows:
+                # The threshold is re-derived here, not taken from the
+                # benchmark's own verdict.
+                baseline=row.get('baselineP95Ms')
+                candidate=row.get('candidateP95Ms')
+                regression=None
+                if isinstance(baseline,(int,float)) and baseline>0 and isinstance(candidate,(int,float)):
+                    regression=(candidate-baseline)/baseline*100
+                gates.append({
+                    'name':f"volume {row.get('volume')} {row.get('mode')} p95 regression at most 20% against the baseline build",
+                    'passed':regression is not None and regression<=20,
+                    'measured':{
+                        'baselineP95Ms':baseline,
+                        'candidateP95Ms':candidate,
+                        'regressionPercent':regression,
+                    },
+                })
+    passed=result.get('passed') is True and all(gate['passed'] for gate in gates)
+    summary={'passed':passed,'gates':gates}
+    print(json.dumps(summary,indent=2))
+    return 0 if passed else 1
+
+if args.benchmark_result:
+    sys.exit(benchmark_gate(args.benchmark_result))
+
+BASE=args.base_url.rstrip('/')
 target=urllib.parse.urlparse(BASE)
 if target.scheme!='http' or target.hostname!='127.0.0.1' or not target.port or target.port in (3000,3001) or target.path or target.query or target.fragment or target.username or target.password:
     parser.error('Choose a disposable loopback server on a port other than 3000 or 3001.')

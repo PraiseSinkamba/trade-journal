@@ -491,3 +491,142 @@ downgrade a journal by dropping tables: restore instead.
 
 See also: [Database migrations](./database-migrations.md) and
 [ADR 0007 — durable SQLite worker and migrations](../decisions/0007-durable-sqlite-worker-and-migrations.md).
+
+## Release
+
+This section is the release acceptance record for the intelligence runtime: what the benchmark
+measures, what the packaged tree must contain, which gates CI runs, and what the Phase 21 run
+actually observed.
+
+### The benchmark
+
+`scripts/benchmark-intelligence.mjs` measures the real path. It ingests synthetic fills over HTTP
+into a disposable journal and reads the journal back over HTTP. Nothing is mocked and no number
+is estimated: a counter that cannot be read is reported as `null`, and the gate it belongs to
+fails.
+
+```sh
+# A disposable scratch root, and a machine-readable result. The baseline build
+# is measured alongside the candidate build, so the p95 gate has something to
+# compare against; without it the run exits non-zero.
+node scripts/benchmark-intelligence.mjs \
+  --volumes 1000,10000,100000 \
+  --label candidate --compare-label baseline \
+  --compare-supervisor /path/to/baseline/apps/web/.next/standalone/apps/web/scripts/run-journal.mjs \
+  --data-dir /tmp/journal-benchmark \
+  --out /tmp/journal-benchmark.json
+
+# The gate: it fails when a measured threshold is missed.
+python3 scripts/verify-features.py --benchmark-result /tmp/journal-benchmark.json
+```
+
+| Volume | What it holds                                       |
+| ------ | --------------------------------------------------- |
+| 1k     | one thousand synthetic fills in one account         |
+| 10k    | ten thousand synthetic fills in one account         |
+| 100k   | one hundred thousand synthetic fills in one account |
+
+Each volume runs in both worker modes against a fresh journal, several times over:
+
+- **idle** — the supervisor with the worker disabled;
+- **active** — the supervisor with the worker enabled, so the worker has real work and the queue
+  latency is measurable.
+
+Both modes capture events, so both modes hold the same data and write the same WAL: the only
+difference between them is the worker. The difference between the two modes is reported as the
+**worker's overhead**.
+
+The read latency is measured at every ingest batch boundary, so both modes read the same sequence
+of journal sizes. A wall-clock sampler would compare one mode's early journal against the other's
+late journal, and the result would depend on how fast the ingest happened to run.
+
+Each mode's number is the **median of its repetitions**: a single latency measurement on a shared
+machine is noisy, and the threshold is not adjusted to accommodate it.
+
+| The gate               | The threshold                                                                                         |
+| ---------------------- | ----------------------------------------------------------------------------------------------------- |
+| SQLITE_BUSY escapes    | zero: no busy error in a job row, a delivery row, a failed request, or the worker's own health stream |
+| lost effects           | zero: every requested fill is in the journal, and every accepted fill is still there                  |
+| failed ingest requests | zero: a batch that failed is a failure, not a rounding error                                          |
+| queue drained          | the active worker consumed its own backlog                                                            |
+
+These gates are absolute: they hold for any build.
+
+### The p95 regression gate
+
+The p95 regression is a comparison between two **builds**: the baseline build the release replaces
+and the candidate build being released. The two are measured **back to back** — the baseline's run
+is immediately followed by the candidate's run for the same volume, mode and repetition — so both
+face the same host conditions and the difference is the build's rather than the machine's. Two
+builds measured hours apart on a shared machine differ by the machine.
+
+```sh
+node scripts/benchmark-intelligence.mjs \
+  --label candidate --compare-label baseline \
+  --compare-supervisor <baseline>/apps/web/.next/standalone/apps/web/scripts/run-journal.mjs \
+  --volumes 1000,10000,100000 --data-dir /tmp/bench \
+  --out /tmp/benchmark.json
+python3 scripts/verify-features.py --benchmark-result /tmp/benchmark.json
+```
+
+The candidate's p95 must be at most 20% above the baseline's, per volume and per worker mode.
+
+The counters are read from the journal's own records and from its own output: the busy errors from
+the `last_error` columns of `intelligence_jobs` and `event_deliveries`, from the response body of a
+failed request, and from the worker's own health stream — a busy journal is classified in the
+worker's memory and never reaches a row, because the work stays pending and is retried. The lost
+effects come from the `executions` table, the queue latency from `domain_outbox` and
+`intelligence_jobs`. The rebuild lock duration is reported as the observed maximum duration of an
+ingest request, because that transaction is what holds the write lock.
+
+### The package-content audit
+
+Two trees are audited, and their rules differ.
+
+**The runtime tree** — the web image and the desktop bundle. It must carry the standalone server
+entry point, the worker entry point with its native SQLite module, the supervisor, the static
+assets and the public assets. It must not carry a journal database, key material, a credential or
+an environment file.
+
+**The published tarballs** — `@luxalgo/journal-core` and `@luxalgo/journal-importers`, packed
+without publishing. Each tarball carries its `dist` output and its metadata, and nothing else.
+
+### The CI gates
+
+| Job         | Runner           | What it proves                                                                                           |
+| ----------- | ---------------- | -------------------------------------------------------------------------------------------------------- |
+| `quality`   | `ubuntu-latest`  | format, typecheck, tests, licences, package builds, app build                                            |
+| `desktop`   | `windows-latest` | the sidecar, the icons, `cargo check`, `cargo test`, the Tauri build, the native ABI, the packaged smoke |
+| `benchmark` | `ubuntu-latest`  | the 1k/10k/100k benchmark and its gate counters                                                          |
+| `audit`     | `ubuntu-latest`  | the published tarball content, without publishing                                                        |
+| `docker`    | `ubuntu-latest`  | the image build and the scratch-volume smoke                                                             |
+
+The root `pnpm typecheck` recurses into the desktop workspace, whose typecheck is `cargo check`. A
+`cargo check` cannot run on a Linux runner without the webview system libraries and a Linux sidecar
+binary, so the desktop's Rust gate lives in the `desktop` job on a Windows runner, and the quality
+job runs the typecheck of the TypeScript workspaces. No workspace loses a gate.
+
+The `desktop` job builds the web app with Node 24, because the sidecar is Node 24.11.0 (ABI 137)
+and `better-sqlite3` is a V8 addon bound to one `NODE_MODULE_VERSION`. The job then loads the
+built native module with the sidecar binary itself: that is the ABI evidence, and it fails the job
+if the sidecar cannot load the module.
+
+### The Phase 21 release record
+
+Every item below was run and observed. The blocked items are stated separately from the passed
+ones.
+
+| Check                                                                                           | Result                                                                                                                                                                                                                                                                   |
+| ----------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| targeted tests (`intelligence-acceptance`, `intelligence-packaging`, `intelligence-supervisor`) | passed: 3 files, 34 tests                                                                                                                                                                                                                                                |
+| `pnpm typecheck`                                                                                | passed, including the desktop `cargo check`                                                                                                                                                                                                                              |
+| `cargo check` / `cargo test` (`desktop/src-tauri`)                                              | passed                                                                                                                                                                                                                                                                   |
+| `cargo test` (`gen_icons`)                                                                      | passed: the icon writer's own header test                                                                                                                                                                                                                                |
+| the desktop build                                                                               | built; the packaged app opened the journal on a nonzero loopback port and answered HTTP                                                                                                                                                                                  |
+| the Windows packaged smoke                                                                      | passed: the journal answered over HTTP and **no `node.exe` survived the quit**                                                                                                                                                                                           |
+| the Docker scratch-volume smoke                                                                 | **blocked host evidence**: the Docker daemon is not running on this host (`failed to connect to the docker API at npipe:////./pipe/dockerDesktopLinuxEngine`). The job exists in CI; it was not run here and is not claimed as passed.                                   |
+| the 1k/10k/100k benchmark                                                                       | the absolute gates passed at every volume (zero busy escapes, zero lost effects, zero failed requests, a drained queue); the **p95 regression gate did not pass** — see the phase report for the measured numbers and for why it could not be shown to pass on this host |
+| the published tarball audit                                                                     | passed: both tarballs carry only `dist` and their metadata                                                                                                                                                                                                               |
+
+The phase report for this run is
+[docs/superpowers/reports/ai-native-journal-phase-21.md](../superpowers/reports/ai-native-journal-phase-21.md).
