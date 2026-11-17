@@ -1,12 +1,16 @@
 """Exercise feature APIs against an explicitly selected disposable journal.
 Run the app with JOURNAL_DATA_DIR pointing to a scratch directory first.
 Example: python3 scripts/verify-features.py --base-url http://127.0.0.1:3002
+Or gate a benchmark result:
+Example: python3 scripts/verify-features.py --benchmark-result benchmark-intelligence.json
 This script creates fixtures; ports 3000 and 3001 are reserved for the working and original journals.
 """
-import argparse, json, urllib.request, urllib.error, urllib.parse, uuid, base64
+import argparse, json, urllib.request, urllib.error, urllib.parse, uuid, base64, sys
 parser=argparse.ArgumentParser(description=__doc__)
-parser.add_argument('--base-url', required=True, help='URL of a disposable journal with a separate JOURNAL_DATA_DIR')
-BASE=parser.parse_args().base_url.rstrip('/')
+mode=parser.add_mutually_exclusive_group(required=True)
+mode.add_argument('--base-url', help='URL of a disposable journal with a separate JOURNAL_DATA_DIR')
+mode.add_argument('--benchmark-result', help='Path to an intelligence benchmark JSON result')
+args=parser.parse_args()
 target=urllib.parse.urlparse(BASE)
 if target.scheme!='http' or target.hostname!='127.0.0.1' or not target.port or target.port in (3000,3001) or target.path or target.query or target.fragment or target.username or target.password:
     parser.error('Choose a disposable loopback server on a port other than 3000 or 3001.')

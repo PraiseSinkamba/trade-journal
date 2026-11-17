@@ -246,10 +246,10 @@ fn write_ico(path: PathBuf, sizes: &[u32], pngs: &[Vec<u8>]) {
     let header_size = 6 + count as usize * 16;
     let mut offset = header_size as u32;
 
-    // ICONDIR
-    w.write_all(&[0u8, 0, 0, 0]).unwrap();                  // reserved (must be 0)
-    w.write_all(&1u16.to_le_bytes()).unwrap();                // type: 1 = ICO
-    w.write_all(&count.to_le_bytes()).unwrap();               // image count
+    // ICONDIR: u16 reserved, u16 type, u16 image count.
+    w.write_all(&0u16.to_le_bytes()).unwrap();
+    w.write_all(&1u16.to_le_bytes()).unwrap();
+    w.write_all(&count.to_le_bytes()).unwrap();
 
     // ICONDIRENTRY for each image
     for (i, &sz) in sizes.iter().enumerate() {
@@ -281,4 +281,53 @@ fn write_ico(path: PathBuf, sizes: &[u32], pngs: &[Vec<u8>]) {
     }
 
     w.flush().unwrap();
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use std::time::{SystemTime, UNIX_EPOCH};
+
+    /// Parse the generated ICO directory exactly as Windows does.
+    #[test]
+    fn ico_directory_describes_six_valid_images() {
+        let sizes = [16u32, 32, 48, 64, 128, 256];
+        let images: Vec<Vec<u8>> = sizes
+            .iter()
+            .map(|&size| encode_bmp(&gen_candlestick_icon(size), size))
+            .collect();
+        let unique = SystemTime::now()
+            .duration_since(UNIX_EPOCH)
+            .unwrap()
+            .as_nanos();
+        let path = std::env::temp_dir().join(format!(
+            "trade-journal-icon-test-{}-{unique}.ico",
+            std::process::id()
+        ));
+
+        write_ico(path.clone(), &sizes, &images);
+        let bytes = std::fs::read(&path).unwrap();
+        std::fs::remove_file(&path).unwrap();
+
+        let reserved = u16::from_le_bytes(bytes[0..2].try_into().unwrap());
+        let icon_type = u16::from_le_bytes(bytes[2..4].try_into().unwrap());
+        let count = u16::from_le_bytes(bytes[4..6].try_into().unwrap());
+        assert_eq!(reserved, 0);
+        assert_eq!(icon_type, 1);
+        assert_eq!(count as usize, sizes.len());
+
+        let mut expected_offset = 6 + count as usize * 16;
+        for (index, &size) in sizes.iter().enumerate() {
+            let entry = 6 + index * 16;
+            let expected_dimension = if size == 256 { 0 } else { size as u8 };
+            assert_eq!(bytes[entry], expected_dimension);
+            assert_eq!(bytes[entry + 1], expected_dimension);
+
+            let image_size = u32::from_le_bytes(bytes[entry + 8..entry + 12].try_into().unwrap()) as usize;
+            let image_offset = u32::from_le_bytes(bytes[entry + 12..entry + 16].try_into().unwrap()) as usize;
+            assert_eq!(image_offset, expected_offset);
+            assert!(image_offset + image_size <= bytes.len());
+            expected_offset += image_size;
+        }
+    }
 }

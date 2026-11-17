@@ -24,6 +24,7 @@ mod tests {
     fn test_data_dir_structure() {
         let fake = PathBuf::from("/fake/app/data");
         let result = fake.join("TradeJournal").join("data");
-        assert!(result.to_str().unwrap().ends_with("TradeJournal/data"));
+        assert_eq!(result.file_name().unwrap(), "data");
+        assert_eq!(result.parent().unwrap().file_name().unwrap(), "TradeJournal");
     }
 }

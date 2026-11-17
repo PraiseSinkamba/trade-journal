@@ -36,6 +36,8 @@ G-B after T-019: registry/gateway authority, provider/endpoint drift, cancellati
 
 G-FINAL after T-021: full CI, actual packaged clean-directory Docker/Windows smoke, forced shutdown/restart, native SQLite ABI, actual Tauri sidecar ABI with desktop restart and quit leaving no orphan processes, public tarball content audit (no publish), safe backup/deletion/retention, and same-machine 1k/10k/100k benchmark. Required threshold is zero escaped SQLITE_BUSY, zero lost effects and <=20% p95 HTTP regression; never weaken atomicity or threshold to pass. scripts/verify-features.py runs against isolated loopback data/port. No additional speculative product testing requirements are introduced here.
 
+Phase 21 (T-021) produces the G-FINAL evidence on branch `codex/ai-native-journal-p21`. Its recorded results are in `docs/superpowers/reports/ai-native-journal-phase-21.md` and the release section of `docs/intelligence-operations.md`: the Windows packaged smoke passed with no orphaned `node.exe`, the Docker scratch-volume smoke is recorded as blocked host evidence because the daemon is not running on this host, and the benchmark's counters are read from the journal's own rows rather than from an assumption.
+
 ## Recovery and decisions
 
 - Failed/partial worker: retain commits and dirty file inventory; mark candidate incomplete, do not merge or unlock dependents. Send precise fixes to that owner or a replacement after proven settlement/exit. New attempt starts from recorded partial tip, not guessed main.
