@@ -2,79 +2,55 @@
 
 ## Outcome
 
-Phase 21 was merged into `codex/ai-native-journal` at `6f7b558292756c00b5dcbdac0bda98e87bba6fd4`, but the destination gate FAILED at `pnpm typecheck (root; covers the desktop workspace)` (exit code 101). The failing command was not re-run, no success is claimed, and the merge was not undone.
+Phase 21 was merged into `codex/ai-native-journal` at `c7c49ad3cd6a0a2307bb5dc78a7990694ee39bf8` and the destination gate passed.
 
 - Destination branch: `codex/ai-native-journal`
-- Destination-before SHA: `5eddeccad36a88d002191dba5a710b879c5fdcad`
-- Candidate base SHA: `4628a575955052dbc62d674dcaf7982ef79821ba`
-- Candidate tip SHA: `aab8505a5cf3fd084ef1fad627d9fdab39d103b1`
-- Merge SHA: `6f7b558292756c00b5dcbdac0bda98e87bba6fd4` (`--no-ff`)
-- Merge parents: `5eddeccad36a88d002191dba5a710b879c5fdcad` and `aab8505a5cf3fd084ef1fad627d9fdab39d103b1`
+- Destination-before SHA: `7b038dc13351af8bbc69e5843cc7b6b462be3d07`
+- Candidate base SHA: `aab8505a5cf3fd084ef1fad627d9fdab39d103b1`
+- Candidate tip SHA: `b469b32f0cdecadb09d3359a84d279ba085465e9`
+- Merge SHA: `c7c49ad3cd6a0a2307bb5dc78a7990694ee39bf8` (`--no-ff`)
+- Merge parents: `7b038dc13351af8bbc69e5843cc7b6b462be3d07` and `b469b32f0cdecadb09d3359a84d279ba085465e9`
 - The candidate base was resolved at run time as `git merge-base codex/ai-native-journal-p21 codex/ai-native-journal`; no SHA is hardcoded in the integration script.
 
 ## Candidate commits
 
 ```
-aab8505 docs: name the Phase 21 repair commit in the phase report
-08354ba fix: enforce the packaged tree audit and make the release record state every gate
-757e3c6 docs: record the Phase 21 release acceptance evidence
-57de41a test: harden intelligence recovery packaging and operations
-1f52a91 test: harden intelligence recovery packaging and operations
-1e2e498 docs: plan the performance, packaging and release acceptance
+b469b32 docs: record the desktop scripts' icon generation in the phase report and the operations runbook
+21ee53b fix: make the desktop scripts generate the bundle icons before cargo runs
+78ee15d docs: name the gate repair commit in the phase report
+25d5a27 fix: make the desktop typecheck generate the icons the Windows resource compiler needs
 ```
 
 ## Changed-file summary
 
 ```
-.github/workflows/ci.yml                           |  232 ++++-
- .github/workflows/release.yml                      |   54 +-
- .omp/reviewer-report.md                            |  432 ++++++--
- Dockerfile                                         |    5 +
- apps/web/scripts/build-worker.mjs                  |   14 +
- apps/web/tests/intelligence-packaging.test.ts      |   95 +-
- desktop/README.md                                  |  284 +++---
- desktop/package.json                               |    6 +-
- desktop/scripts/packaged-smoke.ps1                 |  218 ++++
- desktop/scripts/run-sidecar-setup.js               |   23 +-
- desktop/src-tauri/scripts/gen_icons/src/main.rs    |   57 +-
- desktop/src-tauri/src/lib.rs                       |   88 +-
- desktop/src-tauri/src/paths.rs                     |    3 +-
- desktop/src-tauri/src/server.rs                    |  595 +++++++++--
- desktop/src-tauri/tauri.conf.json                  |    5 +-
- docs/intelligence-operations.md                    |  150 +++
- .../ai-native-journal/integration-plan.md          |    2 +
- .../plans/ai-native-journal/phase-21.md            |  315 ++++++
- .../reports/ai-native-journal-phase-21.md          |  570 +++++++++++
- scripts/benchmark-intelligence.mjs                 | 1063 ++++++++++++++++++++
- scripts/verify-features.py                         |  108 +-
- 21 files changed, 3952 insertions(+), 367 deletions(-)
+.github/workflows/ci.yml                           |   5 +-
+ .github/workflows/release.yml                      |   5 +-
+ .omp/reviewer-report.md                            | 464 ++++++---------------
+ desktop/README.md                                  |  52 ++-
+ desktop/package.json                               |   6 +-
+ desktop/scripts/run-sidecar-setup.js               |   2 +-
+ desktop/src-tauri/tauri.conf.json                  |   8 +-
+ docs/intelligence-operations.md                    |  46 +-
+ .../plans/ai-native-journal/phase-21.md            |  12 +-
+ .../reports/ai-native-journal-phase-21.md          | 203 +++++++--
+ 10 files changed, 390 insertions(+), 413 deletions(-)
 ```
 
-21 candidate files, 21 files in the merge.
+10 candidate files, 10 files in the merge.
 
 Merged files:
 
 - `.github/workflows/ci.yml`
 - `.github/workflows/release.yml`
 - `.omp/reviewer-report.md`
-- `Dockerfile`
-- `apps/web/scripts/build-worker.mjs`
-- `apps/web/tests/intelligence-packaging.test.ts`
 - `desktop/README.md`
 - `desktop/package.json`
-- `desktop/scripts/packaged-smoke.ps1`
 - `desktop/scripts/run-sidecar-setup.js`
-- `desktop/src-tauri/scripts/gen_icons/src/main.rs`
-- `desktop/src-tauri/src/lib.rs`
-- `desktop/src-tauri/src/paths.rs`
-- `desktop/src-tauri/src/server.rs`
 - `desktop/src-tauri/tauri.conf.json`
 - `docs/intelligence-operations.md`
-- `docs/orchestration/ai-native-journal/integration-plan.md`
 - `docs/superpowers/plans/ai-native-journal/phase-21.md`
 - `docs/superpowers/reports/ai-native-journal-phase-21.md`
-- `scripts/benchmark-intelligence.mjs`
-- `scripts/verify-features.py`
 
 ## Ownership verdict
 
@@ -82,24 +58,13 @@ Merged files:
 .github/workflows/ci.yml: ALLOWED (owned file)
 .github/workflows/release.yml: ALLOWED (owned file)
 .omp/reviewer-report.md: ALLOWED (local artifact)
-Dockerfile: ALLOWED (owned file)
-apps/web/scripts/build-worker.mjs: ALLOWED (owned file)
-apps/web/tests/intelligence-packaging.test.ts: ALLOWED (owned file)
 desktop/README.md: ALLOWED (owned file)
 desktop/package.json: ALLOWED (owned file)
-desktop/scripts/packaged-smoke.ps1: ALLOWED (owned file)
 desktop/scripts/run-sidecar-setup.js: ALLOWED (owned file)
-desktop/src-tauri/scripts/gen_icons/src/main.rs: ALLOWED (owned file)
-desktop/src-tauri/src/lib.rs: ALLOWED (owned file)
-desktop/src-tauri/src/paths.rs: ALLOWED (owned file)
-desktop/src-tauri/src/server.rs: ALLOWED (owned file)
 desktop/src-tauri/tauri.conf.json: ALLOWED (owned file)
 docs/intelligence-operations.md: ALLOWED (owned file)
-docs/orchestration/ai-native-journal/integration-plan.md: ALLOWED (owned file)
 docs/superpowers/plans/ai-native-journal/phase-21.md: ALLOWED (owned file)
 docs/superpowers/reports/ai-native-journal-phase-21.md: ALLOWED (owned file)
-scripts/benchmark-intelligence.mjs: ALLOWED (owned file)
-scripts/verify-features.py: ALLOWED (owned file)
 OWNERSHIP VERDICT: ALLOWED
 ```
 
@@ -110,9 +75,9 @@ The Phase 21 ownership set is the exact files `.github/workflows/ci.yml`, `.gith
 SCHEMA VERDICT: ALLOWED
 SCHEMA VERDICT: ALLOWED — this phase owns no migration and no schema change, and migrations 0001 through 0007 are byte-unchanged.
 
-- Schema allocation: None. This phase owns NO migration and NO schema change. The migration diff against the merge base `4628a575955052dbc62d674dcaf7982ef79821ba` is empty: `git diff --name-status --find-renames 4628a575955052dbc62d674dcaf7982ef79821ba..aab8505a5cf3fd084ef1fad627d9fdab39d103b1 -- apps/web/src/db/migrations/` returned no path, so no migration file was added, deleted or renamed.
-- No path under `apps/web/src/db/` changed at all: the schema, the migration registry `apps/web/src/db/migrations.ts` and the checksum artifact `apps/web/src/db/migration-checksums.json` are untouched. The diff `git diff --name-status --find-renames 4628a575955052dbc62d674dcaf7982ef79821ba..aab8505a5cf3fd084ef1fad627d9fdab39d103b1 -- apps/web/src/db/` returned no path.
-- Migrations `0001 through 0007` are byte-unchanged against the merge base `4628a575955052dbc62d674dcaf7982ef79821ba`: the git blob hash of every migration file is identical at the merge base and at the candidate tip.
+- Schema allocation: None. This phase owns NO migration and NO schema change. The migration diff against the merge base `aab8505a5cf3fd084ef1fad627d9fdab39d103b1` is empty: `git diff --name-status --find-renames aab8505a5cf3fd084ef1fad627d9fdab39d103b1..b469b32f0cdecadb09d3359a84d279ba085465e9 -- apps/web/src/db/migrations/` returned no path, so no migration file was added, deleted or renamed.
+- No path under `apps/web/src/db/` changed at all: the schema, the migration registry `apps/web/src/db/migrations.ts` and the checksum artifact `apps/web/src/db/migration-checksums.json` are untouched. The diff `git diff --name-status --find-renames aab8505a5cf3fd084ef1fad627d9fdab39d103b1..b469b32f0cdecadb09d3359a84d279ba085465e9 -- apps/web/src/db/` returned no path.
+- Migrations `0001 through 0007` are byte-unchanged against the merge base `aab8505a5cf3fd084ef1fad627d9fdab39d103b1`: the git blob hash of every migration file is identical at the merge base and at the candidate tip.
 
 | Migration | File | Git blob hash |
 | --- | --- | --- |
@@ -657,33 +622,29 @@ The desktop workspace is IN SCOPE for this gate. The ROOT `pnpm typecheck` cover
 | Command | Exit | Result |
 | --- | --- | --- |
 | `pnpm install --frozen-lockfile` | 0 | passed |
-| `pnpm typecheck (root; covers the desktop workspace)` | 101 | failed |
-| `pnpm --filter @luxalgo/journal-core --filter @luxalgo/journal-importers typecheck` | - | not run (gate stopped) |
-| `pnpm --filter web migrations:check` | - | not run (gate stopped) |
-| `node scripts/check-licenses.mjs` | - | not run (gate stopped) |
-| `pnpm exec prettier --check <prettier-governed merged files>` | - | not run (gate stopped) |
-| `pnpm build` | - | not run (gate stopped) |
-| `pnpm test` | - | not run (gate stopped) |
-| `cargo check (desktop/src-tauri)` | - | not run (gate stopped) |
-| `cargo test (desktop/src-tauri)` | - | not run (gate stopped) |
+| `pnpm typecheck (root; covers the desktop workspace)` | 0 | passed |
+| `pnpm --filter @luxalgo/journal-core --filter @luxalgo/journal-importers typecheck` | 0 | passed |
+| `pnpm --filter web migrations:check` | 0 | passed |
+| `node scripts/check-licenses.mjs` | 0 | passed |
+| `pnpm exec prettier --check <8 prettier-governed merged files>` | 0 | passed |
+| `pnpm build` | 0 | passed |
+| `pnpm test` | 0 | passed |
+| `cargo check (desktop/src-tauri)` | 0 | passed |
+| `cargo test (desktop/src-tauri)` | 0 | passed |
 
-The prettier file list was computed after the merge, from the merge commit itself: `git diff --name-only 5eddeccad36a88d002191dba5a710b879c5fdcad..6f7b558292756c00b5dcbdac0bda98e87bba6fd4` in the feature worktree, with deleted paths excluded because prettier cannot check them (21 merged files).
+The prettier file list was computed after the merge, from the merge commit itself: `git diff --name-only 7b038dc13351af8bbc69e5843cc7b6b462be3d07..c7c49ad3cd6a0a2307bb5dc78a7990694ee39bf8` in the feature worktree, with deleted paths excluded because prettier cannot check them (10 merged files).
 
-Only the files prettier actually governs are passed to prettier (12 of 21). A Rust file, a Python file and a Dockerfile are not prettier targets at all, and the YAML workflows are outside the Phase 21 prettier scope. Each governed file was probed once with `pnpm exec prettier --check <file>` before the gate command, so the result below is per file:
+Only the files prettier actually governs are passed to prettier (8 of 10). A Rust file, a Python file and a Dockerfile are not prettier targets at all, and the YAML workflows are outside the Phase 21 prettier scope. Each governed file was probed once with `pnpm exec prettier --check <file>` before the gate command, so the result below is per file:
 
 ```
   .omp/reviewer-report.md: prettier exit code 0 (formatted)
-  apps/web/scripts/build-worker.mjs: prettier exit code 0 (formatted)
-  apps/web/tests/intelligence-packaging.test.ts: prettier exit code 0 (formatted)
-  desktop/README.md: prettier exit code 1 (NOT formatted)
+  desktop/README.md: prettier exit code 0 (formatted)
   desktop/package.json: prettier exit code 0 (formatted)
-  desktop/scripts/run-sidecar-setup.js: prettier exit code 1 (NOT formatted)
-  desktop/src-tauri/tauri.conf.json: prettier exit code 1 (NOT formatted)
+  desktop/scripts/run-sidecar-setup.js: prettier exit code 0 (formatted)
+  desktop/src-tauri/tauri.conf.json: prettier exit code 0 (formatted)
   docs/intelligence-operations.md: prettier exit code 0 (formatted)
-  docs/orchestration/ai-native-journal/integration-plan.md: prettier exit code 0 (formatted)
   docs/superpowers/plans/ai-native-journal/phase-21.md: prettier exit code 0 (formatted)
   docs/superpowers/reports/ai-native-journal-phase-21.md: prettier exit code 0 (formatted)
-  scripts/benchmark-intelligence.mjs: prettier exit code 0 (formatted)
 ```
 
 Files excluded from the prettier scope:
@@ -691,35 +652,16 @@ Files excluded from the prettier scope:
 ```
   .github/workflows/ci.yml: a YAML workflow: excluded from the Phase 21 prettier scope by the gate rule
   .github/workflows/release.yml: a YAML workflow: excluded from the Phase 21 prettier scope by the gate rule
-  Dockerfile: a file without an extension (a Dockerfile): prettier has no parser for it
-  desktop/src-tauri/scripts/gen_icons/src/main.rs: a rs file: prettier has no parser for it
-  desktop/src-tauri/src/lib.rs: a rs file: prettier has no parser for it
-  desktop/src-tauri/src/paths.rs: a rs file: prettier has no parser for it
-  desktop/src-tauri/src/server.rs: a rs file: prettier has no parser for it
-  scripts/verify-features.py: a py file: prettier has no parser for it
-  desktop/scripts/packaged-smoke.ps1: prettier cannot infer a parser for this file: it is not a prettier target
 ```
 
 - prettier-governed: `.omp/reviewer-report.md`
-- prettier-governed: `apps/web/scripts/build-worker.mjs`
-- prettier-governed: `apps/web/tests/intelligence-packaging.test.ts`
 - prettier-governed: `desktop/README.md`
 - prettier-governed: `desktop/package.json`
 - prettier-governed: `desktop/scripts/run-sidecar-setup.js`
 - prettier-governed: `desktop/src-tauri/tauri.conf.json`
 - prettier-governed: `docs/intelligence-operations.md`
-- prettier-governed: `docs/orchestration/ai-native-journal/integration-plan.md`
 - prettier-governed: `docs/superpowers/plans/ai-native-journal/phase-21.md`
 - prettier-governed: `docs/superpowers/reports/ai-native-journal-phase-21.md`
-- prettier-governed: `scripts/benchmark-intelligence.mjs`
-
-The gate stopped at `pnpm typecheck (root; covers the desktop workspace)` with exit code 101. The exact failing command was:
-
-```
-pnpm typecheck
-```
-
-Every command after it was not run. The gate did not pass and this report does not claim it did.
 
 ## Observed results and blocked host evidence
 
@@ -728,9 +670,15 @@ The observed results and the blocked items are kept apart. A blocked item is nev
 ### Observed
 
 - `pnpm install --frozen-lockfile` exited 0: passed.
-- `pnpm typecheck (root; covers the desktop workspace)` exited 101: failed.
-
-Not run (the gate stopped at the first non-zero command): `pnpm --filter @luxalgo/journal-core --filter @luxalgo/journal-importers typecheck`, `pnpm --filter web migrations:check`, `node scripts/check-licenses.mjs`, `pnpm exec prettier --check <prettier-governed merged files>`, `pnpm build`, `pnpm test`, `cargo check (desktop/src-tauri)`, `cargo test (desktop/src-tauri)`.
+- `pnpm typecheck (root; covers the desktop workspace)` exited 0: passed.
+- `pnpm --filter @luxalgo/journal-core --filter @luxalgo/journal-importers typecheck` exited 0: passed.
+- `pnpm --filter web migrations:check` exited 0: passed.
+- `node scripts/check-licenses.mjs` exited 0: passed.
+- `pnpm exec prettier --check <8 prettier-governed merged files>` exited 0: passed.
+- `pnpm build` exited 0: passed.
+- `pnpm test` exited 0: passed.
+- `cargo check (desktop/src-tauri)` exited 0: passed.
+- `cargo test (desktop/src-tauri)` exited 0: passed.
 
 ### Blocked host evidence
 
@@ -740,7 +688,7 @@ Host provisioning note: the Tauri sidecar binary is gitignored, so the merge can
 
 ## Review verdict
 
-CHANGES REQUIRED. The ownership verdict is ALLOWED, the schema verdict is ALLOWED (this phase owns no migration and migrations 0001 through 0007 are byte-unchanged) and the layer-boundary verdict, scoped to the TypeScript tree and covering the contracts layer, the knowledge layer, the experience layer with its no-runtime-database-import rule, the runtime no-direct-database rule, the pure core package rule and the browser-layer rule (apps/web/src/components/, apps/web/src/lib/, apps/web/src/app/settings/), is ALLOWED, but the destination gate failed at `pnpm typecheck (root; covers the desktop workspace)` (exit code 101). The merge stays in place; the failing command must be fixed and the gate re-run before this phase is called integrated.
+PASS. The candidate commits were reviewed, the ownership boundary held (ALLOWED), the schema verdict is no migration owned with 0001 through 0007 byte-unchanged (ALLOWED), the layer-boundary verdict, scoped to the TypeScript tree and covering the contracts layer, the knowledge layer, the experience layer with its no-runtime-database-import rule, the runtime no-direct-database rule, the pure core package rule and the browser-layer rule (apps/web/src/components/, apps/web/src/lib/, apps/web/src/app/settings/), is ALLOWED, and the destination gate passed on the destination branch, desktop workspace included.
 
 ## What was not done
 
