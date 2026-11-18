@@ -1924,11 +1924,11 @@
       "0006-knowledge-scheduling",
       "0007-intelligence-experience"
     ],
-    "scale": "253 files changed, 59968 insertions(+), 1612 deletions(-)",
+    "scale": "253 files changed, 60044 insertions(+), 1612 deletions(-)",
     "verification": "every phase was reviewed, teeth-proved by the coordinator, merged with --no-ff and verified by a destination gate on the destination branch alone on the host",
     "openItems": [
       "the Docker scratch-volume smoke is blocked host evidence on this host and is carried to G-FINAL, where the CI docker job has a daemon",
-      "pnpm format:check exits 1 on 77 files; the same set failed at the base commit and the failing set is identical, and the release acceptance record states the gate as red",
+      "pnpm format:check exits 1. The repository format gate was already red at the base commit: 73 of the files tracked there fail prettier --check, and the tree this run leaves behind fails on 70 of them with no file entering the failing set - the three that left are the desktop files the Phase 21 repair formatted. The raw repository-wide count drifts with the generated Tauri schema files, so the stable statement is the base-commit set and that nothing entered it. The release acceptance record states the gate as red.",
       "the persisted home for an AI-assisted insight is a next-milestone item: no phase in this run owns a migration for it and the Slice B chain AI leg is optional"
     ],
     "whereTheEvidenceLives": [
