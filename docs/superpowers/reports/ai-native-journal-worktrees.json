@@ -1,7 +1,7 @@
 {
   "schemaVersion": 1,
   "feature": "ai-native-journal",
-  "updatedAt": "2026-11-18T12:14:44Z",
+  "updatedAt": "2026-11-18T20:20:01Z",
   "owner": "parent OMP coordinator (exclusive owner of this record)",
   "repository": {
     "name": "trade-journal",
@@ -35,8 +35,8 @@
     },
     "featureBranch": "codex/ai-native-journal",
     "featureBootstrapSha": "0a278503fd67c0f9e82138dfecb744f4bfd307ad",
-    "featureHeadSha": "cc9e991ca9a372fc938daaa62b51f64f33167d8f",
-    "featureHeadShaNote": "feature branch HEAD at the end of the run; this is the branch the twenty-one phases were integrated into",
+    "featureHeadSha": "3340519c02a46cbac406c240c78d6b8809ccc73e",
+    "featureHeadShaNote": "feature branch HEAD; the twenty-one phases are integrated and the optional-AI insight work continues from this tip on its own phase branches",
     "featureCheckpointCommits": [
       "0a278503fd67c0f9e82138dfecb744f4bfd307ad",
       "80d53ccb62fda801897852a6f4e5d2aab8b0d58b",
@@ -1941,5 +1941,46 @@
   "cleanup": {
     "state": "every phase worktree, git worktree registration, branch and leftover directory were removed after its integration was verified; only the main checkout and the feature worktree remain",
     "removed": 10
+  },
+  "optionalAiInsightWork": {
+    "plan": "C:/Users/4004/Documents/Codex/2026-11-18/report-from-implementing-agent-e-4004/minimax-slice-b-ai-plan.md",
+    "startTip": "3340519c02a46cbac406c240c78d6b8809ccc73e",
+    "startTipNote": "the plan names this SHA as the reviewed implementation; it is the current verified feature tip, so there were no subsequent fixes to record",
+    "gap": "Phase 19 left the optional-AI node of the design chain unwired: the chain had no persisted home, so the producer was deterministic and provider-free and the no-provider path became the only path. The Phase 19 report named a persisted home for an AI-assisted insight as its next-phase input.",
+    "phases": [
+      {
+        "key": "A",
+        "native": "task_c1331981f610",
+        "dispatch": "ctx_79f34d9942e6",
+        "branch": "codex/ai-native-journal-p22",
+        "plan": "docs/superpowers/plans/ai-native-journal/phase-22.md",
+        "report": "docs/superpowers/reports/ai-native-journal-phase-22.md",
+        "scope": "storage only: a dedicated revision-bound insights table in migration 0008, the store, the shared business key and capability-version constant, and the purge, reset, retention and restore integration. No provider call, no job enqueue, no UI."
+      },
+      {
+        "key": "B",
+        "native": "task_fba7b52e7c9f",
+        "dispatch": "",
+        "branch": "codex/ai-native-journal-p23",
+        "plan": "docs/superpowers/plans/ai-native-journal/phase-23.md",
+        "report": "docs/superpowers/reports/ai-native-journal-phase-23.md",
+        "scope": "the fenced asynchronous provider job: a versioned capability, an atomic run and job enqueue in the observation transaction, an async worker path that calls the provider outside any write transaction, and a final transaction that rechecks the fence, consent, pinned policy, current revision and opportunity eligibility before inserting the unique insight."
+      },
+      {
+        "key": "C",
+        "native": "task_f06df023a532",
+        "dispatch": "",
+        "branch": "codex/ai-native-journal-p24",
+        "plan": "docs/superpowers/plans/ai-native-journal/phase-24.md",
+        "report": "docs/superpowers/reports/ai-native-journal-phase-24.md",
+        "scope": "the scoped GET and the labelled rendering with the existing privacy masking, and the end-to-end Slice B proof through the real observation-to-command path, with the full suite, the typecheck, the migrations check and the bundled worker smoke."
+      }
+    ],
+    "rules": [
+      "the three phases are serial and each is merged into codex/ai-native-journal in order",
+      "each phase gets its own Orca child worktree and its own native task",
+      "the journal uses the provider its operator selected; the AI leg is optional and the deterministic path stays available throughout",
+      "a retry or a restart must never deliver a second opportunity for the same review"
+    ]
   }
 }
