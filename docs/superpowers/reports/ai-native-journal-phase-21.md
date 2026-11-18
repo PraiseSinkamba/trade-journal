@@ -10,6 +10,7 @@ schema allocation: **None**
 | Plan commit           | _docs: plan the performance, packaging and release acceptance_                            |
 | Implementation commit | _test: harden intelligence recovery packaging and operations_                             |
 | Report commit         | _docs: record the Phase 21 release acceptance evidence_                                   |
+| Repair commit         | _fix: enforce the packaged tree audit and make the release record state every gate_       |
 | Migrations            | none. `0001`–`0007` are byte-unchanged; no schema, registry or checksum file was touched. |
 
 This phase is the release half of Task 13. Phase 20 shipped the storage and operations half under
