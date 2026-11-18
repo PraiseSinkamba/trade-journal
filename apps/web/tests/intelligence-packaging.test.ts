@@ -21,6 +21,9 @@ import { repairBrokenLinks } from "../scripts/repair-links.mjs";
 
 const appRoot = resolve(dirname(fileURLToPath(import.meta.url)), "..");
 const execute = promisify(execFile);
+// A run that builds the packaged tree must audit it: the switch turns a
+// missing tree from a skip into a failure, so no gate can pass without it.
+const requirePackagedTree = process.env.JOURNAL_REQUIRE_PACKAGED_TREE === "1";
 let scratch: string;
 let artifact: string;
 const children = new Set<ChildProcess>();
@@ -167,14 +170,35 @@ describe("packaged runtime tree", () => {
     expect(forbidden).toEqual([]);
   });
 
+  it("keeps the worker artifact's paths inside the Windows path limit", async () => {
+    // The desktop installer build walks the packaged tree, and Windows caps a
+    // path at 260 characters. A package that ships an install-time-only
+    // dependency chain (prebuild-install and its transitive tree) pushes the
+    // packaged paths past that limit and fails the installer build, so the
+    // artifact must stay shallow.
+    const longest = (await regularFiles(artifact))
+      .map((path) => path.length)
+      .reduce((longest, length) => Math.max(longest, length), 0);
+    expect(longest).toBeLessThanOrEqual(260);
+  });
+
   it("contains the server, worker, native SQLite module, and supervisor without local secrets", async (ctx) => {
     const packagedTree = join(appRoot, ".next", "tauri-dist", "apps", "web");
-    try {
-      expect((await stat(packagedTree)).isDirectory()).toBe(true);
-    } catch {
+    const tree = await stat(packagedTree).catch((error: NodeJS.ErrnoException) => {
+      if (error.code === "ENOENT") return null;
+      throw error;
+    });
+    if (!tree) {
+      if (requirePackagedTree) {
+        throw new Error(
+          `The packaged runtime tree is required but missing: ${packagedTree}. ` +
+            "Build it (pnpm --filter web build) before running this audit.",
+        );
+      }
       ctx.skip("Full packaged runtime tree is not built in this checkout.");
       return;
     }
+    expect(tree.isDirectory()).toBe(true);
 
     expect((await stat(join(packagedTree, "server.js"))).isFile()).toBe(true);
     expect((await stat(join(packagedTree, "scripts", "run-journal.mjs"))).isFile()).toBe(true);

@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 import { fork, spawn } from "node:child_process";
 import { once } from "node:events";
-import { mkdir, rm, writeFile } from "node:fs/promises";
+import { mkdir, readFile, rm, writeFile } from "node:fs/promises";
 import { createServer } from "node:net";
 import { performance } from "node:perf_hooks";
 import { DatabaseSync } from "node:sqlite";
@@ -31,6 +31,28 @@ const BATCH_SIZE = 500;
 const P95_REGRESSION_LIMIT_PERCENT = 20;
 const QUEUE_DRAIN_TIMEOUT_MS = 10 * 60_000;
 const SHUTDOWN_TIMEOUT_MS = 15_000;
+
+/**
+ * The worker modes the benchmark measures.
+ *
+ * The idle mode runs no consumer, so it has no queue to drain: its queue
+ * state is not applicable and must never be reported as a failed drain.
+ */
+const WORKER_MODES = {
+  idle: { worker: "disabled", hasQueue: false },
+  active: { worker: "enabled", hasQueue: true },
+};
+
+/**
+ * Whether the journal's capture switch is on for a configured value.
+ *
+ * The rule mirrors the journal's own check, so the benchmark reports what
+ * the journal would do with the value the run was actually given.
+ */
+function eventCaptureEnabled(value) {
+  const normalized = value?.trim().toLowerCase();
+  return normalized === "1" || normalized === "true" || normalized === "on";
+}
 
 /** Parse and validate the benchmark command line. */
 export function parseArguments(args = process.argv.slice(2)) {
@@ -525,7 +547,8 @@ function readDatabaseMetrics(
 
 /** Run one volume in one worker mode against a fresh journal. */
 async function runMode(volume, mode, options, scratchRoot) {
-  const worker = mode === "active" ? "enabled" : "disabled";
+  const modeSpec = WORKER_MODES[mode];
+  const worker = modeSpec.worker;
   const dataDirectory = join(scratchRoot, `volume-${volume}-${mode}`);
   await mkdir(dataDirectory, { recursive: true });
   const port = await findFreePort(options.port);
@@ -560,7 +583,7 @@ async function runMode(volume, mode, options, scratchRoot) {
   );
   try {
     const busyWatch = createBusyWatch();
-    await waitForReady(child, mode === "active", busyWatch);
+    await waitForReady(child, modeSpec.hasQueue, busyWatch);
     const baseUrl = `http://127.0.0.1:${port}`;
     const accountId = await createAccount(baseUrl, volume, mode);
     // The read path is measured at every ingest batch boundary, so both worker
@@ -585,7 +608,7 @@ async function runMode(volume, mode, options, scratchRoot) {
       restSampleCount: restDurations.length,
     };
     let queueDrained = null;
-    if (mode === "active") {
+    if (modeSpec.hasQueue) {
       // Queue latency is captured from committed rows after the worker consumes
       // them; the read series above measures the active HTTP path under load.
       queueDrained = await waitForQueueDrain(join(dataDirectory, "journal.db"));
@@ -601,7 +624,9 @@ async function runMode(volume, mode, options, scratchRoot) {
     );
     return {
       worker,
-      eventCapture: mode === "active",
+      // The flag reports what the run's own environment asked for, not what
+      // the mode's name suggests: both modes capture events.
+      eventCapture: eventCaptureEnabled(environment.JOURNAL_EVENT_CAPTURE),
       ingest: {
         requestedFills: volume,
         reportedInserted: ingest.reportedInserted,
@@ -671,8 +696,12 @@ function mode_gate(drained) {
  * A single run of a latency measurement on a shared machine is noisy, so the
  * mode's number is the median of its repetitions. The threshold is unchanged;
  * only the estimator is made robust.
+ *
+ * The mode decides what the summary may report: a mode without a consumer
+ * has no queue, so its queue state is not applicable and is reported as null
+ * instead of as a queue that failed to drain.
  */
-function summarizeMode(runs) {
+function summarizeMode(runs, mode) {
   const p95s = runs
     .map((run) => run.readLatencyMs?.p95)
     .filter((value) => typeof value === "number");
@@ -700,8 +729,18 @@ function summarizeMode(runs) {
   const workerCodes = runs.flatMap((run) =>
     Object.keys(run.sqliteBusyEscapes?.workerErrorCodes ?? {}),
   );
+  const captureFlags = runs.map((run) => run.eventCapture);
   return {
     repetitions: runs.length,
+    // The capture flag the runs actually ran with, not one inferred from the
+    // mode's name. Every run of a mode shares the mode's environment, so one
+    // observed flag settles the mode; a mode whose runs all failed before
+    // they could report one leaves it unknown.
+    eventCapture: captureFlags.some((value) => value === false)
+      ? false
+      : captureFlags.some((value) => value === true)
+        ? true
+        : null,
     readLatencyMs: {
       p50: p50s.length ? rounded(percentile(p50s, 50)) : null,
       p95: p95s.length ? rounded(percentile(p95s, 50)) : null,
@@ -724,8 +763,64 @@ function summarizeMode(runs) {
       observedMaximumMs: rebuildMaxima.length ? rounded(Math.max(...rebuildMaxima)) : null,
       unit: "milliseconds",
     },
-    queueDrained: runs.every((run) => run.queueDrained === true),
+    // A mode without a consumer has no queue to drain, so its queue state is
+    // not applicable: it is reported as null, never as a queue that failed.
+    queueDrained: WORKER_MODES[mode].hasQueue
+      ? runs.every((run) => run.queueDrained === true)
+      : null,
   };
+}
+
+/**
+ * Assert the reporting rules the benchmark's own output must satisfy.
+ *
+ * The idle mode has no consumer and therefore no queue to drain, the active
+ * mode's queue state is a real boolean, and the capture flag is the one the
+ * run was configured with rather than the one its mode name suggests.
+ *
+ * With a benchmark result path, the produced result is checked as well: the
+ * reported flags must match what the runs actually did.
+ */
+async function runSelfCheck(resultPath) {
+  const checks = [];
+  const check = (name, passed) => checks.push({ name, passed });
+  const idle = summarizeMode([{ eventCapture: true, queueDrained: null }], "idle");
+  const active = summarizeMode([{ eventCapture: true, queueDrained: true }], "active");
+  const undrained = summarizeMode([{ eventCapture: true, queueDrained: false }], "active");
+  const uncaptured = summarizeMode([{ eventCapture: false }], "active");
+  check("the idle queue is not applicable", idle.queueDrained === null);
+  check("the active queue is a boolean", active.queueDrained === true);
+  check("an undrained active queue is false", undrained.queueDrained === false);
+  check("the idle mode reports the capture flag of its run", idle.eventCapture === true);
+  check("an uncaptured run is not reported as captured", uncaptured.eventCapture === false);
+  check("capture enabled by 1", eventCaptureEnabled("1") === true);
+  check("capture disabled by 0", eventCaptureEnabled("0") === false);
+  if (resultPath) {
+    const result = JSON.parse(await readFile(resultPath, "utf8"));
+    for (const volume of result.volumes ?? []) {
+      const idleMode = volume.modes?.idle ?? {};
+      const activeMode = volume.modes?.active ?? {};
+      check(
+        `volume ${volume.volume}: the idle mode reports that it captured events`,
+        idleMode.eventCapture === true,
+      );
+      check(
+        `volume ${volume.volume}: the idle queue is not applicable`,
+        idleMode.queueDrained === null,
+      );
+      check(
+        `volume ${volume.volume}: the active mode reports that it captured events`,
+        activeMode.eventCapture === true,
+      );
+      check(
+        `volume ${volume.volume}: the active queue is a boolean`,
+        typeof activeMode.queueDrained === "boolean",
+      );
+    }
+  }
+  const failed = checks.filter((entry) => !entry.passed);
+  console.log(JSON.stringify({ passed: failed.length === 0, checks }, null, 2));
+  if (failed.length) process.exitCode = 1;
 }
 
 /**
@@ -767,8 +862,8 @@ function compareVolumes(volume, baselineIdle, baselineActive, candidateIdle, can
  * step, not from the two worker modes of one build.
  */
 function evaluateVolume(volume, idleRuns, activeRuns) {
-  const idle = summarizeMode(idleRuns);
-  const active = summarizeMode(activeRuns);
+  const idle = summarizeMode(idleRuns, "idle");
+  const active = summarizeMode(activeRuns, "active");
   const idleP95 = idle.readLatencyMs?.p95 ?? null;
   const activeP95 = active.readLatencyMs?.p95 ?? null;
   const workerOverheadPercent =
@@ -901,10 +996,10 @@ async function main() {
       if (options.compareSupervisor) {
         evaluated.comparison = compareVolumes(
           volume,
-          summarizeMode(baselineIdleRuns),
-          summarizeMode(baselineActiveRuns),
-          summarizeMode(idleRuns),
-          summarizeMode(activeRuns),
+          summarizeMode(baselineIdleRuns, "idle"),
+          summarizeMode(baselineActiveRuns, "active"),
+          summarizeMode(idleRuns, "idle"),
+          summarizeMode(activeRuns, "active"),
         );
       }
       result.volumes.push(evaluated);
@@ -950,8 +1045,19 @@ async function main() {
 }
 
 if (process.argv[1] && resolve(process.argv[1]) === fileURLToPath(import.meta.url)) {
-  main().catch((error) => {
-    console.error(error instanceof Error ? error.message : error);
-    process.exitCode = 1;
-  });
+  const selfCheckIndex = process.argv.indexOf("--self-check");
+  if (selfCheckIndex !== -1) {
+    const resultPath = process.argv[selfCheckIndex + 1];
+    runSelfCheck(resultPath && !resultPath.startsWith("--") ? resultPath : undefined).catch(
+      (error) => {
+        console.error(error instanceof Error ? error.message : error);
+        process.exitCode = 1;
+      },
+    );
+  } else {
+    main().catch((error) => {
+      console.error(error instanceof Error ? error.message : error);
+      process.exitCode = 1;
+    });
+  }
 }

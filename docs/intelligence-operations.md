@@ -593,13 +593,13 @@ without publishing. Each tarball carries its `dist` output and its metadata, and
 
 ### The CI gates
 
-| Job         | Runner           | What it proves                                                                                           |
-| ----------- | ---------------- | -------------------------------------------------------------------------------------------------------- |
-| `quality`   | `ubuntu-latest`  | format, typecheck, tests, licences, package builds, app build                                            |
-| `desktop`   | `windows-latest` | the sidecar, the icons, `cargo check`, `cargo test`, the Tauri build, the native ABI, the packaged smoke |
-| `benchmark` | `ubuntu-latest`  | the 1k/10k/100k benchmark and its gate counters                                                          |
-| `audit`     | `ubuntu-latest`  | the published tarball content, without publishing                                                        |
-| `docker`    | `ubuntu-latest`  | the image build and the scratch-volume smoke                                                             |
+| Job         | Runner           | What it proves                                                                                                                    |
+| ----------- | ---------------- | --------------------------------------------------------------------------------------------------------------------------------- |
+| `quality`   | `ubuntu-latest`  | format, typecheck, tests, licences, package builds, app build                                                                     |
+| `desktop`   | `windows-latest` | the sidecar, the icons, `cargo check`, `cargo test`, the Tauri build, the packaged-tree audit, the native ABI, the packaged smoke |
+| `benchmark` | `ubuntu-latest`  | the benchmark's own reporting rules, the 1k/10k/100k benchmark and its gate counters                                              |
+| `audit`     | `ubuntu-latest`  | the published tarball content, without publishing                                                                                 |
+| `docker`    | `ubuntu-latest`  | the image build and the scratch-volume smoke                                                                                      |
 
 The root `pnpm typecheck` recurses into the desktop workspace, whose typecheck is `cargo check`. A
 `cargo check` cannot run on a Linux runner without the webview system libraries and a Linux sidecar
@@ -611,22 +611,33 @@ and `better-sqlite3` is a V8 addon bound to one `NODE_MODULE_VERSION`. The job t
 built native module with the sidecar binary itself: that is the ABI evidence, and it fails the job
 if the sidecar cannot load the module.
 
+That same job audits the **packaged runtime tree** it just built. The audit runs with
+`JOURNAL_REQUIRE_PACKAGED_TREE=1`, which turns a missing tree from a skip into a failure, so the
+job cannot pass without the tree it built. The `quality` job's own `pnpm test` keeps the skip,
+because it runs before the build and has no packaged tree.
+
+The packaged smoke lives in `desktop/scripts/packaged-smoke.ps1` and the CI job calls that script.
+It asserts that the journal listens on a nonzero loopback port, that it answers over HTTP, that
+the app published the **readiness signal** on exactly that port, and that no `node.exe` descendant
+survived the quit.
+
 ### The Phase 21 release record
 
 Every item below was run and observed. The blocked items are stated separately from the passed
 ones.
 
-| Check                                                                                           | Result                                                                                                                                                                                                                                                                   |
-| ----------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
-| targeted tests (`intelligence-acceptance`, `intelligence-packaging`, `intelligence-supervisor`) | passed: 3 files, 34 tests                                                                                                                                                                                                                                                |
-| `pnpm typecheck`                                                                                | passed, including the desktop `cargo check`                                                                                                                                                                                                                              |
-| `cargo check` / `cargo test` (`desktop/src-tauri`)                                              | passed                                                                                                                                                                                                                                                                   |
-| `cargo test` (`gen_icons`)                                                                      | passed: the icon writer's own header test                                                                                                                                                                                                                                |
-| the desktop build                                                                               | built; the packaged app opened the journal on a nonzero loopback port and answered HTTP                                                                                                                                                                                  |
-| the Windows packaged smoke                                                                      | passed: the journal answered over HTTP and **no `node.exe` survived the quit**                                                                                                                                                                                           |
-| the Docker scratch-volume smoke                                                                 | **blocked host evidence**: the Docker daemon is not running on this host (`failed to connect to the docker API at npipe:////./pipe/dockerDesktopLinuxEngine`). The job exists in CI; it was not run here and is not claimed as passed.                                   |
-| the 1k/10k/100k benchmark                                                                       | the absolute gates passed at every volume (zero busy escapes, zero lost effects, zero failed requests, a drained queue); the **p95 regression gate did not pass** — see the phase report for the measured numbers and for why it could not be shown to pass on this host |
-| the published tarball audit                                                                     | passed: both tarballs carry only `dist` and their metadata                                                                                                                                                                                                               |
+| Check                                                                                           | Result                                                                                                                                                                                                                                                                                                                                      |
+| ----------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| targeted tests (`intelligence-acceptance`, `intelligence-packaging`, `intelligence-supervisor`) | passed: 3 files, 35 tests                                                                                                                                                                                                                                                                                                                   |
+| `pnpm typecheck`                                                                                | passed, including the desktop `cargo check`                                                                                                                                                                                                                                                                                                 |
+| `cargo check` / `cargo test` (`desktop/src-tauri`)                                              | passed                                                                                                                                                                                                                                                                                                                                      |
+| `cargo test` (`gen_icons`)                                                                      | passed: the icon writer's own header test                                                                                                                                                                                                                                                                                                   |
+| the desktop build                                                                               | built; the packaged app opened the journal on a nonzero loopback port and answered HTTP                                                                                                                                                                                                                                                     |
+| the Windows packaged smoke                                                                      | passed: the journal answered over HTTP, the **readiness signal was published on the same port**, and **no `node.exe` survived the quit**                                                                                                                                                                                                    |
+| the Docker scratch-volume smoke                                                                 | **blocked host evidence**: the Docker daemon is not running on this host (`failed to connect to the docker API at npipe:////./pipe/dockerDesktopLinuxEngine`). The job exists in CI; it was not run here and is not claimed as passed.                                                                                                      |
+| the 1k/10k/100k benchmark                                                                       | the absolute gates passed at every volume (zero busy escapes, zero lost effects, zero failed requests, a drained queue); the **p95 regression gate passed** in the paired run against the baseline build (worst row +8.6 %, no row over the 20 % limit) — see the phase report for the measured numbers and for the host-sensitivity caveat |
+| the published tarball audit                                                                     | passed: both tarballs carry only `dist` and their metadata                                                                                                                                                                                                                                                                                  |
+| `pnpm format:check`                                                                             | **FAILED (exit 1): 77 files fail the format check.** This is a pre-existing condition, not a regression — the same 77 files already failed at the base commit, and the failing-file set is identical to the base commit's set, so this phase adds no new violation. The gate is red and is recorded as red; it is not claimed as passed.    |
 
 The phase report for this run is
 [docs/superpowers/reports/ai-native-journal-phase-21.md](../superpowers/reports/ai-native-journal-phase-21.md).

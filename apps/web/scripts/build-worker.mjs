@@ -10,6 +10,18 @@ const require = createRequire(join(appRoot, "package.json"));
 // pnpm keeps esbuild beneath tsup, not necessarily at the workspace root.
 const esbuild = createRequire(require.resolve("tsup"))("esbuild");
 
+/**
+ * Packages that a dependency installs with but never loads at runtime.
+ *
+ * `prebuild-install` is a build-time helper: better-sqlite3 runs it from its
+ * install script to fetch the prebuilt binary, and the runtime only loads the
+ * compiled `better_sqlite3.node` through `bindings`. Shipping the helper drags
+ * its whole transitive chain (tar-fs, tar-stream, readable-stream,
+ * string_decoder, safe-buffer) into the artifact, and the nested tree pushes
+ * paths past the Windows path limit, which fails the desktop installer build.
+ */
+const INSTALL_TIME_ONLY_PACKAGES = new Set(["prebuild-install"]);
+
 async function copyRuntimePackage(name, parentRequire, destination, ancestors = new Set()) {
   const manifestPath = parentRequire.resolve(`${name}/package.json`);
   const source = await realpath(dirname(manifestPath));
@@ -26,9 +38,11 @@ async function copyRuntimePackage(name, parentRequire, destination, ancestors = 
   const nestedRequire = createRequire(manifestPath);
   const nextAncestors = new Set(ancestors).add(source);
   for (const dependency of Object.keys(manifest.dependencies ?? {})) {
+    if (INSTALL_TIME_ONLY_PACKAGES.has(dependency)) continue;
     await copyRuntimePackage(dependency, nestedRequire, target, nextAncestors);
   }
   for (const dependency of Object.keys(manifest.optionalDependencies ?? {})) {
+    if (INSTALL_TIME_ONLY_PACKAGES.has(dependency)) continue;
     try {
       nestedRequire.resolve(`${dependency}/package.json`);
     } catch (error) {

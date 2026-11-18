@@ -83,6 +83,13 @@ jobs:
           # that imports the routes initializes storage; the runner's
           # filesystem root is not writable.
           JOURNAL_DATA_DIR: ${{ runner.temp }}/journal-desktop-build
+      - name: Audit the packaged runtime tree (the tree this job just built)
+        run: pnpm exec vitest run apps/web/tests/intelligence-packaging.test.ts
+        env:
+          # The quality job runs `pnpm test` before `pnpm build`, so it has no
+          # packaged tree and skips the audit. This job builds the tree, so the
+          # audit must run here and must fail if the tree is missing.
+          JOURNAL_REQUIRE_PACKAGED_TREE: "1"
       - name: Native ABI proof (the sidecar loads better-sqlite3)
         shell: pwsh
         run: |
@@ -98,86 +105,11 @@ jobs:
             Pop-Location
           }
           if ($code -ne 0) { throw "The sidecar binary could not load better-sqlite3 (exit $code)." }
-      - name: Packaged smoke (the journal answers, the app leaves no orphan)
+      - name: Packaged smoke (the journal answers, readiness fires, no orphan survives)
         shell: pwsh
-        run: |
-          $ErrorActionPreference = 'Stop'
-          $PSNativeCommandUseErrorActionPreference = $false
-
-          $exe = (Resolve-Path 'desktop/src-tauri/target/release/trade-journal-desktop.exe').Path
-          $dataDir = Join-Path $env:RUNNER_TEMP 'journal-smoke'
-          New-Item -ItemType Directory -Force -Path $dataDir | Out-Null
-          $env:JOURNAL_DATA_DIR = $dataDir
-
-          function Get-ProcessTree([int]$rootId) {
-            $children = @{}
-            foreach ($p in (Get-CimInstance Win32_Process | Select-Object ProcessId, ParentProcessId, Name)) {
-              $key = [int]$p.ParentProcessId
-              if (-not $children.ContainsKey($key)) { $children[$key] = @() }
-              $children[$key] += $p
-            }
-            $found = @()
-            $queue = [System.Collections.Generic.Queue[int]]::new()
-            $queue.Enqueue($rootId)
-            while ($queue.Count -gt 0) {
-              $current = $queue.Dequeue()
-              foreach ($child in $children[$current]) {
-                $found += $child
-                $queue.Enqueue([int]$child.ProcessId)
-              }
-            }
-            return $found
-          }
-
-          $app = Start-Process -FilePath $exe -PassThru
-          Write-Host "started the packaged app (pid $($app.Id))"
-
-          # The desktop picks its own nonzero port, so the smoke discovers the
-          # loopback listener the journal's node child owns.
-          $port = $null
-          $deadline = (Get-Date).AddSeconds(180)
-          while ((Get-Date) -lt $deadline) {
-            if ($app.HasExited) { throw "The packaged app exited with code $($app.ExitCode) before the journal answered." }
-            $nodeIds = @(Get-ProcessTree $app.Id | Where-Object { $_.Name -eq 'node.exe' } | ForEach-Object { [int]$_.ProcessId })
-            if ($nodeIds.Count -gt 0) {
-              $listener = Get-NetTCPConnection -State Listen -ErrorAction SilentlyContinue |
-                Where-Object { $nodeIds -contains [int]$_.OwningProcess -and $_.LocalAddress -eq '127.0.0.1' } |
-                Select-Object -First 1
-              if ($listener) { $port = [int]$listener.LocalPort; break }
-            }
-            Start-Sleep -Seconds 2
-          }
-          if (-not $port) { throw 'The packaged app never opened a loopback listener for the journal.' }
-          if ($port -in 3000, 3001) { throw "The journal bound a reserved port ($port)." }
-          Write-Host "the journal listens on 127.0.0.1:$port"
-
-          $answered = $false
-          for ($attempt = 0; $attempt -lt 60; $attempt++) {
-            try {
-              $response = Invoke-WebRequest -Uri "http://127.0.0.1:$port/api/accounts" -TimeoutSec 5
-              if ($response.StatusCode -eq 200) { $answered = $true; break }
-            }
-            catch { }
-            Start-Sleep -Seconds 2
-          }
-          if (-not $answered) { throw "The journal did not answer HTTP on http://127.0.0.1:$port/api/accounts." }
-          Write-Host 'the journal answered over HTTP'
-
-          # The node children the app owned while it served.
-          $children = @(Get-ProcessTree $app.Id | Where-Object { $_.Name -eq 'node.exe' } | ForEach-Object { [int]$_.ProcessId })
-          Write-Host "node.exe children: $($children -join ', ')"
-
-          # Terminate the app, then prove that no node child of it survives.
-          [void]$app.CloseMainWindow()
-          if (-not $app.WaitForExit(30000)) { Stop-Process -Id $app.Id -Force }
-          Start-Sleep -Seconds 10
-
-          $orphans = @($children | Where-Object { Get-Process -Id $_ -ErrorAction SilentlyContinue })
-          if ($orphans.Count -gt 0) {
-            foreach ($orphan in $orphans) { Stop-Process -Id $orphan -Force -ErrorAction SilentlyContinue }
-            throw "Orphaned node.exe processes survived the app: $($orphans -join ', ')"
-          }
-          Write-Host 'no orphaned node.exe survived the app'
+        run: pwsh -NoProfile -File desktop/scripts/packaged-smoke.ps1
+        env:
+          JOURNAL_DATA_DIR: ${{ runner.temp }}/journal-smoke
 
   benchmark:
     runs-on: ubuntu-latest
@@ -216,6 +148,8 @@ jobs:
           cd "$RUNNER_TEMP/baseline"
           pnpm install --frozen-lockfile
           JOURNAL_DATA_DIR="$RUNNER_TEMP/journal-baseline-build" pnpm --filter web build
+      - name: Verify the benchmark's own reporting rules
+        run: node scripts/benchmark-intelligence.mjs --self-check
       - name: Benchmark the baseline and the candidate build, back to back
         run: |
           node scripts/benchmark-intelligence.mjs \
@@ -224,6 +158,8 @@ jobs:
             --compare-supervisor "$RUNNER_TEMP/baseline/apps/web/.next/standalone/apps/web/scripts/run-journal.mjs" \
             --data-dir "$RUNNER_TEMP/ai-native-journal-benchmark" \
             --out "$RUNNER_TEMP/ai-native-journal-benchmark.json"
+      - name: Verify the reporting rules against the produced result
+        run: node scripts/benchmark-intelligence.mjs --self-check "$RUNNER_TEMP/ai-native-journal-benchmark.json"
       - name: Verify the benchmark gates (SQLITE_BUSY, lost effects, failed requests, drained queue, p95 regression)
         run: python3 scripts/verify-features.py --benchmark-result "$RUNNER_TEMP/ai-native-journal-benchmark.json"
       - uses: actions/upload-artifact@v4

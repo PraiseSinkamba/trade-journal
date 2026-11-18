@@ -10,6 +10,8 @@ use tokio::sync::Mutex;
 
 const MAX_START_ATTEMPTS: usize = 5;
 const PROCESS_EXIT_TIMEOUT: Duration = Duration::from_secs(30);
+/// The readiness marker the packaged smoke script matches on.
+const READY_MARKER: &str = "[server] ready url=";
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct ServerStatus {
@@ -321,6 +323,7 @@ async fn monitor_attempt(
                 if accepted && !ready_seen {
                     ready_seen = true;
                     let url = ready.url();
+                    eprintln!("{READY_MARKER}{url}");
                     let _ = app.emit("server-ready", serde_json::json!({ "url": url }));
                 }
             }

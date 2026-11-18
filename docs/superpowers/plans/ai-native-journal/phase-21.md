@@ -30,12 +30,14 @@ phase ships the performance, packaging and release half.
 | `desktop/src-tauri/src/server.rs`                          | fix: supervised child, explicit nonzero port, collision retry, structured readiness, tree termination    |
 | `desktop/src-tauri/src/lib.rs`                             | fix: one managed `SharedServerState`, restart, quit                                                      |
 | `desktop/src-tauri/src/paths.rs`                           | fix: its Windows-only path assertion, which failed `cargo test`                                          |
+| `desktop/scripts/packaged-smoke.ps1`                       | new: the packaged smoke as a committed script, with the readiness assertion                              |
 | `desktop/src-tauri/tauri.conf.json`                        | fix: the packaged tree the desktop actually launches                                                     |
 | `desktop/package.json`                                     | fix: the workspace scripts the desktop build and the gates need                                          |
 | `desktop/README.md`                                        | the truth about the packaged lifecycle                                                                   |
 | `scripts/benchmark-intelligence.mjs`                       | new: the 1k/10k/100k benchmark and the paired baseline comparison                                        |
 | `scripts/verify-features.py`                               | extend: the package-content and benchmark-result checks                                                  |
 | `apps/web/tests/intelligence-packaging.test.ts`            | extend: the packaging and release assertions                                                             |
+| `apps/web/scripts/build-worker.mjs`                        | fix: the worker artifact ships an install-time-only dependency chain that breaks the installer build     |
 | `.github/workflows/ci.yml`                                 | extend: the desktop, benchmark, audit and Docker gates                                                   |
 | `.github/workflows/release.yml`                            | extend: the release keeps its publish targets and gains the audit gate                                   |
 | `Dockerfile`                                               | fix: the build-time data dir and the telemetry flag                                                      |
