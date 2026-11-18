@@ -1,7 +1,7 @@
 {
   "schemaVersion": 1,
   "feature": "ai-native-journal",
-  "updatedAt": "2026-11-16T23:09:46Z",
+  "updatedAt": "2026-11-18T00:47:52Z",
   "owner": "parent OMP coordinator (exclusive owner of this record)",
   "repository": {
     "name": "trade-journal",
@@ -35,7 +35,7 @@
     },
     "featureBranch": "codex/ai-native-journal",
     "featureBootstrapSha": "0a278503fd67c0f9e82138dfecb744f4bfd307ad",
-    "featureHeadSha": "697da39df21000b6defadd8d5e952e48d54234d3",
+    "featureHeadSha": "b4b0422b6c69656a60e95820f34f25248ce12ad2",
     "featureHeadShaNote": "feature branch HEAD at the Phase 21 dispatch and the exact base of the Phase 21 worktree; the coordinator record commit advances the branch by one commit",
     "featureCheckpointCommits": [
       "0a278503fd67c0f9e82138dfecb744f4bfd307ad",
@@ -87,7 +87,8 @@
       "ab5af9661636575c5aec06acfc08952bc780d6c7",
       "3afad4bf473c2e9ad2e7d26620f1c2ad8b84eb11",
       "2aae5031edb7c4030aaca131ac9dd9005540405f",
-      "697da39df21000b6defadd8d5e952e48d54234d3"
+      "697da39df21000b6defadd8d5e952e48d54234d3",
+      "b4b0422b6c69656a60e95820f34f25248ce12ad2"
     ],
     "featureBranchNote": "Orca slugified the requested name to codex-ai-native-journal at creation; the coordinator renamed the newly created, exclusively owned branch to the contract-required codex/ai-native-journal. Orca reads the renamed ref live (refs/heads/codex/ai-native-journal). No pre-existing branch was overwritten."
   },
@@ -377,8 +378,8 @@
         "startSha": "4628a57",
         "orcaParentWorktreeId": "aa54a522-a9af-4cb4-9de7-f1d9a349c0fd::E:/4004/orca/workspaces/trade-journal/codex-ai-native-journal",
         "setup": "pnpm install --frozen-lockfile completed in the worker checkout; working tree clean; Node v24.20.0, pnpm 11.0.8; own node_modules and own pnpm virtual store",
-        "state": "dispatched: ctx_18590f1337ef, worker handle term_31fe8115-bbb1-4673-995a-f061b29909b7",
-        "note": "Phase 21 is the LAST phase: performance, complete packaging and the CI release acceptance, the remainder of detailed plan Task 13. It owns the two defects that have blocked the desktop checks since Phase 10: desktop/scripts/run-sidecar-setup.js uses CommonJS require inside a package whose package.json says type module, and desktop/src-tauri/scripts/gen_icons/src/main.rs writes an invalid ICO. It owns the benchmark script, the CI and release workflows, the Dockerfile, the package-content results and the release acceptance record. The brief requires the Docker scratch-volume smoke to be ATTEMPTED and reported as observed: the daemon is not running on this host and starting it is the operator call, so a blocked item recorded truthfully is the expected outcome and a passed item that was not run is not."
+        "state": "the implementation-diff review failed with 5 findings; the phase was reopened and the repair dispatched as ctx_55778a9ac200",
+        "note": "Phase 21 is the LAST phase: performance, complete packaging and the CI release acceptance, the remainder of detailed plan Task 13. It owns the two defects that have blocked the desktop checks since Phase 10: desktop/scripts/run-sidecar-setup.js uses CommonJS require inside a package whose package.json says type module, and desktop/src-tauri/scripts/gen_icons/src/main.rs writes an invalid ICO. It owns the benchmark script, the CI and release workflows, the Dockerfile, the package-content results and the release acceptance record. The brief requires the Docker scratch-volume smoke to be ATTEMPTED and reported as observed: the daemon is not running on this host and starting it is the operator call, so a blocked item recorded truthfully is the expected outcome and a passed item that was not run is not. The independent implementation-diff review returned 5 findings, all about the release acceptance being TRUE rather than about the core behaviour, which the reviewer confirmed correct: the ICO header fix with a test that fails against the old output, the nonzero-port selection, the JSON readiness parse, the single shared SharedServerState, the taskkill /T tree kill with a Windows grandchild test, the busy counter reading workerHealth.worker.lastErrorCode from the worker health stream, waitForQueueDrain recorded and gating, the Docker item recorded as blocked host evidence and carried to G-FINAL and never as passed, the p95 gate comparing two builds, and the format failing set identical to the base commit set. The five findings: the packaged runtime-tree audit skips when the tree is absent and no CI job has it, so it is enforced by no gate; the commands table omits the three commands that produced the key evidence, so the p50 and p95 tables and the smoke pid and port trace to no recorded command; the release acceptance record lists every gate except the one that is red, pnpm format:check exiting 1 on 77 files; the packaged smoke never asserts the server-ready event, which was the exact signal defect 4 broke; and the benchmark misreports its own workload, claiming the idle run captured no events although both modes set the capture flag, and reporting the idle queue as false although idle has no queue. The coordinator granted the two paths the candidate needed, desktop/src-tauri/src/paths.rs and the integration plan document, and dispatched the repair."
       }
     ]
   },
@@ -779,8 +780,9 @@
       "status": "dispatched",
       "state": "dispatched",
       "outcome": null,
-      "nativeDispatch": "ctx_18590f1337ef",
-      "note": "the last phase: performance, complete packaging and the CI release acceptance. The brief requires the two long-standing desktop defects to be fixed so the desktop cargo check and the Windows packaged smoke can run at all, the benchmark with the 1k, 10k and 100k synthetic fills and the p50 and p95 latency, the package-content results, the CI and release workflows, the Dockerfile, and the release acceptance record with the blocked items stated separately from the passed ones. The Docker smoke must be attempted and reported as observed, never mocked and never claimed as passed."
+      "nativeDispatch": "ctx_55778a9ac200",
+      "note": "the last phase: performance, complete packaging and the CI release acceptance. The brief requires the two long-standing desktop defects to be fixed so the desktop cargo check and the Windows packaged smoke can run at all, the benchmark with the 1k, 10k and 100k synthetic fills and the p50 and p95 latency, the package-content results, the CI and release workflows, the Dockerfile, and the release acceptance record with the blocked items stated separately from the passed ones. The Docker smoke must be attempted and reported as observed, never mocked and never claimed as passed. The implementation-diff review found five findings, all about the release record being true: an audit no gate enforces, three commands missing from the evidence table, the red format gate absent from the acceptance record, the readiness signal unasserted in the smoke, and a benchmark misreporting its own workload. The repair is in flight.",
+      "priorDispatch": "ctx_18590f1337ef"
     }
   ],
   "dispatches": [
@@ -1368,6 +1370,23 @@
       "worktree": "aa54a522-a9af-4cb4-9de7-f1d9a349c0fd::E:/4004/orca/workspaces/trade-journal/codex-ai-native-journal-p21",
       "base": "4628a57",
       "purpose": "Phase 21 - performance, complete packaging and the CI release acceptance; the last phase",
+      "state": "completed; the implementation-diff review failed with 5 findings and the phase was reopened for repair",
+      "candidate": ["1e2e498", "1f52a91", "57de41a", "757e3c6"],
+      "reviewed": true,
+      "integrated": false,
+      "verified": false,
+      "outcome": "the worker delivered the release acceptance with the desktop defects fixed and the Windows packaged smoke run; the implementation-diff review found five findings about the acceptance being true rather than about the core behaviour",
+      "tip": "757e3c6"
+    },
+    {
+      "task": "T-021",
+      "native": "task_d136aa634289",
+      "dispatch": "ctx_55778a9ac200",
+      "agent": "omp",
+      "provider": "omp",
+      "worktree": "aa54a522-a9af-4cb4-9de7-f1d9a349c0fd::E:/4004/orca/workspaces/trade-journal/codex-ai-native-journal-p21",
+      "base": "757e3c6",
+      "purpose": "Phase 21 repair - enforce the packaged runtime-tree audit in a gate, state every gate in the release record including the red format gate, assert the readiness signal in the smoke, correct the benchmark self-report and complete the command table",
       "state": "dispatched",
       "candidate": [],
       "reviewed": false,
