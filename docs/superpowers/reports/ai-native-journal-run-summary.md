@@ -106,9 +106,9 @@ test files. No schema allocation. Merge `40011b4`. **What was caught** — the p
 `prettier --check` and the phase report claimed the format gate was clean; the defect was routed to
 a replacement attempt and fixed at `477b102`, the false claim corrected at `f0edcc3`. The first
 dispatch was revoked by an Orca runtime restart, not by a worker failure. **Detail** —
-[integration](docs/superpowers/reports/ai-native-journal-integration-01.md) ·
-[phase report](docs/superpowers/reports/ai-native-journal-phase-01.md) ·
-[plan](docs/superpowers/plans/ai-native-journal/phase-01.md)
+[integration](./ai-native-journal-integration-01.md) ·
+[phase report](./ai-native-journal-phase-01.md) ·
+[plan](../plans/ai-native-journal/phase-01.md)
 
 ### Phase 02 — Versioned migration runner and legacy baseline
 
@@ -124,9 +124,9 @@ concurrency test spawns child Node processes with `--experimental-strip-types` t
 TypeScript modules, so the explicit specifier is required. The worker's own two reviews fixed five
 things, among them a duplicate-version drop in the manifest generator and an unenforced manifest
 name. **Detail** —
-[integration](docs/superpowers/reports/ai-native-journal-integration-02.md) ·
-[phase report](docs/superpowers/reports/ai-native-journal-phase-02.md) ·
-[plan](docs/superpowers/plans/ai-native-journal/phase-02.md)
+[integration](./ai-native-journal-integration-02.md) ·
+[phase report](./ai-native-journal-phase-02.md) ·
+[plan](../plans/ai-native-journal/phase-02.md)
 
 ### Phase 03 — Projection identity, fingerprints and immutable revisions
 
@@ -145,9 +145,9 @@ failed. The provider outage was recorded: the first sixteen model calls failed w
 `insufficient_balance_error` and then HTTP 401 `invalid api key`, exhausting the retry budget at
 15:02Z; the worker recovered and completed the phase on its own once the balance was restored.
 **Detail** —
-[integration](docs/superpowers/reports/ai-native-journal-integration-03.md) ·
-[phase report](docs/superpowers/reports/ai-native-journal-phase-03.md) ·
-[plan](docs/superpowers/plans/ai-native-journal/phase-03.md)
+[integration](./ai-native-journal-integration-03.md) ·
+[phase report](./ai-native-journal-phase-03.md) ·
+[plan](../plans/ai-native-journal/phase-03.md)
 
 ### Phase 04 — Outbox, durable jobs and fenced worker mechanics
 
@@ -167,9 +167,9 @@ to an implementation worker; no production semantics changed. The initial attemp
 `api.minimax.io` mid-phase and still completed, and the coordinator's supervisor aborted on a single
 transient error, which was a false alarm.
 **Detail** —
-[integration](docs/superpowers/reports/ai-native-journal-integration-04.md) ·
-[phase report](docs/superpowers/reports/ai-native-journal-phase-04.md) ·
-[plan](docs/superpowers/plans/ai-native-journal/phase-04.md)
+[integration](./ai-native-journal-integration-04.md) ·
+[phase report](./ai-native-journal-phase-04.md) ·
+[plan](../plans/ai-native-journal/phase-04.md)
 
 ### Phase 05 — Transaction-aware reconciliation for manual and generic ingestion
 
@@ -187,9 +187,9 @@ which can fail the WAL deferred-to-write upgrade with `SQLITE_BUSY_SNAPSHOT`, an
 reconciliation that rewrote every projection on a zero-insert broker poll, and a vacuous rollback
 assertion whose two injected failures both happened before the note write.
 **Detail** —
-[integration](docs/superpowers/reports/ai-native-journal-integration-05.md) ·
-[phase report](docs/superpowers/reports/ai-native-journal-phase-05.md) ·
-[plan](docs/superpowers/plans/ai-native-journal/phase-05.md)
+[integration](./ai-native-journal-integration-05.md) ·
+[phase report](./ai-native-journal-phase-05.md) ·
+[plan](../plans/ai-native-journal/phase-05.md)
 
 ### Phase 06 — All broker and specialized import paths
 
@@ -205,9 +205,9 @@ real contract defects: the import route could still decide from a stale pre-tran
 the XTB holdings reconciliation and the IBKR timezone check were computed outside any transaction on
 both the preview and the commit path, and the XTB commit response exposed a new `matched` key,
 changing the import response contract. **Detail** —
-[integration](docs/superpowers/reports/ai-native-journal-integration-06.md) ·
-[phase report](docs/superpowers/reports/ai-native-journal-phase-06.md) ·
-[plan](docs/superpowers/plans/ai-native-journal/phase-06.md)
+[integration](./ai-native-journal-integration-06.md) ·
+[phase report](./ai-native-journal-phase-06.md) ·
+[plan](../plans/ai-native-journal/phase-06.md)
 
 ### Phase 07 — Remaining mutation commands and settings-driven rebuilds
 
@@ -225,9 +225,9 @@ Three risks were handed forward and accepted: the write lock of a multiplier cha
 journal and is measured at the Phase 21 release gate; a transfer is refused when the moved fills
 merge with the destination's, deliberately; and the purge must be extended to the observation tables
 when migration `0004` arrives. **Detail** —
-[integration](docs/superpowers/reports/ai-native-journal-integration-07.md) ·
-[phase report](docs/superpowers/reports/ai-native-journal-phase-07.md) ·
-[plan](docs/superpowers/plans/ai-native-journal/phase-07.md)
+[integration](./ai-native-journal-integration-07.md) ·
+[phase report](./ai-native-journal-phase-07.md) ·
+[plan](../plans/ai-native-journal/phase-07.md)
 
 ### Phase 08 — Factual observations and explicit cTrader evidence quality
 
@@ -248,9 +248,9 @@ the phase's own files (a three-line wrapped evaluator signature and a six-space 
 in the plan). The dispatch was revoked by an Orca runtime restart at 2026-10-28T20:04:12Z: the worker
 survived the revocation, completed and verified the implementation, and composed its summary at
 22:31Z, but could no longer send its `worker_done`. **Detail** —
-[integration](docs/superpowers/reports/ai-native-journal-integration-08.md) ·
-[phase report](docs/superpowers/reports/ai-native-journal-phase-08.md) ·
-[plan](docs/superpowers/plans/ai-native-journal/phase-08.md)
+[integration](./ai-native-journal-integration-08.md) ·
+[phase report](./ai-native-journal-phase-08.md) ·
+[plan](../plans/ai-native-journal/phase-08.md)
 
 ### Phase 09 — Historical seed, replay and no-provider recovery
 
@@ -270,9 +270,9 @@ event id and payloadJson on both sides — rather than weakening it, and no prod
 permitted to make the test pass. Two scope extensions were granted after verification on the merged
 branch: the worker routing path, and the source-only derived-quality extraction that removed a
 quadratic rescan. **Detail** —
-[integration](docs/superpowers/reports/ai-native-journal-integration-09.md) ·
-[phase report](docs/superpowers/reports/ai-native-journal-phase-09.md) ·
-[plan](docs/superpowers/plans/ai-native-journal/phase-09.md)
+[integration](./ai-native-journal-integration-09.md) ·
+[phase report](./ai-native-journal-phase-09.md) ·
+[plan](../plans/ai-native-journal/phase-09.md)
 
 ### Phase 10 — Node supervisor, worker bundle and Docker startup
 
@@ -295,9 +295,9 @@ file only; no production deadline, timeout or assertion changed. The Docker scra
 blocked host evidence: the daemon is stopped and was not started. Two dispatches were revoked by the
 orchestration, and the MiniMax balance hit zero during the repair with repeated HTTP 402 responses.
 **Detail** —
-[integration](docs/superpowers/reports/ai-native-journal-integration-10.md) ·
-[phase report](docs/superpowers/reports/ai-native-journal-phase-10.md) ·
-[plan](docs/superpowers/plans/ai-native-journal/phase-10.md)
+[integration](./ai-native-journal-integration-10.md) ·
+[phase report](./ai-native-journal-phase-10.md) ·
+[plan](../plans/ai-native-journal/phase-10.md)
 
 ### Phase 11 — Slice A integrated gate and financial regression
 
@@ -316,9 +316,9 @@ Docker scratch-volume smoke, which cannot run on this host, so the Docker and Ta
 moved from G-A to G-FINAL. The root `pnpm typecheck` exited 101 on the `desktop` workspace's
 `cargo check`, blocked host evidence from the pre-existing sidecar defect, never mocked.
 **Detail** —
-[integration](docs/superpowers/reports/ai-native-journal-integration-11.md) ·
-[phase report](docs/superpowers/reports/ai-native-journal-phase-11.md) ·
-[plan](docs/superpowers/plans/ai-native-journal/phase-11.md)
+[integration](./ai-native-journal-integration-11.md) ·
+[phase report](./ai-native-journal-phase-11.md) ·
+[plan](../plans/ai-native-journal/phase-11.md)
 
 ### Phase 12 — Execution contexts, capability registry and tool gateway
 
@@ -337,9 +337,9 @@ runtime hook, so the legacy request-level budget error became unreachable and a 
 `maxToolCalls` received a normal answer instead. The repair made the context always consult the
 hook while its own ceiling stays authoritative, and the coordinator proved the new regression tests
 fail against the pre-fix code. **Detail** —
-[integration](docs/superpowers/reports/ai-native-journal-integration-12.md) ·
-[phase report](docs/superpowers/reports/ai-native-journal-phase-12.md) ·
-[plan](docs/superpowers/plans/ai-native-journal/phase-12.md)
+[integration](./ai-native-journal-integration-12.md) ·
+[phase report](./ai-native-journal-phase-12.md) ·
+[plan](../plans/ai-native-journal/phase-12.md)
 
 ### Phase 13 — Background AI policies, reservations and provider adapters
 
@@ -361,9 +361,9 @@ concurrent-writer case; and a false `0005`-coverage claim in the plan and the re
 touched no production file. The destination gate failed once at `prettier --check` on seven
 never-formatted candidate files; the formatting was applied at `1df91a2`, proven formatting-only, and
 the whole gate was re-run alone on the host. **Detail** —
-[integration](docs/superpowers/reports/ai-native-journal-integration-13.md) ·
-[phase report](docs/superpowers/reports/ai-native-journal-phase-13.md) ·
-[plan](docs/superpowers/plans/ai-native-journal/phase-13.md)
+[integration](./ai-native-journal-integration-13.md) ·
+[phase report](./ai-native-journal-phase-13.md) ·
+[plan](../plans/ai-native-journal/phase-13.md)
 
 ### Phase 14 — Knowledge-source revisions and invalidation
 
@@ -386,9 +386,9 @@ they claimed, and the plan's column table contradicted the shipped migration. Th
 found two defects in its own integration script — the schema verdict regex could never match, and
 the migration path was built with a doubled prefix — before the merge, and corrected the plan's
 `source_kind` CHECK row. **Detail** —
-[integration](docs/superpowers/reports/ai-native-journal-integration-14.md) ·
-[phase report](docs/superpowers/reports/ai-native-journal-phase-14.md) ·
-[plan](docs/superpowers/plans/ai-native-journal/phase-14.md)
+[integration](./ai-native-journal-integration-14.md) ·
+[phase report](./ai-native-journal-phase-14.md) ·
+[plan](../plans/ai-native-journal/phase-14.md)
 
 ### Phase 15 — Durable time and condition scheduling
 
@@ -407,9 +407,9 @@ checkpoint replayed what it had already consumed, a dead condition occurrence re
 change forever, and a dead time occurrence stalled the schedule on a key it could never use again.
 The repair re-anchors a damaged cursor from the job ledger, burns dead occurrences and advances
 `next_due_at`. Six-mutation teeth proof. **Detail** —
-[integration](docs/superpowers/reports/ai-native-journal-integration-15.md) ·
-[phase report](docs/superpowers/reports/ai-native-journal-phase-15.md) ·
-[plan](docs/superpowers/plans/ai-native-journal/phase-15.md)
+[integration](./ai-native-journal-integration-15.md) ·
+[phase report](./ai-native-journal-phase-15.md) ·
+[plan](../plans/ai-native-journal/phase-15.md)
 
 ### Phase 16 — Persistent workflow command and transition engine
 
@@ -432,9 +432,9 @@ side effect. It also raised a FAIL: `definition_version` was written on every wo
 read, so a workflow under a different definition was still advanced by the current rules. The repair
 made the transaction an injected seam with type-only database imports and made the legal-transition
 source keyed by (definition, version). **Detail** —
-[integration](docs/superpowers/reports/ai-native-journal-integration-16.md) ·
-[phase report](docs/superpowers/reports/ai-native-journal-phase-16.md) ·
-[plan](docs/superpowers/plans/ai-native-journal/phase-16.md)
+[integration](./ai-native-journal-integration-16.md) ·
+[phase report](./ai-native-journal-phase-16.md) ·
+[plan](../plans/ai-native-journal/phase-16.md)
 
 ### Phase 17 — Engagement and opportunity coordination
 
@@ -455,9 +455,9 @@ and the last-proactive read moved from a full table scan to an index search, ver
 with `EXPLAIN QUERY PLAN`; the subject query still scans and its cost is handed to the next
 migration, which owns the schema. A third reviewer run was spent beyond the budget of two, to
 confirm the fixes. **Detail** —
-[integration](docs/superpowers/reports/ai-native-journal-integration-17.md) ·
-[phase report](docs/superpowers/reports/ai-native-journal-phase-17.md) ·
-[plan](docs/superpowers/plans/ai-native-journal/phase-17.md)
+[integration](./ai-native-journal-integration-17.md) ·
+[phase report](./ai-native-journal-phase-17.md) ·
+[plan](../plans/ai-native-journal/phase-17.md)
 
 ### Phase 18 — Authenticated interaction and control APIs
 
@@ -478,9 +478,9 @@ revoked-scope refusal had no independent teeth, because the suite's only unknown
 an account-bound workflow, where the workflow-scope check refuses with the same body. The first
 destination gate run failed at `prettier --check` on two never-formatted candidate documents; the
 formatting was applied at `2783ab4` and the whole gate was re-run alone. **Detail** —
-[integration](docs/superpowers/reports/ai-native-journal-integration-18.md) ·
-[phase report](docs/superpowers/reports/ai-native-journal-phase-18.md) ·
-[plan](docs/superpowers/plans/ai-native-journal/phase-18.md)
+[integration](./ai-native-journal-integration-18.md) ·
+[phase report](./ai-native-journal-phase-18.md) ·
+[plan](../plans/ai-native-journal/phase-18.md)
 
 ### Phase 19 — Native inbox and control UI, and the complete Slice B gate
 
@@ -506,9 +506,9 @@ and refused a duplicate review start with `409 review_already_started`. The coor
 that the proactive opt-in had nothing persisting it, that the deletion of persistent intelligence
 was named in the brief although the contract review assigns it to Phase 20, and that nothing called
 `engage()` outside the tests — so the Slice B chain was not a running path. **Detail** —
-[integration](docs/superpowers/reports/ai-native-journal-integration-19.md) ·
-[phase report](docs/superpowers/reports/ai-native-journal-phase-19.md) ·
-[plan](docs/superpowers/plans/ai-native-journal/phase-19.md)
+[integration](./ai-native-journal-integration-19.md) ·
+[phase report](./ai-native-journal-phase-19.md) ·
+[plan](../plans/ai-native-journal/phase-19.md)
 
 ### Phase 20 — Retention, backup/restore, deletion and operations documentation
 
@@ -537,9 +537,9 @@ domain's private file. The phase's own verification command had run only the thr
 and omitted the boundary test that caught them; every later phase runs it. Two merges followed: the
 phase's first merge, whose gate failed, and then the boundary repair commits `73930f9` and `5f2793c`
 merged in `33e1fce`, whose gate passed. **Detail** —
-[integration](docs/superpowers/reports/ai-native-journal-integration-20.md) ·
-[phase report](docs/superpowers/reports/ai-native-journal-phase-20.md) ·
-[plan](docs/superpowers/plans/ai-native-journal/phase-20.md)
+[integration](./ai-native-journal-integration-20.md) ·
+[phase report](./ai-native-journal-phase-20.md) ·
+[plan](../plans/ai-native-journal/phase-20.md)
 
 ### Phase 21 — Performance, complete packaging and the CI release acceptance
 
@@ -575,9 +575,9 @@ followed: the first merge, whose gate failed, and then the icon repair merged in
 gate was re-run green with the desktop workspace in scope. The Windows packaged smoke passed with
 the readiness signal asserted and no orphaned `node.exe`; the Docker scratch-volume smoke was
 attempted and recorded as blocked host evidence. **Detail** —
-[integration](docs/superpowers/reports/ai-native-journal-integration-21.md) ·
-[phase report](docs/superpowers/reports/ai-native-journal-phase-21.md) ·
-[plan](docs/superpowers/plans/ai-native-journal/phase-21.md)
+[integration](./ai-native-journal-integration-21.md) ·
+[phase report](./ai-native-journal-phase-21.md) ·
+[plan](../plans/ai-native-journal/phase-21.md)
 
 ## What remains open
 
@@ -589,9 +589,9 @@ with its own evidence.
    Phase 21 and the output recorded — `failed to connect to the docker API at
 npipe:////./pipe/dockerDesktopLinuxEngine` — and it was never claimed as passed. The CI `docker`
    job exists and has a daemon, so G-FINAL is where the item lands. Recorded in
-   [the Phase 21 phase report](docs/superpowers/reports/ai-native-journal-phase-21.md) under _The
+   [the Phase 21 phase report](./ai-native-journal-phase-21.md) under _The
    Docker scratch-volume smoke — blocked host evidence_, in
-   [the operations release record](docs/intelligence-operations.md) and in the coordinator index's
+   [the operations release record](../../intelligence-operations.md) and in the coordinator index's
    open items.
 2. **`pnpm format:check` is red.** The repository's format gate was already red at the base commit
    and is red now; the release acceptance record states it as red and does not claim it passed. The
@@ -602,15 +602,15 @@ npipe:////./pipe/dockerDesktopLinuxEngine` — and it was never claimed as passe
    earlier wording of this item — "77 files", "the failing set is identical" — was found false
    during the Phase 21 gate repair and corrected in the phase report, in the operations record and in
    the coordinator index, whose open item now carries the corrected numbers. Recorded
-   in [the Phase 21 phase report](docs/superpowers/reports/ai-native-journal-phase-21.md) under
+   in [the Phase 21 phase report](./ai-native-journal-phase-21.md) under
    _Three files this phase left unformatted_ and in
-   [the operations release record](docs/intelligence-operations.md).
+   [the operations release record](../../intelligence-operations.md).
 3. **The persisted home for an AI-assisted insight — a next-milestone item.** The chain's AI leg has
    no table of its own: an opportunity carries no text, and a provider call may not happen inside a
    write transaction. No phase in this run owns the migration that would give it one, and the leg
    itself is optional, so this is a next-milestone item and not a hole in the Phase 20 or Phase 21
-   gates. Recorded in [the Phase 20 plan](docs/superpowers/plans/ai-native-journal/phase-20.md) and
-   [the Phase 20 phase report](docs/superpowers/reports/ai-native-journal-phase-20.md) under _The next
+   gates. Recorded in [the Phase 20 plan](../plans/ai-native-journal/phase-20.md) and
+   [the Phase 20 phase report](./ai-native-journal-phase-20.md) under _The next
    phase's inputs_.
 
 Two further surfaces are named in the same place and are also next-milestone items rather than
