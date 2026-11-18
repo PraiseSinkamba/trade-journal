@@ -1,18 +1,54 @@
 mod paths;
 mod server;
 
-use server::{get_status, restart_server as srv_restart, start_server, stop_server, ServerStatus, SharedServerState};
-use std::sync::Arc;
+use server::{
+    get_status, restart_server as srv_restart, start_server, stop_server, ServerStatus,
+    SharedServerState,
+};
+use std::sync::{
+    atomic::{AtomicBool, Ordering},
+    Arc,
+};
 use tauri::{
     menu::{Menu, MenuItem},
     tray::{MouseButton, MouseButtonState, TrayIconBuilder, TrayIconEvent},
-    AppHandle, Emitter, Listener, Manager,
+    AppHandle, Emitter, Listener, Manager, RunEvent,
 };
 use tokio::sync::Mutex;
 
+struct ShutdownState {
+    exiting: AtomicBool,
+}
+
+impl Default for ShutdownState {
+    fn default() -> Self {
+        Self {
+            exiting: AtomicBool::new(false),
+        }
+    }
+}
+
+/// Stop the managed tree once, then request application exit.
+fn request_shutdown(app: &AppHandle) -> bool {
+    let shutdown = app.state::<ShutdownState>();
+    if shutdown.exiting.swap(true, Ordering::SeqCst) {
+        return false;
+    }
+    let state = app.state::<SharedServerState>();
+    let state_clone = Arc::clone(&state);
+    let app_clone = app.clone();
+    tauri::async_runtime::spawn(async move {
+        if let Err(error) = stop_server(&state_clone).await {
+            eprintln!("Server shutdown failed: {error}");
+        }
+        app_clone.exit(0);
+    });
+    true
+}
+
 #[tauri::command]
 async fn get_server_status(state: tauri::State<'_, SharedServerState>) -> Result<ServerStatus, String> {
-    Ok(get_status(&state).await)
+    Ok(get_status(state.inner()).await)
 }
 
 #[tauri::command]
@@ -20,20 +56,12 @@ async fn restart_server(
     app: AppHandle,
     state: tauri::State<'_, SharedServerState>,
 ) -> Result<(), String> {
-    srv_restart(&state).await;
     let data_dir = app.path().app_data_dir()
         .map_err(|e| format!("Could not resolve app data directory: {}", e))?;
     let data_dir = data_dir.join("TradeJournal").join("data");
     std::fs::create_dir_all(&data_dir)
         .map_err(|e| format!("Failed to create data directory: {}", e))?;
-    let dir_clone = data_dir.clone();
-    let app_handle = app.clone();
-    tauri::async_runtime::spawn(async move {
-        if let Err(e) = start_server(&app_handle, &dir_clone).await {
-            eprintln!("Server restart failed: {}", e);
-        }
-    });
-    Ok(())
+    srv_restart(&app, &data_dir, state.inner()).await
 }
 
 #[tauri::command]
@@ -75,9 +103,8 @@ fn setup_tray(app: &AppHandle) -> Result<(), Box<dyn std::error::Error>> {
                         let _ = std::fs::create_dir_all(&data_dir);
                         let app_clone = app_handle.clone();
                         tauri::async_runtime::spawn(async move {
-                            srv_restart(&state_clone).await;
-                            if let Err(e) = start_server(&app_clone, &data_dir).await {
-                                eprintln!("Server restart failed: {}", e);
+                            if let Err(error) = srv_restart(&app_clone, &data_dir, &state_clone).await {
+                                eprintln!("Server restart failed: {error}");
                             }
                         });
                     }
@@ -90,12 +117,7 @@ fn setup_tray(app: &AppHandle) -> Result<(), Box<dyn std::error::Error>> {
                     }
                 }
                 "quit" => {
-                    let state = app_handle.state::<SharedServerState>();
-                    let state_clone = Arc::clone(&state);
-                    tokio::spawn(async move {
-                        stop_server(&state_clone).await;
-                        std::process::exit(0);
-                    });
+                    request_shutdown(&app_handle);
                 }
                 _ => {}
             }
@@ -130,17 +152,16 @@ pub fn run() {
             std::fs::create_dir_all(&data_dir)
                 .map_err(|e| format!("Failed to create data directory: {}", e))?;
 
-            let state: SharedServerState = Arc::new(Mutex::new(server::ServerState {
-                child: None,
-                port: None,
-            }));
+            let state: SharedServerState = Arc::new(Mutex::new(server::ServerState::default()));
             app.manage(state.clone());
+            app.manage(ShutdownState::default());
 
             // Start server
             let app_handle = app.handle().clone();
             let dir_clone = data_dir.clone();
+            let start_state = state.clone();
             tauri::async_runtime::spawn(async move {
-                if let Err(e) = start_server(&app_handle, &dir_clone).await {
+                if let Err(e) = start_server(&app_handle, &dir_clone, &start_state).await {
                     eprintln!("Server start failed: {}", e);
                     let _ = app_handle.emit("server-error", e);
                 }
@@ -164,8 +185,8 @@ pub fn run() {
         })
         .on_window_event(|window, event| {
             if let tauri::WindowEvent::CloseRequested { api, .. } = event {
-                let _ = window.hide();
                 api.prevent_close();
+                request_shutdown(window.app_handle());
             }
         })
         .invoke_handler(tauri::generate_handler![
@@ -173,6 +194,13 @@ pub fn run() {
             restart_server,
             open_data_folder,
         ])
-        .run(tauri::generate_context!())
-        .expect("error while running tauri application");
+        .build(tauri::generate_context!())
+        .expect("error while building tauri application")
+        .run(|app, event| {
+            if let RunEvent::ExitRequested { api, code, .. } = event {
+                if code.is_none() && request_shutdown(app) {
+                    api.prevent_exit();
+                }
+            }
+        });
 }

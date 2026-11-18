@@ -5,9 +5,16 @@ on:
     branches: [main]
   pull_request:
 
+# One run per ref. A newer push supersedes the run in flight for that ref,
+# so a broken branch does not queue a second full run behind the first.
+concurrency:
+  group: ci-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
 jobs:
   quality:
     runs-on: ubuntu-latest
+    timeout-minutes: 30
     steps:
       - uses: actions/checkout@v6
       # pnpm version comes from the packageManager field in package.json
@@ -18,8 +25,231 @@ jobs:
           cache: pnpm
       - run: pnpm install --frozen-lockfile
       - run: pnpm format:check
-      - run: pnpm typecheck
+      # The root typecheck script recurses into every workspace, and the
+      # desktop workspace's typecheck is `cargo check`: it cannot run on
+      # ubuntu-latest (no webview system libraries, no Linux sidecar binary).
+      # The root package.json belongs to another owner, so the workflow scopes
+      # the run itself; the Rust gate lives in the desktop job below.
+      - run: pnpm -r --filter "!desktop" typecheck
       - run: pnpm test
       - run: node scripts/check-licenses.mjs
       - run: pnpm -r --filter "./packages/*" build
       - run: pnpm build
+        env:
+          # A build that imports the routes initializes storage, and the
+          # runner's filesystem root is not writable: the build needs its own
+          # disposable journal directory.
+          NEXT_TELEMETRY_DISABLED: "1"
+          JOURNAL_DATA_DIR: ${{ runner.temp }}/journal-quality
+
+  desktop:
+    runs-on: windows-latest
+    timeout-minutes: 90
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          # The sidecar and the icons are gitignored, so this job needs the
+          # full history only for the benchmark baseline it does not build.
+          fetch-depth: 1
+      # pnpm version comes from the packageManager field in package.json
+      - uses: pnpm/action-setup@v6
+      # Node 24: the sidecar is Node 24.11.0 (ABI 137) and better-sqlite3 in
+      # this repository is a V8 addon bound to one NODE_MODULE_VERSION, so the
+      # web app must be built with the same Node major as the sidecar that
+      # loads it. The ABI proof below loads the built module with the sidecar
+      # binary itself.
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - name: Install the Node sidecar (gitignored binary)
+        run: pnpm --filter desktop setup:sidecar
+      - name: Generate the bundle icons (gitignored, reproducible)
+        run: pnpm --filter desktop setup:icons
+      - name: cargo check (desktop)
+        run: cargo check --manifest-path desktop/src-tauri/Cargo.toml
+      - name: cargo test (desktop)
+        run: cargo test --manifest-path desktop/src-tauri/Cargo.toml
+      - name: cargo check (icon generator)
+        run: cargo check --manifest-path desktop/src-tauri/scripts/gen_icons/Cargo.toml
+      - name: cargo test (icon generator)
+        run: cargo test --manifest-path desktop/src-tauri/scripts/gen_icons/Cargo.toml
+      - name: Build the packaged application
+        run: pnpm --filter desktop build:app
+        env:
+          NEXT_TELEMETRY_DISABLED: "1"
+          # The desktop's build script builds the web tree first, and a build
+          # that imports the routes initializes storage; the runner's
+          # filesystem root is not writable.
+          JOURNAL_DATA_DIR: ${{ runner.temp }}/journal-desktop-build
+      - name: Audit the packaged runtime tree (the tree this job just built)
+        run: pnpm exec vitest run apps/web/tests/intelligence-packaging.test.ts
+        env:
+          # The quality job runs `pnpm test` before `pnpm build`, so it has no
+          # packaged tree and skips the audit. This job builds the tree, so the
+          # audit must run here and must fail if the tree is missing.
+          JOURNAL_REQUIRE_PACKAGED_TREE: "1"
+      - name: Native ABI proof (the sidecar loads better-sqlite3)
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = 'Stop'
+          $PSNativeCommandUseErrorActionPreference = $false
+          $sidecar = (Resolve-Path 'desktop/src-tauri/binaries/node-x86_64-pc-windows-msvc.exe').Path
+          Push-Location 'apps/web'
+          try {
+            & $sidecar --input-type=commonjs -e "const Database=require('better-sqlite3');const db=new Database(':memory:');db.exec('CREATE TABLE t(x)');db.prepare('INSERT INTO t VALUES (?)').run(42);if(db.prepare('SELECT x FROM t').get().x!==42)throw new Error('unexpected row');console.log('sidecar node',process.version,'ABI',process.versions.modules,'loaded better-sqlite3');"
+            $code = $LASTEXITCODE
+          }
+          finally {
+            Pop-Location
+          }
+          if ($code -ne 0) { throw "The sidecar binary could not load better-sqlite3 (exit $code)." }
+      - name: Packaged smoke (the journal answers, readiness fires, no orphan survives)
+        shell: pwsh
+        run: pwsh -NoProfile -File desktop/scripts/packaged-smoke.ps1
+        env:
+          JOURNAL_DATA_DIR: ${{ runner.temp }}/journal-smoke
+
+  benchmark:
+    runs-on: ubuntu-latest
+    # The benchmark runs each volume three times per worker mode against two
+    # builds, and the 100k volume with an active worker is the slow one.
+    timeout-minutes: 240
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          # The baseline build is the parent of this branch's tip, so the
+          # history must be present: a shallow fetch has no parent commit.
+          fetch-depth: 0
+      # pnpm version comes from the packageManager field in package.json
+      - uses: pnpm/action-setup@v6
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - name: Build the candidate web tree
+        run: pnpm --filter web build
+        env:
+          NEXT_TELEMETRY_DISABLED: "1"
+          # A build that imports the routes initializes storage, and the
+          # runner's filesystem root is not writable.
+          JOURNAL_DATA_DIR: ${{ runner.temp }}/journal-benchmark-build
+      - name: Build the baseline web tree (the merge base of this branch)
+        run: |
+          set -euo pipefail
+          base="${{ github.event.pull_request.base.sha }}"
+          if [ -z "$base" ] || [ "$base" = "0000000000000000000000000000000000000000" ]; then
+            base="$(git rev-parse HEAD^)"
+          fi
+          echo "the baseline build is $base"
+          git worktree add "$RUNNER_TEMP/baseline" "$base"
+          cd "$RUNNER_TEMP/baseline"
+          pnpm install --frozen-lockfile
+          JOURNAL_DATA_DIR="$RUNNER_TEMP/journal-baseline-build" pnpm --filter web build
+      - name: Verify the benchmark's own reporting rules
+        run: node scripts/benchmark-intelligence.mjs --self-check
+      - name: Benchmark the baseline and the candidate build, back to back
+        run: |
+          node scripts/benchmark-intelligence.mjs \
+            --volumes 1000,10000,100000 --samples 30 --repetitions 3 \
+            --label candidate --compare-label baseline \
+            --compare-supervisor "$RUNNER_TEMP/baseline/apps/web/.next/standalone/apps/web/scripts/run-journal.mjs" \
+            --data-dir "$RUNNER_TEMP/ai-native-journal-benchmark" \
+            --out "$RUNNER_TEMP/ai-native-journal-benchmark.json"
+      - name: Verify the reporting rules against the produced result
+        run: node scripts/benchmark-intelligence.mjs --self-check "$RUNNER_TEMP/ai-native-journal-benchmark.json"
+      - name: Verify the benchmark gates (SQLITE_BUSY, lost effects, failed requests, drained queue, p95 regression)
+        run: python3 scripts/verify-features.py --benchmark-result "$RUNNER_TEMP/ai-native-journal-benchmark.json"
+      - uses: actions/upload-artifact@v4
+        with:
+          name: benchmark-result
+          path: ${{ runner.temp }}/ai-native-journal-benchmark.json
+          if-no-files-found: error
+
+  audit:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v6
+      # pnpm version comes from the packageManager field in package.json
+      - uses: pnpm/action-setup@v6
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm -r --filter "./packages/*" build
+      - name: Pack the published packages without publishing
+        run: |
+          mkdir -p "$RUNNER_TEMP/tarballs"
+          pnpm -r --filter "./packages/*" pack --pack-destination "$RUNNER_TEMP/tarballs"
+      - name: Assert each tarball carries only its dist output and metadata
+        run: |
+          set -euo pipefail
+          tarballs=("$RUNNER_TEMP"/tarballs/*.tgz)
+          if [ "${#tarballs[@]}" -ne 2 ]; then
+            echo "expected 2 tarballs, found ${#tarballs[@]}"
+            exit 1
+          fi
+          for tarball in "${tarballs[@]}"; do
+            name="$(basename "$tarball")"
+            echo "== $name"
+            entries="$(tar -tzf "$tarball")"
+            printf '%s\n' "$entries"
+            # No src directory, no database, no credential, no runtime asset.
+            forbidden="$(printf '%s\n' "$entries" | grep -Ei '^package/src/|\.(db|sqlite|sqlite3|db-journal|db-wal|db-shm)$|(^|/)\.env|credential|secret|\.(pem|key|p12|pfx|node|so|dylib|dll|exe|wasm|png|jpe?g|gif|svg|ico|woff2?|ttf|otf)$' || true)"
+            if [ -n "$forbidden" ]; then
+              echo "forbidden content in $name:"
+              printf '%s\n' "$forbidden"
+              exit 1
+            fi
+            # Nothing but the dist output and the package metadata.
+            extra="$(printf '%s\n' "$entries" | grep -vE '^package/dist/|^package/(package\.json|README\.md|LICENSE)$' || true)"
+            if [ -n "$extra" ]; then
+              echo "unexpected entries in $name:"
+              printf '%s\n' "$extra"
+              exit 1
+            fi
+            if ! printf '%s\n' "$entries" | grep -qE '^package/dist/'; then
+              echo "$name carries no dist output"
+              exit 1
+            fi
+          done
+          for expected in luxalgo-journal-core- luxalgo-journal-importers-; do
+            if ! printf '%s\n' "${tarballs[@]##*/}" | grep -q "^${expected}"; then
+              echo "missing the tarball of ${expected}"
+              exit 1
+            fi
+          done
+          echo "the published tarballs carry only their dist output and metadata"
+
+  docker:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v6
+      - name: Build the image
+        run: docker build -t trade-journal:ci .
+      - name: Run the image on a scratch volume and verify the features
+        run: |
+          set -euo pipefail
+          docker volume create tj-smoke-data
+          docker run -d --name tj-smoke -v tj-smoke-data:/data -p 3007:3000 -e JOURNAL_DATA_DIR=/data trade-journal:ci
+          ready=0
+          for _ in $(seq 1 60); do
+            if curl -fsS http://127.0.0.1:3007/api/accounts > /dev/null; then ready=1; break; fi
+            sleep 2
+          done
+          if [ "$ready" -ne 1 ]; then
+            docker logs tj-smoke
+            echo "the image did not answer HTTP on 127.0.0.1:3007"
+            exit 1
+          fi
+          python3 scripts/verify-features.py --base-url http://127.0.0.1:3007
+      - name: Remove the container and the scratch volume
+        if: always()
+        run: |
+          docker rm -f tj-smoke || true
+          docker volume rm tj-smoke-data || true

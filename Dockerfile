@@ -1,5 +1,9 @@
 # Self-hosted trade journal — single container, SQLite on a volume.
 FROM node:22-slim AS builder
+ENV NEXT_TELEMETRY_DISABLED=1
+# A build that imports the routes initializes storage, so the build gets its
+# own disposable journal directory instead of the image's volume.
+ENV JOURNAL_DATA_DIR=/tmp/journal-build
 RUN corepack enable
 WORKDIR /repo
 COPY pnpm-workspace.yaml package.json pnpm-lock.yaml ./
@@ -12,6 +16,7 @@ RUN pnpm --filter web build
 
 FROM node:22-slim AS runner
 ENV NODE_ENV=production
+ENV NEXT_TELEMETRY_DISABLED=1
 ENV JOURNAL_DATA_DIR=/data
 WORKDIR /app
 # Next standalone output bundles the server and pruned node_modules.

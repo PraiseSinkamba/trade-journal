@@ -14,13 +14,16 @@ import {
   writeFile,
 } from "node:fs/promises";
 import { tmpdir } from "node:os";
-import { dirname, join, resolve } from "node:path";
+import { basename, dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { promisify } from "node:util";
 import { repairBrokenLinks } from "../scripts/repair-links.mjs";
 
 const appRoot = resolve(dirname(fileURLToPath(import.meta.url)), "..");
 const execute = promisify(execFile);
+// A run that builds the packaged tree must audit it: the switch turns a
+// missing tree from a skip into a failure, so no gate can pass without it.
+const requirePackagedTree = process.env.JOURNAL_REQUIRE_PACKAGED_TREE === "1";
 let scratch: string;
 let artifact: string;
 const children = new Set<ChildProcess>();
@@ -59,6 +62,39 @@ async function nativeArtifacts(directory: string): Promise<string[]> {
     }),
   );
   return nested.flat();
+}
+
+async function regularFiles(directory: string): Promise<string[]> {
+  const entries = await readdir(directory, { withFileTypes: true });
+  const nested = await Promise.all(
+    entries.map(async (entry) => {
+      const path = join(directory, entry.name);
+      if (entry.isDirectory()) return regularFiles(path);
+      return entry.isFile() ? [path] : [];
+    }),
+  );
+  return nested.flat();
+}
+
+/** Runtime trees must never carry local state or secrets into a distributable artifact. */
+function forbiddenRuntimeFile(path: string): boolean {
+  const name = basename(path).toLowerCase();
+  return (
+    name === "journal.db" ||
+    name.startsWith("journal.db-") ||
+    name === ".secret" ||
+    name.startsWith(".env") ||
+    name.endsWith(".pem") ||
+    name.endsWith(".key") ||
+    name.endsWith(".p12") ||
+    name.endsWith(".pfx") ||
+    name === "credentials.json" ||
+    name === "credentials.yaml" ||
+    name === "credentials.yml" ||
+    name === "credential.json" ||
+    name === "credential.yaml" ||
+    name === "credential.yml"
+  );
 }
 
 async function startPortable(name: string) {
@@ -119,6 +155,63 @@ describe("independent worker deployment artifact", () => {
     expect(await exited).toEqual([0, null]);
     expect((await stat(join(data, "journal.db"))).size).toBeGreaterThan(0);
   }, 120_000);
+});
+
+describe("packaged runtime tree", () => {
+  it("keeps the worker artifact free of journals and secrets", async () => {
+    expect((await stat(join(artifact, "worker-entry.cjs"))).isFile()).toBe(true);
+    expect(
+      (await nativeArtifacts(join(artifact, "node_modules"))).some((path) =>
+        path.endsWith("better_sqlite3.node"),
+      ),
+    ).toBe(true);
+
+    const forbidden = (await regularFiles(artifact)).filter(forbiddenRuntimeFile);
+    expect(forbidden).toEqual([]);
+  });
+
+  it("keeps the worker artifact's paths inside the Windows path limit", async () => {
+    // The desktop installer build walks the packaged tree, and Windows caps a
+    // path at 260 characters. A package that ships an install-time-only
+    // dependency chain (prebuild-install and its transitive tree) pushes the
+    // packaged paths past that limit and fails the installer build, so the
+    // artifact must stay shallow.
+    const longest = (await regularFiles(artifact))
+      .map((path) => path.length)
+      .reduce((longest, length) => Math.max(longest, length), 0);
+    expect(longest).toBeLessThanOrEqual(260);
+  });
+
+  it("contains the server, worker, native SQLite module, and supervisor without local secrets", async (ctx) => {
+    const packagedTree = join(appRoot, ".next", "tauri-dist", "apps", "web");
+    const tree = await stat(packagedTree).catch((error: NodeJS.ErrnoException) => {
+      if (error.code === "ENOENT") return null;
+      throw error;
+    });
+    if (!tree) {
+      if (requirePackagedTree) {
+        throw new Error(
+          `The packaged runtime tree is required but missing: ${packagedTree}. ` +
+            "Build it (pnpm --filter web build) before running this audit.",
+        );
+      }
+      ctx.skip("Full packaged runtime tree is not built in this checkout.");
+      return;
+    }
+    expect(tree.isDirectory()).toBe(true);
+
+    expect((await stat(join(packagedTree, "server.js"))).isFile()).toBe(true);
+    expect((await stat(join(packagedTree, "scripts", "run-journal.mjs"))).isFile()).toBe(true);
+    expect((await stat(join(packagedTree, "worker", "worker-entry.cjs"))).isFile()).toBe(true);
+    expect(
+      (await nativeArtifacts(join(packagedTree, "worker"))).some((path) =>
+        path.endsWith("better_sqlite3.node"),
+      ),
+    ).toBe(true);
+
+    const forbidden = (await regularFiles(packagedTree)).filter(forbiddenRuntimeFile);
+    expect(forbidden).toEqual([]);
+  });
 });
 
 describe("packaged dependency links", () => {
