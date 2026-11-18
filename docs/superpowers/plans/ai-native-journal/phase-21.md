@@ -261,7 +261,9 @@ The desktop workspace's own `typecheck` script generates the icons before it com
 are a build input of the Windows resource — `cargo check` compiles `icons/icon.ico` into it — they
 are not in git, and no merge can carry a corrected one, so the gate that compiles the crate has to
 produce it. A checkout that carries an icon from an older generator fails `cargo check` with
-`RC2175` otherwise.
+`RC2175` otherwise. The two build scripts compile the same resource, so `build:app` and
+`build:debug` generate the icons too, and every desktop script that runs cargo is
+self-sufficient.
 
 The release workflow keeps its two publish targets, its OIDC trusted publishing and its manual
 trigger. Its typecheck step is scoped the same way as the quality job's, so it cannot fail on a

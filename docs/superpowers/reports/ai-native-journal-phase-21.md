@@ -3,16 +3,16 @@
 Phase guide row 21 · detailed-plan Task 13 (performance, packaging and release half) · milestone M6 ·
 schema allocation: **None**
 
-|                       |                                                                                           |
-| --------------------- | ----------------------------------------------------------------------------------------- |
-| Branch                | `codex/ai-native-journal-p21` (child of the feature worktree)                             |
-| Base                  | `4628a575955052dbc62d674dcaf7982ef79821ba` (verified feature HEAD)                        |
-| Plan commit           | _docs: plan the performance, packaging and release acceptance_                            |
-| Implementation commit | _test: harden intelligence recovery packaging and operations_                             |
-| Report commit         | _docs: record the Phase 21 release acceptance evidence_                                   |
-| Repair commit         | _fix: enforce the packaged tree audit and make the release record state every gate_       |
-| Gate repair commit    | _fix: make the desktop typecheck generate the icons the Windows resource compiler needs_  |
-| Migrations            | none. `0001`–`0007` are byte-unchanged; no schema, registry or checksum file was touched. |
+|                       |                                                                                                                                                                        |
+| --------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Branch                | `codex/ai-native-journal-p21` (child of the feature worktree)                                                                                                          |
+| Base                  | `4628a575955052dbc62d674dcaf7982ef79821ba` (verified feature HEAD)                                                                                                     |
+| Plan commit           | _docs: plan the performance, packaging and release acceptance_                                                                                                         |
+| Implementation commit | _test: harden intelligence recovery packaging and operations_                                                                                                          |
+| Report commit         | _docs: record the Phase 21 release acceptance evidence_                                                                                                                |
+| Repair commit         | _fix: enforce the packaged tree audit and make the release record state every gate_                                                                                    |
+| Gate repair commits   | _fix: make the desktop typecheck generate the icons the Windows resource compiler needs_ · _fix: make the desktop scripts generate the bundle icons before cargo runs_ |
+| Migrations            | none. `0001`–`0007` are byte-unchanged; no schema, registry or checksum file was touched.                                                                              |
 
 This phase is the release half of Task 13. Phase 20 shipped the storage and operations half under
 the **same** commit subject (`test: harden intelligence recovery packaging and operations`); this
@@ -209,6 +209,9 @@ Every command below was run against the tree of this phase, on Node v24.22.3 and
 | `pnpm --filter desktop typecheck` with the same stale `icon.ico` in place                                                                                                                                                                                                                                                                        | 0    | 45 s    | the icon was regenerated (its SHA-256 returned to `640877a9…`) and `cargo check` passed                                                                                                                                              |
 | the destination gate sequence, re-run **in this worktree** after the repair (this is the worktree run, not the coordinator's gate): install, root typecheck, packages typecheck, migrations:check, licences, prettier over the 12 governed merged files, build, test, `cargo check`, `cargo test`, icon-generator `cargo check` and `cargo test` | 0    | 675 s   | **every command exited 0**: `pnpm test` **1375 passed** (116 files), `cargo test` **5 passed**, the icon generator's test **1 passed**. The coordinator's own gate still has to be re-run on the merged result                       |
 | `JOURNAL_REQUIRE_PACKAGED_TREE=1 pnpm exec vitest run apps/web/tests/intelligence-acceptance.test.ts apps/web/tests/intelligence-packaging.test.ts`                                                                                                                                                                                              | 0    | 15 s    | **19 passed** (2 files) — the packaged-tree audit ran against the built tree instead of skipping                                                                                                                                     |
+| `pnpm exec vitest run apps/web/tests/intelligence-acceptance.test.ts apps/web/tests/intelligence-packaging.test.ts apps/web/tests/intelligence-supervisor.test.ts`, run **after deleting the generated icons**                                                                                                                                   | 0    | 24 s    | **35 passed** (3 files)                                                                                                                                                                                                              |
+| `pnpm typecheck` (root), run **after deleting the generated icons**                                                                                                                                                                                                                                                                              | 0    | 66 s    | the desktop's typecheck regenerated the five icon files and `cargo check` passed; no type errors anywhere                                                                                                                            |
+| `pnpm --filter desktop build:app`, run **after deleting the generated icons**                                                                                                                                                                                                                                                                    | 0    | 784 s   | the build script generated the icons first, then built the packaged tree and the **MSI (51.46 MiB) and NSIS (32.70 MiB) installers**                                                                                                 |
 
 The `format:check` result is a **pre-existing** condition, not a regression, and the earlier
 wording of it in this report was wrong and is corrected here. The repository's format gate was
@@ -431,21 +434,30 @@ thread 'main' panicked at ...\tauri-winres-0.3.6\src\lib.rs:543:14:
 ```
 
 **The cause was a stale generated file, not the merged code.** The bundle icons are generated and
-gitignored, so a checkout carries whatever icon was last generated in it. The destination worktree
-carried an `icon.ico` from the **pre-Phase-21** generator — an icon the Windows resource compiler
-cannot read — and the gate had provisioned the sidecar but not the icons. Phase 21 fixed the
-generator (this phase's writer emits the six-byte icon directory and the BMP entries `rc.exe`
-requires), but a checkout that already holds an old icon keeps that old icon: the merge cannot
-carry the fix, because the icons are not in git.
+gitignored, like the Node sidecar, so a checkout carries whatever icon was last generated in it.
+The destination worktree carried an `icon.ico` from the **pre-Phase-21** generator — an icon the
+Windows resource compiler cannot read — and the gate had provisioned the sidecar but not the
+icons. Phase 21 fixed the generator (this phase's writer emits the six-byte icon directory and the
+BMP entries `rc.exe` requires), but a checkout that already holds an old icon keeps that old icon:
+the merge cannot carry the fix, because the icons are not in git.
 
-**The fix is that the desktop's typecheck owns its own inputs.** The desktop workspace's
-typecheck now regenerates the icons before it compiles:
+**The fix is that the desktop's own scripts own their inputs.** Every desktop script that runs
+cargo now generates the icons before it compiles:
 
 ```json
 "typecheck": "pnpm run icons && cd src-tauri && cargo check"
+"build:app": "pnpm run icons && pnpm build:web && tauri build"
+"build:debug": "pnpm run icons && pnpm build:web && tauri build --debug"
 ```
 
-A fresh checkout, and a checkout carrying an icon from an older generator, now typecheck.
+`tauri build` compiles the same Windows resource, so a local `pnpm --filter desktop build:app`
+failed the same way and now does not. A fresh checkout, and a checkout carrying an icon from an
+older generator, now typecheck and build.
+
+**A direct `cargo check` still needs the icons first.** A command that does not go through the
+desktop's scripts — the release gate runs `cargo check` and `cargo test` directly — compiles the
+same resource, so it needs `pnpm --filter desktop setup:icons` once before it. The desktop's own
+scripts now guarantee it for everyone else, and the operations record says so.
 
 _Proof of teeth._ The destination worktree's stale `icon.ico` was copied into this checkout and
 the build script was forced to rerun. The **old** command (`cd src-tauri && cargo check`) failed
@@ -453,7 +465,8 @@ with the destination gate's exact error, `error RC2175 : resource file ... is no
 and **exit 101**. The **fixed** command on the same stale file regenerated the icon (its SHA-256
 returned to `640877a9…`, the generator's output) and `cargo check` **exited 0**. The same held
 with the icons deleted outright: `pnpm --filter desktop typecheck` regenerated all five files and
-exited 0.
+exited 0. The build script is the same case: with the icons deleted, `pnpm --filter desktop
+build:app` regenerated them and produced the MSI and the NSIS installer (exit 0, 784 s).
 
 **The whole gate sequence was re-run after the repair, in this worktree.** This is the worktree
 run, not the coordinator's gate on the merged result: the coordinator still has to merge this
@@ -489,7 +502,7 @@ on **70** now: three fewer, none added. The gate itself was already red before t
 red now — a pre-existing condition, not a regression, and not something this phase can fix inside
 its ownership.
 
-### The gate repair went through three review rounds
+### The gate repair went through four review rounds
 
 **Round 1** returned FAIL with four findings, all real: the report's new table rows broke
 `prettier --check` on the report file itself; the `format:check` wording was false (it claimed 77
@@ -509,10 +522,14 @@ in the report. The plan now records that the desktop typecheck generates the ico
 the probe, the operations document still described the desktop typecheck as a plain `cargo check`,
 the report's commit row named a commit that did not exist yet, and the gate-sequence row read as
 though the destination gate had passed. The heading is retitled, the operations document is
-corrected, the commit row is filled in by the follow-up commit that names this one, and the row
-states that it is the worktree run, not the coordinator's gate.
+corrected, the commit rows are filled in by the commits that follow, and the row states that it is
+the worktree run, not the coordinator's gate.
 
-**Round 4** is the pass this commit was made against.
+**Round 4** returned PASS. The two non-blocking items it raised — the commit row and the two
+workflow comments that still called the desktop typecheck a plain `cargo check` — are fixed. Four
+review rounds is more than the repair budget allowed; the extra rounds were spent on the report's
+own prose, not on new code, and every finding they raised was a real defect in a document that
+claims to be a record of what was observed.
 
 ## The measurement was corrected twice
 
@@ -658,12 +675,12 @@ and no environment file. The test passed in the targeted run and in the whole-pr
    the `build:app` evidence that the repair's Finding 2 demanded failed on the MSI bundling step,
    and the cause was this script shipping an install-time-only dependency chain. The plan's
    ownership table now lists the file.
-8. **`desktop/package.json`'s typecheck now generates the icons before it compiles.** The
+8. **`desktop/package.json`'s cargo scripts now generate the icons before they compile.** The
    destination gate failed at the root typecheck because the checkout carried an `icon.ico` from
    the pre-Phase-21 generator, and the Windows resource compiler rejects it. The icons are
    generated and gitignored, so no merge can carry a repaired icon; the gate has to produce one.
-   The plan's ownership table already lists `desktop/package.json`, and the desktop README
-   documents the requirement.
+   `typecheck`, `build:app` and `build:debug` now generate them. The plan's ownership table
+   already lists `desktop/package.json`, and the desktop README documents the requirement.
 
 ## What this phase leaves to the release gate
 
@@ -671,6 +688,11 @@ and no environment file. The test passed in the targeted run and in the whole-pr
   (exit 101, the desktop's `cargo check` on a stale generated icon). The gate repair is described
   under **The gate repair**; the fix is in this branch and needs the coordinator's merge and gate
   re-run.
+- **The gate's provisioning needs the icons, not only the sidecar.** The gate runs `cargo check`
+  and `cargo test` **directly**, and those commands do not go through the desktop's scripts, so
+  they need `pnpm --filter desktop setup:icons` once before them — the same way they need
+  `setup:sidecar`. The desktop's own scripts now generate the icons on their own, so only the
+  direct cargo commands need the provisioning step.
 - **The Docker scratch-volume smoke.** Blocked host evidence, carried to G-FINAL. The CI job exists.
 - **The p95 regression gate.** The gate is implemented, it fails when it is not met, and in the
   recorded paired run on this host it **passed** (worst row +8.6 %). It is host-sensitive: an

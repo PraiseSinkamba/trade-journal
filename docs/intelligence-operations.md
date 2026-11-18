@@ -607,6 +607,19 @@ webview system libraries and a Linux sidecar binary, so the desktop's Rust gate 
 `desktop` job on a Windows runner, and the quality job runs the typecheck of the TypeScript
 workspaces. No workspace loses a gate.
 
+**Two desktop artifacts are generated and gitignored, and every cargo path needs them.** The Node
+sidecar (`desktop/src-tauri/binaries/node-x86_64-pc-windows-msvc.exe`) and the bundle icons
+(`desktop/src-tauri/icons/icon.ico` and the PNG and ICNS files beside it) are produced by
+`pnpm --filter desktop setup:sidecar` and `pnpm --filter desktop setup:icons`; neither is in git,
+so no merge can carry them. The icons are a build input of the Windows resource — `cargo check`,
+`cargo test` and `tauri build` all compile `icon.ico` into the binary — so a checkout that has none
+of them, or that still holds an icon from an older generator, fails with `RC2175`. Every desktop
+script that runs cargo generates the icons first — `pnpm --filter desktop typecheck`,
+`pnpm --filter desktop build:app` and `pnpm --filter desktop build:debug` — so an operator who
+checks out the repository and runs those scripts never hits that error. A **direct** `cargo check`
+or `cargo test` does not go through them and needs `pnpm --filter desktop setup:icons` once
+before it.
+
 The `desktop` job builds the web app with Node 24, because the sidecar is Node 24.11.0 (ABI 137)
 and `better-sqlite3` is a V8 addon bound to one `NODE_MODULE_VERSION`. The job then loads the
 built native module with the sidecar binary itself: that is the ABI evidence, and it fails the job
