@@ -2464,7 +2464,9 @@
           "desktop/scripts/run-sidecar-setup.js",
           "desktop/src-tauri/scripts/gen_icons/src/main.rs",
           "apps/web/scripts/run-journal.mjs",
-          "apps/web/scripts/http-child.mjs"
+          "apps/web/scripts/http-child.mjs",
+          "desktop/src-tauri/src/paths.rs",
+          "docs/orchestration/ai-native-journal/integration-plan.md"
         ],
         "exclusive": true,
         "sharedFilesPolicy": "Single phase owner; see integration-plan.md. No edits outside task subset without coordinator allocation."
@@ -2510,7 +2512,8 @@
           "path": "apps/web/tests/intelligence-supervisor.test.ts",
           "status": "existing"
         }
-      ]
+      ],
+      "note": "undefined Two paths were granted after the candidate was reviewed: desktop/src-tauri/src/paths.rs, a new Rust module the phase created while fixing the ephemeral-port defect, and docs/orchestration/ai-native-journal/integration-plan.md, the merged-feature gate document the phase brief told it to complete and which its own plan review had flagged as coordinator-owned."
     }
   ]
 }
