@@ -68,15 +68,23 @@ pnpm --filter desktop tauri dev       # dev window; devUrl is http://localhost:3
 `pnpm --filter desktop build:app` builds the web tree and then the packaged application.
 `pnpm --filter desktop build:debug` does the same in debug mode.
 
+**The Rust gates need the icons.** `cargo check` and `cargo test` compile
+`desktop/src-tauri/icons/icon.ico` into the Windows resource of the binary, and the icons are
+**generated and gitignored** — like the Node sidecar. Every desktop script that runs cargo now
+generates them first: `pnpm --filter desktop typecheck`, `pnpm --filter desktop build:app` and
+`pnpm --filter desktop build:debug`. A **direct** `cargo check` or `cargo test` does not go through
+those scripts, so it needs `pnpm --filter desktop setup:icons` once before it — a checkout that
+still holds an icon from an older generator otherwise fails with `RC2175`.
+
 ## Build outputs
 
 The release artifacts land under the **active `CARGO_TARGET_DIR`** — read the variable instead of
 assuming a path:
 
-| Artifact | Path |
-|---|---|
-| MSI installer | `$CARGO_TARGET_DIR/release/bundle/msi/*.msi` |
-| NSIS installer | `$CARGO_TARGET_DIR/release/bundle/nsis/*.exe` |
+| Artifact       | Path                                                  |
+| -------------- | ----------------------------------------------------- |
+| MSI installer  | `$CARGO_TARGET_DIR/release/bundle/msi/*.msi`          |
+| NSIS installer | `$CARGO_TARGET_DIR/release/bundle/nsis/*.exe`         |
 | Standalone exe | `$CARGO_TARGET_DIR/release/trade-journal-desktop.exe` |
 
 With no `CARGO_TARGET_DIR` set, that is `desktop/src-tauri/target/release/...`.
@@ -126,21 +134,21 @@ asserts that none of those `node.exe` processes survived.
 
 The desktop passes these to the supervisor, which forwards them to both children:
 
-| Variable | Value |
-|---|---|
-| `JOURNAL_DATA_DIR` | absolute path of the app data directory |
-| `NODE_ENV` | `production` |
-| `HOSTNAME` | `127.0.0.1` |
-| `PORT` | the nonzero loopback port the desktop picked |
+| Variable           | Value                                        |
+| ------------------ | -------------------------------------------- |
+| `JOURNAL_DATA_DIR` | absolute path of the app data directory      |
+| `NODE_ENV`         | `production`                                 |
+| `HOSTNAME`         | `127.0.0.1`                                  |
+| `PORT`             | the nonzero loopback port the desktop picked |
 
 The journal also reads these if they are set in the environment of the app:
 
-| Variable | Description |
-|---|---|
-| `JOURNAL_PASSWORD` | Database encryption password |
-| `JOURNAL_SECRET` | Session secret |
+| Variable            | Description                       |
+| ------------------- | --------------------------------- |
+| `JOURNAL_PASSWORD`  | Database encryption password      |
+| `JOURNAL_SECRET`    | Session secret                    |
 | `ANTHROPIC_API_KEY` | Anthropic API key for AI features |
-| `OPENAI_API_KEY` | OpenAI API key for AI features |
+| `OPENAI_API_KEY`    | OpenAI API key for AI features    |
 
 ## Troubleshooting
 
@@ -185,6 +193,18 @@ does not provide. The dispatcher runs the script with PowerShell 7 (`pwsh`) and 
 `powershell` only when `pwsh` is not installed, so install PowerShell 7 to run
 `pnpm --filter desktop setup:sidecar`.
 
+### `cargo check` fails with `RC2175` — the icon is not in 3.00 format
+
+The Windows resource compiler rejects an `icon.ico` it cannot read. The icons are generated, not
+checked in, so a checkout that carries an icon from an older generator fails this way. Regenerate
+them:
+
+```bash
+pnpm --filter desktop setup:icons
+```
+
+`pnpm --filter desktop typecheck` does this for you.
+
 ## Limitations
 
 - **Windows-only**: no macOS or Linux builds are configured; `bundle.targets` is `["msi", "nsis"]`.
@@ -199,6 +219,7 @@ does not provide. The dispatcher runs the script with PowerShell 7 (`pwsh`) and 
 IPC command capture, window state, all over a WebSocket on `127.0.0.1:9223`.
 
 **Status:** not wired. Two stacked upstream bugs:
+
 1. **`webview2-com` version conflict** — `tauri-plugin-mcp-bridge 0.13` and the hushlor fork both
    pin `webview2-com = 0.38`. Tauri 2.12+ pulls `webview2-com = 0.39`. The two versions produce
    incompatible Rust types (e.g. `COREWEBVIEW2_CAPTURE_PREVIEW_IMAGE_FORMAT`).
@@ -218,4 +239,3 @@ wrapper, no version pins.
 3. Launch the app — it uses the existing database
 
 No migration script is needed; the database schema is identical.
-

@@ -3,15 +3,16 @@
 Phase guide row 21 · detailed-plan Task 13 (performance, packaging and release half) · milestone M6 ·
 schema allocation: **None**
 
-|                       |                                                                                           |
-| --------------------- | ----------------------------------------------------------------------------------------- |
-| Branch                | `codex/ai-native-journal-p21` (child of the feature worktree)                             |
-| Base                  | `4628a575955052dbc62d674dcaf7982ef79821ba` (verified feature HEAD)                        |
-| Plan commit           | _docs: plan the performance, packaging and release acceptance_                            |
-| Implementation commit | _test: harden intelligence recovery packaging and operations_                             |
-| Report commit         | _docs: record the Phase 21 release acceptance evidence_                                   |
-| Repair commit         | _fix: enforce the packaged tree audit and make the release record state every gate_       |
-| Migrations            | none. `0001`–`0007` are byte-unchanged; no schema, registry or checksum file was touched. |
+|                       |                                                                                                                                                                        |
+| --------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Branch                | `codex/ai-native-journal-p21` (child of the feature worktree)                                                                                                          |
+| Base                  | `4628a575955052dbc62d674dcaf7982ef79821ba` (verified feature HEAD)                                                                                                     |
+| Plan commit           | _docs: plan the performance, packaging and release acceptance_                                                                                                         |
+| Implementation commit | _test: harden intelligence recovery packaging and operations_                                                                                                          |
+| Report commit         | _docs: record the Phase 21 release acceptance evidence_                                                                                                                |
+| Repair commit         | _fix: enforce the packaged tree audit and make the release record state every gate_                                                                                    |
+| Gate repair commits   | _fix: make the desktop typecheck generate the icons the Windows resource compiler needs_ · _fix: make the desktop scripts generate the bundle icons before cargo runs_ |
+| Migrations            | none. `0001`–`0007` are byte-unchanged; no schema, registry or checksum file was touched.                                                                              |
 
 This phase is the release half of Task 13. Phase 20 shipped the storage and operations half under
 the **same** commit subject (`test: harden intelligence recovery packaging and operations`); this
@@ -189,25 +190,37 @@ it.
 
 Every command below was run against the tree of this phase, on Node v24.22.3 and pnpm 11.0.8.
 
-| Command                                                                                                                                                                                                                      | Exit | Runtime | Result                                                                                                                                                               |
-| ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ---- | ------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `pnpm exec vitest run apps/web/tests/intelligence-acceptance.test.ts apps/web/tests/intelligence-packaging.test.ts apps/web/tests/intelligence-supervisor.test.ts`                                                           | 0    | 22 s    | **35 passed** (3 files)                                                                                                                                              |
-| `pnpm typecheck`                                                                                                                                                                                                             | 0    | 53 s    | no type errors, including the desktop `cargo check`                                                                                                                  |
-| `pnpm test` (the whole project)                                                                                                                                                                                              | 0    | 153 s   | **1375 passed** (116 files)                                                                                                                                          |
-| `cargo check --manifest-path desktop/src-tauri/Cargo.toml`                                                                                                                                                                   | 0    | 24 s    | clean                                                                                                                                                                |
-| `cargo test --manifest-path desktop/src-tauri/Cargo.toml`                                                                                                                                                                    | 0    | 69 s    | **5 passed**                                                                                                                                                         |
-| `cargo test --manifest-path desktop/src-tauri/scripts/gen_icons/Cargo.toml`                                                                                                                                                  | 0    | 0.2 s   | **1 passed** — the icon writer's own header test                                                                                                                     |
-| `node desktop/scripts/run-sidecar-setup.js`                                                                                                                                                                                  | 0    | 1.8 s   | the sidecar was already in place, hash verified                                                                                                                      |
-| `pnpm format:check`                                                                                                                                                                                                          | 1    | 51 s    | **77 files** fail — exactly the set that already failed at the base commit, so this phase adds no new violation. The files this phase added were formatted.          |
-| `node scripts/check-licenses.mjs`                                                                                                                                                                                            | 0    | —       | `Dependency licenses OK.`                                                                                                                                            |
-| `pnpm --filter desktop build:app`                                                                                                                                                                                            | 0    | 986 s   | the packaged tree and the packaged app built; the MSI and the NSIS installer were produced                                                                           |
-| `pwsh -NoProfile -File desktop/scripts/packaged-smoke.ps1 -Exe <release exe> -DataDir <scratch>`                                                                                                                             | 0    | 39 s    | the journal answered on `127.0.0.1:54893`, the readiness signal was published on that same port, and no `node.exe` survived the quit                                 |
-| `node scripts/benchmark-intelligence.mjs --volumes 1000,10000,100000 --samples 30 --repetitions 3 --label candidate --data-dir <scratch> --out <result>`                                                                     | 1    | 2288 s  | the absolute gates passed at every volume; the exit code is 1 because the run carried no baseline build, so the p95 comparison gate could not be met and was not met |
-| `node scripts/benchmark-intelligence.mjs --volumes 1000,10000,100000 --samples 30 --repetitions 1 --label candidate --compare-label baseline --compare-supervisor <baseline supervisor> --data-dir <scratch> --out <result>` | 0    | 1301 s  | the paired run: every gate passed, including the p95 regression gate; the worst regression was +8.6 %                                                                |
+| Command                                                                                                                                                                                                                                                                                                                                          | Exit | Runtime | Result                                                                                                                                                                                                                               |
+| ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ | ---- | ------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| `pnpm exec vitest run apps/web/tests/intelligence-acceptance.test.ts apps/web/tests/intelligence-packaging.test.ts apps/web/tests/intelligence-supervisor.test.ts`                                                                                                                                                                               | 0    | 22 s    | **35 passed** (3 files)                                                                                                                                                                                                              |
+| `pnpm typecheck`                                                                                                                                                                                                                                                                                                                                 | 0    | 53 s    | no type errors, including the desktop `cargo check`                                                                                                                                                                                  |
+| `pnpm test` (the whole project)                                                                                                                                                                                                                                                                                                                  | 0    | 153 s   | **1375 passed** (116 files)                                                                                                                                                                                                          |
+| `cargo check --manifest-path desktop/src-tauri/Cargo.toml`                                                                                                                                                                                                                                                                                       | 0    | 24 s    | clean                                                                                                                                                                                                                                |
+| `cargo test --manifest-path desktop/src-tauri/Cargo.toml`                                                                                                                                                                                                                                                                                        | 0    | 69 s    | **5 passed**                                                                                                                                                                                                                         |
+| `cargo test --manifest-path desktop/src-tauri/scripts/gen_icons/Cargo.toml`                                                                                                                                                                                                                                                                      | 0    | 0.2 s   | **1 passed** — the icon writer's own header test                                                                                                                                                                                     |
+| `node desktop/scripts/run-sidecar-setup.js`                                                                                                                                                                                                                                                                                                      | 0    | 1.8 s   | the sidecar was already in place, hash verified                                                                                                                                                                                      |
+| `pnpm format:check`                                                                                                                                                                                                                                                                                                                              | 1    | 36 s    | the gate is **red before this phase and red now**. Measured over the files tracked in the base commit: **73 fail at the base commit, 70 now, and none was added** (the three that left are the desktop files this repair formatted). |
+| `node scripts/check-licenses.mjs`                                                                                                                                                                                                                                                                                                                | 0    | —       | `Dependency licenses OK.`                                                                                                                                                                                                            |
+| `pnpm --filter desktop build:app`                                                                                                                                                                                                                                                                                                                | 0    | 986 s   | the packaged tree and the packaged app built; the MSI and the NSIS installer were produced                                                                                                                                           |
+| `pwsh -NoProfile -File desktop/scripts/packaged-smoke.ps1 -Exe <release exe> -DataDir <scratch>`                                                                                                                                                                                                                                                 | 0    | 39 s    | the journal answered on `127.0.0.1:54893`, the readiness signal was published on that same port, and no `node.exe` survived the quit                                                                                                 |
+| `node scripts/benchmark-intelligence.mjs --volumes 1000,10000,100000 --samples 30 --repetitions 3 --label candidate --data-dir <scratch> --out <result>`                                                                                                                                                                                         | 1    | 2288 s  | the absolute gates passed at every volume; the exit code is 1 because the run carried no baseline build, so the p95 comparison gate could not be met and was not met                                                                 |
+| `node scripts/benchmark-intelligence.mjs --volumes 1000,10000,100000 --samples 30 --repetitions 1 --label candidate --compare-label baseline --compare-supervisor <baseline supervisor> --data-dir <scratch> --out <result>`                                                                                                                     | 0    | 1301 s  | the paired run: every gate passed, including the p95 regression gate; the worst regression was +8.6 %                                                                                                                                |
+| `cd desktop/src-tauri && cargo check` with the stale `icon.ico` in place                                                                                                                                                                                                                                                                         | 101  | 34 s    | the destination gate's failure, reproduced: `error RC2175 : resource file … is not in 3.00 format`                                                                                                                                   |
+| `pnpm --filter desktop typecheck` with the same stale `icon.ico` in place                                                                                                                                                                                                                                                                        | 0    | 45 s    | the icon was regenerated (its SHA-256 returned to `640877a9…`) and `cargo check` passed                                                                                                                                              |
+| the destination gate sequence, re-run **in this worktree** after the repair (this is the worktree run, not the coordinator's gate): install, root typecheck, packages typecheck, migrations:check, licences, prettier over the 12 governed merged files, build, test, `cargo check`, `cargo test`, icon-generator `cargo check` and `cargo test` | 0    | 675 s   | **every command exited 0**: `pnpm test` **1375 passed** (116 files), `cargo test` **5 passed**, the icon generator's test **1 passed**. The coordinator's own gate still has to be re-run on the merged result                       |
+| `JOURNAL_REQUIRE_PACKAGED_TREE=1 pnpm exec vitest run apps/web/tests/intelligence-acceptance.test.ts apps/web/tests/intelligence-packaging.test.ts`                                                                                                                                                                                              | 0    | 15 s    | **19 passed** (2 files) — the packaged-tree audit ran against the built tree instead of skipping                                                                                                                                     |
+| `pnpm exec vitest run apps/web/tests/intelligence-acceptance.test.ts apps/web/tests/intelligence-packaging.test.ts apps/web/tests/intelligence-supervisor.test.ts`, run **after deleting the generated icons**                                                                                                                                   | 0    | 24 s    | **35 passed** (3 files)                                                                                                                                                                                                              |
+| `pnpm typecheck` (root), run **after deleting the generated icons**                                                                                                                                                                                                                                                                              | 0    | 66 s    | the desktop's typecheck regenerated the five icon files and `cargo check` passed; no type errors anywhere                                                                                                                            |
+| `pnpm --filter desktop build:app`, run **after deleting the generated icons**                                                                                                                                                                                                                                                                    | 0    | 784 s   | the build script generated the icons first, then built the packaged tree and the **MSI (51.46 MiB) and NSIS (32.70 MiB) installers**                                                                                                 |
 
-The `format:check` result is a **pre-existing** condition, not a regression: the repository's
-format gate was already red at the base commit, on the same 77 files. The failing-file set was
-compared against the base commit's set and is now **identical** — this phase adds no new violation.
+The `format:check` result is a **pre-existing** condition, not a regression, and the earlier
+wording of it in this report was wrong and is corrected here. The repository's format gate was
+already red at the base commit: **73 files** tracked in the base commit fail `prettier --check`.
+In the tree this phase leaves behind, **70** of those files still fail and **no file entered the
+set**. The three that left are `desktop/README.md`, `desktop/scripts/run-sidecar-setup.js` and
+`desktop/src-tauri/tauri.conf.json` — the three this repair formatted. The raw repository-wide
+count is 74 rather than 70 because four Tauri-generated schema files under
+`desktop/src-tauri/gen/` are gitignored build output that a fresh checkout does not have.
 
 The benchmark row is the run this report's measured numbers come from. It was run **without** a
 comparison build, so the p95 regression gate had nothing to compare against and the run exited 1.
@@ -327,10 +340,11 @@ table above now carries `pnpm --filter desktop build:app`, the packaged smoke an
 each with its exit code and its runtime, so every number in this report traces to a row.
 
 **Finding 3 — the release record listed every gate except the one that is red.** The CI `quality`
-job presents `format` as a gate it proves, but `pnpm format:check` **exits 1 on 77 files**. The
-operations release record now carries that row explicitly, with the exit code, the file count and
-the fact that the failing set is identical to the base commit's set. The gate stays red and is
-recorded as red.
+job presents `format` as a gate it proves, but `pnpm format:check` **exits 1** — on 73 files
+tracked in the base commit, and on 70 in the tree this phase leaves behind. The operations release
+record now carries that row explicitly, with the exit code, the two measured counts and the fact
+that the failing set lost the three files this phase formatted and gained nothing. The gate stays
+red and is recorded as red.
 
 **Finding 4 — the packaged smoke never asserted the readiness signal.** The smoke asserted that
 the journal answered HTTP and that no `node.exe` survived, but never asserted the `server-ready`
@@ -406,6 +420,116 @@ longest path is now **208 characters**, and **no** path in it exceeds the 260-ch
 (2 363 files, 0 over). `pnpm --filter desktop build:app` now **exits 0** and produces both the MSI
 and the NSIS installer. A packaging test asserts the artifact's longest path stays within the
 limit, so the defect cannot come back silently.
+
+## The gate repair
+
+The destination gate failed after the merge, at its second command: `pnpm typecheck` exited
+**101**. 101 is Cargo's exit code, and the root typecheck recurses into the desktop workspace,
+whose typecheck is `cargo check`. The failure was reproduced on the destination worktree and in
+this one, byte for byte:
+
+```
+E:\...\desktop\src-tauri\icons\icon.ico : error RC2175 : resource file ... is not in 3.00 format
+thread 'main' panicked at ...\tauri-winres-0.3.6\src\lib.rs:543:14:
+```
+
+**The cause was a stale generated file, not the merged code.** The bundle icons are generated and
+gitignored, like the Node sidecar, so a checkout carries whatever icon was last generated in it.
+The destination worktree carried an `icon.ico` from the **pre-Phase-21** generator — an icon the
+Windows resource compiler cannot read — and the gate had provisioned the sidecar but not the
+icons. Phase 21 fixed the generator (this phase's writer emits the six-byte icon directory and the
+BMP entries `rc.exe` requires), but a checkout that already holds an old icon keeps that old icon:
+the merge cannot carry the fix, because the icons are not in git.
+
+**The fix is that the desktop's own scripts own their inputs.** Every desktop script that runs
+cargo now generates the icons before it compiles:
+
+```json
+"typecheck": "pnpm run icons && cd src-tauri && cargo check"
+"build:app": "pnpm run icons && pnpm build:web && tauri build"
+"build:debug": "pnpm run icons && pnpm build:web && tauri build --debug"
+```
+
+`tauri build` compiles the same Windows resource, so a local `pnpm --filter desktop build:app`
+failed the same way and now does not. A fresh checkout, and a checkout carrying an icon from an
+older generator, now typecheck and build.
+
+**A direct `cargo check` still needs the icons first.** A command that does not go through the
+desktop's scripts — the release gate runs `cargo check` and `cargo test` directly — compiles the
+same resource, so it needs `pnpm --filter desktop setup:icons` once before it. The desktop's own
+scripts now guarantee it for everyone else, and the operations record says so.
+
+_Proof of teeth._ The destination worktree's stale `icon.ico` was copied into this checkout and
+the build script was forced to rerun. The **old** command (`cd src-tauri && cargo check`) failed
+with the destination gate's exact error, `error RC2175 : resource file ... is not in 3.00 format`
+and **exit 101**. The **fixed** command on the same stale file regenerated the icon (its SHA-256
+returned to `640877a9…`, the generator's output) and `cargo check` **exited 0**. The same held
+with the icons deleted outright: `pnpm --filter desktop typecheck` regenerated all five files and
+exited 0. The build script is the same case: with the icons deleted, `pnpm --filter desktop
+build:app` regenerated them and produced the MSI and the NSIS installer (exit 0, 784 s).
+
+**The whole gate sequence was re-run after the repair, in this worktree.** This is the worktree
+run, not the coordinator's gate on the merged result: the coordinator still has to merge this
+branch and re-run its gate, and the carry item under **What this phase leaves to the release
+gate** says so. Every command exited **0**: `pnpm install --frozen-lockfile`, the root
+`pnpm typecheck` (which covers the desktop workspace), the packages' typecheck,
+`pnpm --filter web migrations:check`, the licence check, prettier over the twelve
+prettier-governed merged files, `pnpm build`, `pnpm test` (**1375 passed**, 116 files),
+`cargo check`, `cargo test` (**5 passed**), and the icon generator's `cargo check` and
+`cargo test` (**1 passed**). The Docker scratch-volume smoke was re-attempted and the daemon is
+still not running, so it stays blocked host evidence.
+
+The prettier step over the twelve governed merged files was run **again after this report and the
+plan were edited**, because the edits are themselves markdown the gate checks: it exits **0**.
+
+### Three files this phase left unformatted
+
+The destination gate probes every prettier-governed merged file once, before it runs its own
+prettier step, and records the result per file. Three of them came back unformatted:
+
+```
+desktop/README.md: prettier exit code 1 (NOT formatted)
+desktop/scripts/run-sidecar-setup.js: prettier exit code 1 (NOT formatted)
+desktop/src-tauri/tauri.conf.json: prettier exit code 1 (NOT formatted)
+```
+
+The gate stopped at the typecheck before its own prettier step ran, so that step would have failed
+next. All three are now formatted. The base commit's copies of the same three files were also
+unformatted, but this phase rewrote two of them and owns the third, so the phase leaves them
+clean. Measured over the files tracked in the base commit, the repository-wide `pnpm format:check`
+gate fails on **73** files at the base commit and
+on **70** now: three fewer, none added. The gate itself was already red before this phase and is
+red now — a pre-existing condition, not a regression, and not something this phase can fix inside
+its ownership.
+
+### The gate repair went through four review rounds
+
+**Round 1** returned FAIL with four findings, all real: the report's new table rows broke
+`prettier --check` on the report file itself; the `format:check` wording was false (it claimed 77
+files and an identical set); the recorded prettier result described a tree that was edited
+afterwards; and the scratch files of the investigation were untracked and not gitignored, so a
+`git add -A` would have swept a 370 KB binary icon into the commit. All four are fixed, and the
+scratch files are gone.
+
+**Round 2** returned FAIL with one finding and two notes: the false `format:check` wording had
+survived in a second place — this report's Finding 3 paragraph and the operations release record —
+and the heading credited a prettier probe that never ran, while the body said the gate stopped
+before its own prettier step. Both documents now carry the measured numbers, the heading names
+the three files without crediting a probe, and the quote of the gate's per-file probe results is
+in the report. The plan now records that the desktop typecheck generates the icons.
+
+**Round 3** returned FAIL with one blocking finding and three notes: the heading still credited
+the probe, the operations document still described the desktop typecheck as a plain `cargo check`,
+the report's commit row named a commit that did not exist yet, and the gate-sequence row read as
+though the destination gate had passed. The heading is retitled, the operations document is
+corrected, the commit rows are filled in by the commits that follow, and the row states that it is
+the worktree run, not the coordinator's gate.
+
+**Round 4** returned PASS. The two non-blocking items it raised — the commit row and the two
+workflow comments that still called the desktop typecheck a plain `cargo check` — are fixed. Four
+review rounds is more than the repair budget allowed; the extra rounds were spent on the report's
+own prose, not on new code, and every finding they raised was a real defect in a document that
+claims to be a record of what was observed.
 
 ## The measurement was corrected twice
 
@@ -551,9 +675,24 @@ and no environment file. The test passed in the targeted run and in the whole-pr
    the `build:app` evidence that the repair's Finding 2 demanded failed on the MSI bundling step,
    and the cause was this script shipping an install-time-only dependency chain. The plan's
    ownership table now lists the file.
+8. **`desktop/package.json`'s cargo scripts now generate the icons before they compile.** The
+   destination gate failed at the root typecheck because the checkout carried an `icon.ico` from
+   the pre-Phase-21 generator, and the Windows resource compiler rejects it. The icons are
+   generated and gitignored, so no merge can carry a repaired icon; the gate has to produce one.
+   `typecheck`, `build:app` and `build:debug` now generate them. The plan's ownership table
+   already lists `desktop/package.json`, and the desktop README documents the requirement.
 
 ## What this phase leaves to the release gate
 
+- **The destination gate must be re-run.** It failed after the merge at `pnpm typecheck`
+  (exit 101, the desktop's `cargo check` on a stale generated icon). The gate repair is described
+  under **The gate repair**; the fix is in this branch and needs the coordinator's merge and gate
+  re-run.
+- **The gate's provisioning needs the icons, not only the sidecar.** The gate runs `cargo check`
+  and `cargo test` **directly**, and those commands do not go through the desktop's scripts, so
+  they need `pnpm --filter desktop setup:icons` once before them — the same way they need
+  `setup:sidecar`. The desktop's own scripts now generate the icons on their own, so only the
+  direct cargo commands need the provisioning step.
 - **The Docker scratch-volume smoke.** Blocked host evidence, carried to G-FINAL. The CI job exists.
 - **The p95 regression gate.** The gate is implemented, it fails when it is not met, and in the
   recorded paired run on this host it **passed** (worst row +8.6 %). It is host-sensitive: an
