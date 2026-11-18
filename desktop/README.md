@@ -69,10 +69,12 @@ pnpm --filter desktop tauri dev       # dev window; devUrl is http://localhost:3
 `pnpm --filter desktop build:debug` does the same in debug mode.
 
 **The Rust gates need the icons.** `cargo check` and `cargo test` compile
-`desktop/src-tauri/icons/icon.ico` into the Windows resource of the binary, and the icons are not
-checked in. `pnpm --filter desktop typecheck` regenerates them first, so the typecheck gate works in
-a fresh checkout. A direct `cargo check` or `cargo test` needs `pnpm --filter desktop setup:icons`
-once before it.
+`desktop/src-tauri/icons/icon.ico` into the Windows resource of the binary, and the icons are
+**generated and gitignored** — like the Node sidecar. Every desktop script that runs cargo now
+generates them first: `pnpm --filter desktop typecheck`, `pnpm --filter desktop build:app` and
+`pnpm --filter desktop build:debug`. A **direct** `cargo check` or `cargo test` does not go through
+those scripts, so it needs `pnpm --filter desktop setup:icons` once before it — a checkout that
+still holds an icon from an older generator otherwise fails with `RC2175`.
 
 ## Build outputs
 
