@@ -2466,7 +2466,9 @@
           "apps/web/scripts/run-journal.mjs",
           "apps/web/scripts/http-child.mjs",
           "desktop/src-tauri/src/paths.rs",
-          "docs/orchestration/ai-native-journal/integration-plan.md"
+          "docs/orchestration/ai-native-journal/integration-plan.md",
+          "apps/web/scripts/build-worker.mjs",
+          "desktop/scripts/packaged-smoke.ps1"
         ],
         "exclusive": true,
         "sharedFilesPolicy": "Single phase owner; see integration-plan.md. No edits outside task subset without coordinator allocation."
@@ -2513,7 +2515,7 @@
           "status": "existing"
         }
       ],
-      "note": "undefined Two paths were granted after the candidate was reviewed: desktop/src-tauri/src/paths.rs, a new Rust module the phase created while fixing the ephemeral-port defect, and docs/orchestration/ai-native-journal/integration-plan.md, the merged-feature gate document the phase brief told it to complete and which its own plan review had flagged as coordinator-owned."
+      "note": "undefined Two paths were granted after the candidate was reviewed: desktop/src-tauri/src/paths.rs, a new Rust module the phase created while fixing the ephemeral-port defect, and docs/orchestration/ai-native-journal/integration-plan.md, the merged-feature gate document the phase brief told it to complete and which its own plan review had flagged as coordinator-owned. Two further paths were granted after the repair: desktop/scripts/packaged-smoke.ps1, the Windows packaged smoke as a committed script so the CI desktop job runs exactly the check the release gate uses, and apps/web/scripts/build-worker.mjs, the script that produces the worker tree the packaged runtime-tree audit inspects."
     }
   ]
 }
