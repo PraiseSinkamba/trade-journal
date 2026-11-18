@@ -229,7 +229,9 @@ workflow itself scopes the run: the quality job runs the typecheck of the TypeSc
 (`pnpm -r --filter "!desktop" typecheck`), and the Rust workspace's typecheck is `cargo check`,
 which moves to the `desktop` job below. No workspace loses its gate — the desktop's gate becomes
 `cargo check` **and** `cargo test` on a runner that can satisfy them, instead of a cargo check
-that cannot run on Linux without the webview system libraries and a Linux sidecar binary.
+that cannot run on Linux without the webview system libraries and a Linux sidecar binary. The
+desktop workspace's own `typecheck` script generates the icons before it compiles, because the
+icons are a build input of the Windows resource and are not in git.
 
 The gates this phase adds are separate jobs, because a job that needs a Rust toolchain, a Windows
 runner or a Docker daemon must not take the serial quality job down with it:
@@ -254,6 +256,12 @@ The `desktop` job also runs the two setup steps the build needs and the reposito
 `pnpm --filter desktop setup:icons` (the icons are gitignored and reproducible from the icon
 generator). It builds the web app before the Tauri build, because the Tauri build consumes the
 built web tree.
+
+The desktop workspace's own `typecheck` script generates the icons before it compiles. The icons
+are a build input of the Windows resource — `cargo check` compiles `icons/icon.ico` into it — they
+are not in git, and no merge can carry a corrected one, so the gate that compiles the crate has to
+produce it. A checkout that carries an icon from an older generator fails `cargo check` with
+`RC2175` otherwise.
 
 The release workflow keeps its two publish targets, its OIDC trusted publishing and its manual
 trigger. Its typecheck step is scoped the same way as the quality job's, so it cannot fail on a

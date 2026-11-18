@@ -37,8 +37,9 @@ jobs:
           registry-url: https://registry.npmjs.org
       - run: pnpm install --frozen-lockfile
       # The root typecheck script recurses into every workspace, and the
-      # desktop workspace's typecheck is `cargo check`: it cannot run on
-      # ubuntu-latest (no webview system libraries, no Linux sidecar binary),
+      # desktop workspace's typecheck script generates the bundle icons and
+      # then runs `cargo check`: it cannot run on ubuntu-latest (no webview
+      # system libraries, no Linux sidecar binary),
       # and the Rust gate belongs to the desktop job of the CI workflow.
       - run: pnpm -r --filter "!desktop" typecheck
       - run: pnpm test

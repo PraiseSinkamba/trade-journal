@@ -26,8 +26,9 @@ jobs:
       - run: pnpm install --frozen-lockfile
       - run: pnpm format:check
       # The root typecheck script recurses into every workspace, and the
-      # desktop workspace's typecheck is `cargo check`: it cannot run on
-      # ubuntu-latest (no webview system libraries, no Linux sidecar binary).
+      # desktop workspace's typecheck script generates the bundle icons and
+      # then runs `cargo check`: it cannot run on ubuntu-latest (no webview
+      # system libraries, no Linux sidecar binary).
       # The root package.json belongs to another owner, so the workflow scopes
       # the run itself; the Rust gate lives in the desktop job below.
       - run: pnpm -r --filter "!desktop" typecheck

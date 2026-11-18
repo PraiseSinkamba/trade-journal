@@ -14,7 +14,7 @@
     "setup:sidecar": "node scripts/run-sidecar-setup.js",
     "setup:icons": "cd src-tauri && cargo run --manifest-path scripts/gen_icons/Cargo.toml",
     "clean": "cd src-tauri && cargo clean && echo cleaned",
-    "typecheck": "cd src-tauri && cargo check"
+    "typecheck": "pnpm run icons && cd src-tauri && cargo check"
   },
   "devDependencies": {
     "@tauri-apps/cli": "^2"
