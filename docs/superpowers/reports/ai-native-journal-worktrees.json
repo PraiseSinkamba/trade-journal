@@ -1,7 +1,7 @@
 {
   "schemaVersion": 1,
   "feature": "ai-native-journal",
-  "updatedAt": "2026-11-18T09:18:22Z",
+  "updatedAt": "2026-11-18T12:14:44Z",
   "owner": "parent OMP coordinator (exclusive owner of this record)",
   "repository": {
     "name": "trade-journal",
@@ -35,8 +35,8 @@
     },
     "featureBranch": "codex/ai-native-journal",
     "featureBootstrapSha": "0a278503fd67c0f9e82138dfecb744f4bfd307ad",
-    "featureHeadSha": "16cc4f9d46eb2d67dc620bf44e021d763744cbb1",
-    "featureHeadShaNote": "feature branch HEAD at the Phase 21 dispatch and the exact base of the Phase 21 worktree; the coordinator record commit advances the branch by one commit",
+    "featureHeadSha": "cc9e991ca9a372fc938daaa62b51f64f33167d8f",
+    "featureHeadShaNote": "feature branch HEAD at the end of the run; this is the branch the twenty-one phases were integrated into",
     "featureCheckpointCommits": [
       "0a278503fd67c0f9e82138dfecb744f4bfd307ad",
       "80d53ccb62fda801897852a6f4e5d2aab8b0d58b",
@@ -89,7 +89,8 @@
       "2aae5031edb7c4030aaca131ac9dd9005540405f",
       "697da39df21000b6defadd8d5e952e48d54234d3",
       "b4b0422b6c69656a60e95820f34f25248ce12ad2",
-      "16cc4f9d46eb2d67dc620bf44e021d763744cbb1"
+      "16cc4f9d46eb2d67dc620bf44e021d763744cbb1",
+      "cc9e991ca9a372fc938daaa62b51f64f33167d8f"
     ],
     "featureBranchNote": "Orca slugified the requested name to codex-ai-native-journal at creation; the coordinator renamed the newly created, exclusively owned branch to the contract-required codex/ai-native-journal. Orca reads the renamed ref live (refs/heads/codex/ai-native-journal). No pre-existing branch was overwritten."
   },
@@ -379,7 +380,7 @@
         "startSha": "4628a57",
         "orcaParentWorktreeId": "aa54a522-a9af-4cb4-9de7-f1d9a349c0fd::E:/4004/orca/workspaces/trade-journal/codex-ai-native-journal",
         "setup": "pnpm install --frozen-lockfile completed in the worker checkout; working tree clean; Node v24.20.0, pnpm 11.0.8; own node_modules and own pnpm virtual store",
-        "state": "merged into codex/ai-native-journal at 6f7b558, but the destination gate FAILED on the desktop typecheck; a repair is in flight as ctx_ce919cddfbb7",
+        "state": "integrated into codex/ai-native-journal at c7c49ad and verified on the destination branch (the release gate green on the destination branch: pnpm install --frozen-lockfile, the ROOT pnpm typecheck which now covers the desktop workspace, the core and importers typecheck, pnpm --filter web migrations:check, node scripts/check-licenses.mjs, prettier --check on every merged file, pnpm build and pnpm test all exit 0; cargo check and cargo test in desktop/src-tauri exit 0; pnpm test 1375 tests passed in 116 files, cargo test 5 passed, the icon generator's header test 1 passed). The worktree, the git worktree registration, the branch and the leftover directory remain until the user requests cleanup.",
         "note": "Phase 21 is the LAST phase: performance, complete packaging and the CI release acceptance, the remainder of detailed plan Task 13. It owns the two defects that have blocked the desktop checks since Phase 10: desktop/scripts/run-sidecar-setup.js uses CommonJS require inside a package whose package.json says type module, and desktop/src-tauri/scripts/gen_icons/src/main.rs writes an invalid ICO. It owns the benchmark script, the CI and release workflows, the Dockerfile, the package-content results and the release acceptance record. The brief requires the Docker scratch-volume smoke to be ATTEMPTED and reported as observed: the daemon is not running on this host and starting it is the operator call, so a blocked item recorded truthfully is the expected outcome and a passed item that was not run is not. The independent implementation-diff review returned 5 findings, all about the release acceptance being TRUE rather than about the core behaviour, which the reviewer confirmed correct: the ICO header fix with a test that fails against the old output, the nonzero-port selection, the JSON readiness parse, the single shared SharedServerState, the taskkill /T tree kill with a Windows grandchild test, the busy counter reading workerHealth.worker.lastErrorCode from the worker health stream, waitForQueueDrain recorded and gating, the Docker item recorded as blocked host evidence and carried to G-FINAL and never as passed, the p95 gate comparing two builds, and the format failing set identical to the base commit set. The five findings: the packaged runtime-tree audit skips when the tree is absent and no CI job has it, so it is enforced by no gate; the commands table omits the three commands that produced the key evidence, so the p50 and p95 tables and the smoke pid and port trace to no recorded command; the release acceptance record lists every gate except the one that is red, pnpm format:check exiting 1 on 77 files; the packaged smoke never asserts the server-ready event, which was the exact signal defect 4 broke; and the benchmark misreports its own workload, claiming the idle run captured no events although both modes set the capture flag, and reporting the idle queue as false although idle has no queue. The coordinator granted the two paths the candidate needed, desktop/src-tauri/src/paths.rs and the integration plan document, and dispatched the repair. The destination gate FAILED at the ROOT pnpm typecheck, which now covers the desktop workspace: cargo check died with error RC2175, resource file desktop/src-tauri/icons/icon.ico is not in 3.00 format, and the tauri-winres build script panicked. The coordinator confirmed the cause directly: desktop/src-tauri/.gitignore line 20 ignores *.ico, so the bundle icon is a GENERATED, UNTRACKED artifact and the icon on disk still carries the old broken header (reserved 0, type 0, count 1, first entry w 6 h 4112). The CI desktop job already runs setup:icons before cargo, so CI was green while the repository own pnpm typecheck was red: desktop/package.json still had typecheck: cd src-tauri && cargo check, so nothing generated the icon in a fresh checkout. The phase own cargo check passed because the build had already generated the icon in the candidate worktree. The repair makes the desktop scripts generate the icons before cargo runs, and the coordinator added the matching setup:icons provisioning to the gate, because the gate runs cargo directly."
       }
     ]
@@ -778,13 +779,27 @@
       "wave": 21,
       "branch": "codex/ai-native-journal-p21",
       "deps": ["task_16692d8c9708"],
-      "status": "dispatched",
-      "state": "repair in flight",
-      "outcome": null,
+      "status": "completed",
+      "state": "integrated",
+      "outcome": "succeeded",
       "nativeDispatch": "ctx_ce919cddfbb7",
       "note": "the last phase: performance, complete packaging and the CI release acceptance. The brief requires the two long-standing desktop defects to be fixed so the desktop cargo check and the Windows packaged smoke can run at all, the benchmark with the 1k, 10k and 100k synthetic fills and the p50 and p95 latency, the package-content results, the CI and release workflows, the Dockerfile, and the release acceptance record with the blocked items stated separately from the passed ones. The Docker smoke must be attempted and reported as observed, never mocked and never claimed as passed. The implementation-diff review found five findings, all about the release record being true: an audit no gate enforces, three commands missing from the evidence table, the red format gate absent from the acceptance record, the readiness signal unasserted in the smoke, and a benchmark misreporting its own workload. The repair is in flight.",
       "priorDispatch": "ctx_55778a9ac200",
-      "verified": "NOT VERIFIED YET: merged at 6f7b558, but the destination gate failed at the root pnpm typecheck with RC2175, because the bundle icon is a generated gitignored artifact and the desktop typecheck script did not generate it. The repair is in flight."
+      "verified": "the release gate green on the destination branch: pnpm install --frozen-lockfile, the ROOT pnpm typecheck which now covers the desktop workspace, the core and importers typecheck, pnpm --filter web migrations:check, node scripts/check-licenses.mjs, prettier --check on every merged file, pnpm build and pnpm test all exit 0; cargo check and cargo test in desktop/src-tauri exit 0; pnpm test 1375 tests passed in 116 files, cargo test 5 passed, the icon generator's header test 1 passed",
+      "commits": [
+        "1e2e498",
+        "1f52a91",
+        "57de41a",
+        "757e3c6",
+        "08354ba",
+        "aab8505",
+        "25d5a27",
+        "21ee53b",
+        "78ee15d",
+        "b469b32",
+        "c7c49ad3cd6a0a2307bb5dc78a7990694ee39bf8"
+      ],
+      "evidence": "the independent implementation-diff review raised 5 findings, all about the release acceptance being true rather than about the core behaviour, which the review confirmed correct; and the destination gate then failed on the root pnpm typecheck with RC2175 because the bundle icon is a generated, gitignored artifact that the desktop typecheck script did not generate. The coordinator verified the repair on a tree with the icon deleted: an ungated cargo check still fails, the desktop typecheck regenerates the icon and passes, and the regenerated header is valid 3.00 format (reserved 0, type 1, count 6) where the old one was type 0, count 1. Evidence: docs/superpowers/plans/ai-native-journal/phase-21.md, docs/superpowers/reports/ai-native-journal-phase-21.md, docs/superpowers/reports/ai-native-journal-integration-21.md"
     }
   ],
   "dispatches": [
@@ -1406,12 +1421,13 @@
       "worktree": "aa54a522-a9af-4cb4-9de7-f1d9a349c0fd::E:/4004/orca/workspaces/trade-journal/codex-ai-native-journal-p21",
       "base": "aab8505",
       "purpose": "Phase 21 repair - make the desktop scripts generate the gitignored bundle icons before cargo runs, so the repository own typecheck and the release gate are self-sufficient",
-      "state": "dispatched",
-      "candidate": [],
+      "state": "completed; the repair made every desktop script that runs cargo generate the gitignored bundle icons first, so the repository own typecheck and the release gate are self-sufficient",
+      "candidate": ["25d5a27", "21ee53b", "78ee15d", "b469b32"],
       "reviewed": false,
-      "integrated": false,
-      "verified": false,
-      "outcome": null
+      "integrated": true,
+      "verified": true,
+      "outcome": "verified by the coordinator on a tree with the icon deleted, merged, and verified on the destination branch",
+      "tip": "b469b32"
     }
   ],
   "integration": {
@@ -1858,6 +1874,33 @@
       "review": "one implementation-diff review, then two coordinator-granted repairs and one coordinator re-verification; the review found that the delivered behaviour was not wired and that the backup and restore had no operator entry point at all. The coordinator ran an independent nine-mutation teeth proof.",
       "note": "no schema change: nothing under apps/web/src/db/ moved and migrations 0001 through 0007 are byte-unchanged. The prune removes only finished and unreferenced rows, the compact dedup keys survive it, the deletion ledger is written before the purge and survives a restore, a rebuild undoes a reset but never a deletion, and the backup demands the quiescence acknowledgement while the restore verifies the copy before migrating it. The operator entry point calls the shipped functions and adds no dependency. The persisted home for an AI-assisted insight stays a next-milestone item: no phase in this run owns a migration for it and the Slice B AI leg is optional. No push, no pull request and no merge into main.",
       "report": "docs/superpowers/reports/ai-native-journal-integration-20.md"
+    },
+    {
+      "phase": "21",
+      "stable": "T-021",
+      "native": "task_d136aa634289",
+      "branch": "codex/ai-native-journal-p21",
+      "merge": "c7c49ad3cd6a0a2307bb5dc78a7990694ee39bf8",
+      "destinationBefore": "7b038dc13351af8bbc69e5843cc7b6b462be3d07",
+      "head": "b469b32",
+      "commits": [
+        "1e2e498",
+        "1f52a91",
+        "57de41a",
+        "757e3c6",
+        "08354ba",
+        "aab8505",
+        "25d5a27",
+        "21ee53b",
+        "78ee15d",
+        "b469b32"
+      ],
+      "files": 22,
+      "schema": "none - this phase owns no migration",
+      "verification": "the release gate green on the destination branch: pnpm install --frozen-lockfile, the ROOT pnpm typecheck which now covers the desktop workspace, the core and importers typecheck, pnpm --filter web migrations:check, node scripts/check-licenses.mjs, prettier --check on every merged file, pnpm build and pnpm test all exit 0; cargo check and cargo test in desktop/src-tauri exit 0; pnpm test 1375 tests passed in 116 files, cargo test 5 passed, the icon generator's header test 1 passed",
+      "review": "one implementation-diff review, then two repair rounds and one coordinator re-verification; the review found five findings about the release record being true, and the gate then found that the desktop scripts did not generate the gitignored bundle icons the cargo steps need.",
+      "note": "no schema change: migrations 0001 through 0007 are byte-unchanged and no dependency or lockfile change. The two desktop defects that blocked the cargo check since Phase 10 are fixed, and every desktop script that runs cargo now generates the bundle icons first, so the root pnpm typecheck and the release gate are self-sufficient on a fresh checkout. The Windows packaged smoke ran on the host with the readiness signal asserted and no leftover processes. The Docker scratch-volume smoke was attempted and is recorded as blocked host evidence with the daemon-not-running output, never as passed, and is carried to G-FINAL where a daemon exists. The format gate remains red on 77 files, the same set that failed at the base commit, and the acceptance record states it as red. No push, no pull request and no merge into main.",
+      "report": "docs/superpowers/reports/ai-native-journal-integration-21.md"
     }
   ],
   "recordShape": "This file is the index and the authoritative stable-to-native task mapping: stable/native task mapping, worktree and dispatch identifiers, and one compact entry per integrated phase. Narrative, findings, deviations and command output live in the per-phase reports under docs/superpowers/reports/. Keep this file compact - one entry per phase, no duplicated prose. Resolve a native task id from taskMap here or from the native task list, never from a chat summary: a transcription slip once named T-019 as T-005, and the near miss was caught because the native task list disagreed with the prose.",
@@ -1865,5 +1908,34 @@
     "path": "E:/4004/ai-native-journal-scratch",
     "contents": "supervise.cjs (the dispatch supervisor), go-p14.cjs (the Phase 14 dispatch script), finalise-p14.cjs (the Phase 14 integration script) and the record update scripts",
     "note": "This directory was deliberately moved out of E:/4004/Temp. On 2026-11-13 the host clock jumped from 2026-11-01 to 2026-11-13, which made every coordinator script there look twelve days stale, and a temp sweep deleted them all. The repository, the worktrees and the committed reports were never under E:/4004/Temp and were unaffected."
+  },
+  "runSummary": {
+    "phases": 21,
+    "integrations": 21,
+    "dispatches": 37,
+    "branch": "codex/ai-native-journal",
+    "mainUnchangedAt": "4ae868d",
+    "migrations": [
+      "0001-legacy-baseline",
+      "0002-trade-projections",
+      "0003-durable-jobs",
+      "0004-observations",
+      "0005-intelligence-runtime",
+      "0006-knowledge-scheduling",
+      "0007-intelligence-experience"
+    ],
+    "scale": "253 files changed, 59968 insertions(+), 1612 deletions(-)",
+    "verification": "every phase was reviewed, teeth-proved by the coordinator, merged with --no-ff and verified by a destination gate on the destination branch alone on the host",
+    "openItems": [
+      "the Docker scratch-volume smoke is blocked host evidence on this host and is carried to G-FINAL, where the CI docker job has a daemon",
+      "pnpm format:check exits 1 on 77 files; the same set failed at the base commit and the failing set is identical, and the release acceptance record states the gate as red",
+      "the persisted home for an AI-assisted insight is a next-milestone item: no phase in this run owns a migration for it and the Slice B chain AI leg is optional"
+    ],
+    "whereTheEvidenceLives": [
+      "docs/superpowers/reports/ai-native-journal-integration-NN.md - one per phase, with its gate table and its review verdict",
+      "docs/superpowers/plans/ai-native-journal/phase-NN.md and docs/superpowers/reports/ai-native-journal-phase-NN.md - the plan and the phase report",
+      "docs/intelligence-operations.md - the operator runbook, and the release acceptance section",
+      "docs/orchestration/ai-native-journal/integration-plan.md - the G-A and G-FINAL gate definitions"
+    ]
   }
 }
