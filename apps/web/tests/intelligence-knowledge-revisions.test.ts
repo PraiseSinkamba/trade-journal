@@ -303,10 +303,9 @@ describe("Phase 14 knowledge-source revisions", () => {
       db.$client.exec("DROP TABLE knowledge_hypotheses");
       db.$client.exec("DROP TABLE knowledge_patterns");
       db.$client.exec("DROP TABLE intelligence_schedules");
-      db.$client.exec("DELETE FROM journal_migrations WHERE version = 6");
-      // The experience tables arrived with migration 0007, so a journal that
-      // predates this phase does not have them either and the ledger holds
-      // nothing past 0005.
+      // The experience tables arrived with migration 0007 and the insights with
+      // migration 0008, so a journal that predates this phase does not have
+      // them either and the ledger holds nothing past 0005.
       db.$client.exec("DROP TABLE workflow_conversations");
       db.$client.exec("DROP TABLE intelligence_messages");
       db.$client.exec("DROP TABLE intelligence_conversations");
@@ -314,7 +313,8 @@ describe("Phase 14 knowledge-source revisions", () => {
       db.$client.exec("DROP TABLE interaction_commands");
       db.$client.exec("DROP TABLE workflow_transitions");
       db.$client.exec("DROP TABLE intelligence_workflows");
-      db.$client.exec("DELETE FROM journal_migrations WHERE version = 7");
+      db.$client.exec("DROP TABLE intelligence_insights");
+      db.$client.exec("DELETE FROM journal_migrations WHERE version >= 6");
 
       const { applyMigrations } = await import("../src/db/migrations");
       applyMigrations(db.$client);

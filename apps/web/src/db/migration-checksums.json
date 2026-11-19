@@ -35,6 +35,11 @@
       "file": "0007-intelligence-experience.ts",
       "name": "intelligence-experience",
       "checksum": "ca51aa7bee573b35261e626332ca4cbb25b3007c9c3ca67258c570f802eb63c3"
+    },
+    "8": {
+      "file": "0008-ai-insights.ts",
+      "name": "ai-insights",
+      "checksum": "0815aa9f1dd30f2250eb4ee7b94a526c8b1b0f1ac1345d8ef984922656c44aca"
     }
   }
 }

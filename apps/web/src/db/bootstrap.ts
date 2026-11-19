@@ -6,6 +6,7 @@ import { OBSERVATIONS_SQL } from "./migrations/0004-observations.ts";
 import { INTELLIGENCE_RUNTIME_SQL } from "./migrations/0005-intelligence-runtime.ts";
 import { KNOWLEDGE_SCHEDULING_SQL } from "./migrations/0006-knowledge-scheduling.ts";
 import { EXPERIENCE_SQL } from "./migrations/0007-intelligence-experience.ts";
+import { INSIGHTS_SQL } from "./migrations/0008-ai-insights.ts";
 
 /**
  * Final-schema snapshot of the journal, used by the schema parity test and by
@@ -218,6 +219,8 @@ ${INTELLIGENCE_RUNTIME_SQL}
 ${KNOWLEDGE_SCHEDULING_SQL}
 
 ${EXPERIENCE_SQL}
+
+${INSIGHTS_SQL}
 
 ${LEDGER_TABLE_SQL_SNAPSHOT}
 `;

@@ -196,6 +196,29 @@ const createPhaseFourJournal = (name: string): Database.Database => {
 };
 
 /**
+ * A journal from the phase before this one: the ledger holds the baseline and
+ * every migration up to the experience schema, and the insight table does not
+ * exist yet.
+ */
+const createPhaseEightJournal = (name: string): Database.Database => {
+  const sqlite = new Database(scratchFile(name));
+  sqlite.exec(BOOTSTRAP_SQL);
+  // The insight table arrived with the next migration, so this journal does
+  // not have it.
+  sqlite.exec("DROP TABLE IF EXISTS intelligence_insights");
+  sqlite.exec("DROP TABLE IF EXISTS journal_migrations");
+  sqlite.exec(LEDGER_TABLE_SQL);
+  const insert = sqlite.prepare(
+    "INSERT INTO journal_migrations (version, name, checksum, applied_at) VALUES (?, ?, ?, ?)",
+  );
+  for (const version of [1, 2, 3, 4, 5, 6, 7]) {
+    const entry = MANIFEST.migrations[String(version)];
+    insert.run(version, entry?.name ?? "", entry?.checksum ?? "", version);
+  }
+  return sqlite;
+};
+
+/**
  * Structural schema fingerprint: tables, their columns, their foreign keys and
  * their indexes. Column order is excluded on purpose — SQLite appends a column
  * added with `ALTER TABLE`, so an upgraded journal orders the repaired columns
@@ -502,6 +525,58 @@ describe("migration runner", () => {
         id: "old",
         name: "Existing",
       });
+    } finally {
+      sqlite.close();
+    }
+  });
+
+  it("upgrades a journal from the previous phase onto the insight schema", () => {
+    const previous = createPhaseEightJournal("previous-insight-phase.db");
+    previous.exec(
+      "INSERT INTO accounts (id, name, kind, created_at) VALUES ('old', 'Existing', 'manual', '2026-01-01')",
+    );
+    previous.exec(
+      `INSERT INTO intelligence_observations (id, subject_id, source_revision, evaluator_id, evaluator_version, type, status, account_id, currency, net_pnl, fees, trade_status, timing_quality, duration_ms, direct_facts_json, observation_json, recorded_at, updated_at)
+       VALUES ('obs-old', 'trade-old', 'rev-old', 'trade-evaluator', '1', 'trade_outcome', 'active', 'old', 'USD', 1.5, 0.1, 'win', 'source_reported', NULL, '{}', '{}', 1, 1)`,
+    );
+    previous.close();
+
+    const sqlite = new Database(scratchFile("previous-insight-phase.db"));
+    try {
+      // Before the upgrade the insight table does not exist, and the ledger
+      // stops at the experience schema.
+      const before = (
+        sqlite
+          .prepare("SELECT name FROM sqlite_master WHERE type = 'table' ORDER BY name")
+          .all() as { name: string }[]
+      ).map((row) => row.name);
+      expect(before).not.toContain("intelligence_insights");
+      expect(inspectMigrations(sqlite)).toEqual({
+        currentVersion: 7,
+        pendingVersions: REGISTERED_VERSIONS.filter((version) => version > 7),
+      });
+
+      applyMigrations(sqlite);
+
+      expect(inspectMigrations(sqlite)).toEqual({
+        currentVersion: LATEST_VERSION,
+        pendingVersions: [],
+      });
+      const after = (
+        sqlite
+          .prepare("SELECT name FROM sqlite_master WHERE type = 'table' ORDER BY name")
+          .all() as { name: string }[]
+      ).map((row) => row.name);
+      expect(after).toContain("intelligence_insights");
+      expect(ledgerRows(sqlite)).toHaveLength(REGISTERED.length);
+      // The rows the journal already held survived the upgrade untouched.
+      expect(sqlite.prepare("SELECT id, name FROM accounts").get()).toEqual({
+        id: "old",
+        name: "Existing",
+      });
+      expect(
+        sqlite.prepare("SELECT id, source_revision, net_pnl FROM intelligence_observations").get(),
+      ).toEqual({ id: "obs-old", source_revision: "rev-old", net_pnl: 1.5 });
     } finally {
       sqlite.close();
     }

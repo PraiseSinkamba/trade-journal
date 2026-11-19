@@ -39,7 +39,9 @@ const {
   domainOutbox,
   eventDeliveries,
   executions,
+  intelligenceInsights,
   intelligenceJobs,
+  intelligenceObservations,
   intelligenceWorkerLease,
   settings,
   trades,
@@ -48,6 +50,8 @@ const {
 const { openConnection } = await import("../src/db/connection");
 const { backupJournal, readPurgeLedger, recordPurgeLedger, restoreJournal } =
   await import("../src/server/intelligence/infrastructure/retention");
+const { persistInsightInTx } =
+  await import("../src/server/intelligence/infrastructure/insight-store");
 const { setAiKeyInTx } = await import("../src/server/settings");
 const { decryptJson } = await import("../src/server/crypto");
 
@@ -161,6 +165,32 @@ const insertFinishedEvent = (eventId: string, accountId: string, recordedAt: num
       lastError: null,
       createdAt: recordedAt,
       updatedAt: recordedAt,
+    })
+    .run();
+};
+
+/** An observation of an account, the way a trade evaluation leaves one. */
+const insertObservation = (id: string, accountId: string): void => {
+  db.insert(intelligenceObservations)
+    .values({
+      id,
+      subjectId: `trade-${id}`,
+      sourceRevision: `rev-${id}`,
+      evaluatorId: "trade-evaluator",
+      evaluatorVersion: "1",
+      type: "trade_outcome",
+      status: "active",
+      accountId,
+      currency: "USD",
+      netPnl: 100,
+      fees: 0,
+      tradeStatus: "win",
+      timingQuality: "source_reported",
+      durationMs: null,
+      directFactsJson: "{}",
+      observationJson: "{}",
+      recordedAt: NOW,
+      updatedAt: NOW,
     })
     .run();
 };
@@ -423,6 +453,53 @@ describe("the no resurrection guarantee", () => {
       ).not.toContain("evt-2");
       expect(restored.select().from(eventDeliveries).all()).toHaveLength(0);
       expect(restored.select().from(intelligenceJobs).all()).toHaveLength(0);
+    } finally {
+      restored.$client.close();
+    }
+  });
+
+  it("keeps a purged question out of the restored journal", () => {
+    // The account holds an observation and the question generated from it.
+    insertObservation("obs-1", "acct-1");
+    const insightId = withJournalTransaction((tx) =>
+      persistInsightInTx(tx, {
+        accountId: "acct-1",
+        subjectId: "trade-obs-1",
+        observationId: "obs-1",
+        sourceRevision: "rev-obs-1",
+        question: "Why did the stop widen?",
+      }),
+    );
+    expect(insightId).not.toBeNull();
+
+    // The purge is recorded in the ledger, and the ledger file beside the
+    // database is what survives the database being replaced.
+    recordPurgeLedger(scratch, "acct-1", "deleted");
+
+    backupJournal({
+      source: scratch,
+      destination: directory("out-purged-question"),
+      quiesced: true,
+    });
+
+    // The snapshot holds the question: the purge is only recorded in the
+    // ledger, so the backup was taken before the account was deleted.
+    const snapshot = openConnection(directory("out-purged-question"));
+    try {
+      expect(snapshot.select().from(intelligenceInsights).all()).toHaveLength(1);
+    } finally {
+      snapshot.$client.close();
+    }
+
+    // The restore applies the ledger again, so the question does not come back
+    // with the account it belonged to.
+    restoreJournal({
+      source: directory("out-purged-question"),
+      destination: directory("restored-purged-question"),
+    });
+    const restored = openConnection(directory("restored-purged-question"));
+    try {
+      expect(restored.select().from(intelligenceInsights).all()).toHaveLength(0);
     } finally {
       restored.$client.close();
     }

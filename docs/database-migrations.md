@@ -152,15 +152,16 @@ See [Backing up before an upgrade](#backing-up-before-an-upgrade) below.
 The migration history is the journal's own record of how it got to its current shape. An operator
 reads it to answer two questions: _what does this journal contain_ and _can I open it_.
 
-| Version | Adds                                                                                 | What it means                                                                     |
-| ------- | ------------------------------------------------------------------------------------ | --------------------------------------------------------------------------------- |
-| `0001`  | the legacy baseline: the trading journal and its legacy repairs                      | every journal has it; it is the shape a fresh install starts from                 |
-| `0002`  | trade projections: identities, revisions, memberships, evidence                      | the journal's own memory of how it grouped fills into trades                      |
-| `0003`  | the durable runtime: outbox, deliveries, jobs, the worker lease                      | the journal can record a change and hand it to a worker                           |
-| `0004`  | observations, their evidence links and the seed checkpoints                          | the journal's own conclusions about the trades, and whether it may re-derive them |
-| `0005`  | the background runtime: runs, policies, budget reservations                          | the background AI attempts and the daily allowance they consume                   |
-| `0006`  | knowledge and scheduling: sources, hypotheses, patterns, schedules                   | what the journal concluded about your own notes, and when a schedule is due       |
-| `0007`  | the experience layer: workflows, transitions, commands, opportunities, conversations | the interactions you still have open                                              |
+| Version | Adds                                                                                 | What it means                                                                             |
+| ------- | ------------------------------------------------------------------------------------ | ----------------------------------------------------------------------------------------- |
+| `0001`  | the legacy baseline: the trading journal and its legacy repairs                      | every journal has it; it is the shape a fresh install starts from                         |
+| `0002`  | trade projections: identities, revisions, memberships, evidence                      | the journal's own memory of how it grouped fills into trades                              |
+| `0003`  | the durable runtime: outbox, deliveries, jobs, the worker lease                      | the journal can record a change and hand it to a worker                                   |
+| `0004`  | observations, their evidence links and the seed checkpoints                          | the journal's own conclusions about the trades, and whether it may re-derive them         |
+| `0005`  | the background runtime: runs, policies, budget reservations                          | the background AI attempts and the daily allowance they consume                           |
+| `0006`  | knowledge and scheduling: sources, hypotheses, patterns, schedules                   | what the journal concluded about your own notes, and when a schedule is due               |
+| `0007`  | the experience layer: workflows, transitions, commands, opportunities, conversations | the interactions you still have open                                                      |
+| `0008`  | the revision-bound AI insight                                                        | one generated review question per source revision, bound to the revision it was made from |
 
 ```sql
 -- The history of this journal.

@@ -16,6 +16,7 @@ yet, and names what is missing.
 | the **backlog**         | `intelligence_jobs`                                                                  | durable work: observations, seeds, schedule triggers, retention runs, workflow effects |
 | the **outbox**          | `domain_outbox` and `event_deliveries`                                               | the committed change events and what each handler did with them                        |
 | the **observations**    | `intelligence_observations` and `observation_evidence`                               | what the journal concluded about a trade, and the revisions it rests on                |
+| the **insights**        | `intelligence_insights`                                                              | one generated review question per source revision                                      |
 | the **knowledge**       | `knowledge_sources`, `knowledge_hypotheses`, `knowledge_patterns`                    | what the journal concluded about the operator's own notes and rules                    |
 | the **experience**      | `intelligence_workflows`, `intelligence_opportunities`, `intelligence_conversations` | the interactions the operator still has open                                           |
 | the **background runs** | `intelligence_runs` and `intelligence_budget_reservations`                           | the background AI attempts, their pinned configuration and their daily allowance       |
@@ -211,11 +212,19 @@ Retention removes what is finished and unreferenced. It never removes a live ref
 workflow that waits for you, an opportunity you can still act on, an open conversation, a pending
 delivery, or a failure nobody has acknowledged.
 
-| Class       | What it removes                                                                | Window  |
-| ----------- | ------------------------------------------------------------------------------ | ------- |
-| transport   | outbox events whose whole subtree is finished, and the finished retention jobs | 30 days |
-| diagnostics | the diagnostic payload of a finished background run                            | 30 days |
-| knowledge   | superseded and invalidated knowledge and observations nobody names             | 90 days |
+| Class       | What it removes                                                                                           | Window  |
+| ----------- | --------------------------------------------------------------------------------------------------------- | ------- |
+| transport   | outbox events whose whole subtree is finished, and the finished retention jobs                            | 30 days |
+| diagnostics | the diagnostic payload of a finished background run                                                       | 30 days |
+| knowledge   | superseded and invalidated knowledge and observations nobody names, and the review questions nobody names | 90 days |
+
+The review questions are knowledge class too. A question goes only when all three hold: it is older
+than the 90-day window, it is no longer the current one — the trade it was made from was
+corrected, or the observation it rests on is no longer active — and nothing live still names it. A
+question is bound to the revision it was made from, so a correction hides the older question at
+once: the row stays in the table, but it is no longer the current question for that trade.
+
+Nothing generates a question yet — the table holds the storage, and no provider call writes to it.
 
 The prune is bounded: one call removes at most the number of rows you give it, so a retention run
 cannot hold the write lock for an unbounded time.
@@ -326,10 +335,10 @@ reset has been undone. The answer is `{"accountId": "...", "checkpoint": "pendin
 ## Deletion
 
 Deleting an account takes its whole intelligence with it: its events, their deliveries and jobs,
-the evidence of its fills, its observations, its knowledge, its workflows, its opportunities, its
-conversations and the background runs scoped to it. A run scoped to several accounts loses only
-the deleted account; a run scoped to the deleted account alone goes with it, and its budget
-reservations with it.
+the evidence of its fills, its observations, its review questions, its knowledge, its workflows, its
+opportunities, its conversations and the background runs scoped to it. A run scoped to several
+accounts loses only the deleted account; a run scoped to the deleted account alone goes with it,
+and its budget reservations with it.
 
 The operator deletes an account with `DELETE /api/accounts/{id}`.
 
@@ -346,6 +355,9 @@ A restore applies the ledger again, so **a restore cannot bring a purged account
 The operator's own levers on the intelligence of an account are the two routes of
 [Running the prune, the reset and the rebuild](#running-the-prune-the-reset-and-the-rebuild): the
 reset, and the rebuild that undoes it.
+
+The review questions go with the account. A purge takes them, the reset takes them, and a restore
+cannot bring a purged account's question back, because the ledger is applied again.
 
 ### An explicit reset
 

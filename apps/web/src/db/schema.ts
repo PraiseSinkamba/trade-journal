@@ -1194,3 +1194,49 @@ export const workflowConversations = sqliteTable(
     uniqueIndex("workflow_conversations_pair_unique").on(table.workflowId, table.conversationId),
   ],
 );
+
+/**
+ * The revision-bound AI insight (Phase 22).
+ *
+ * One row per generated review question. The unique business key is the
+ * deduplication identity of the capability version and the source revision
+ * within the account, so a repeated write is one row. The account and the
+ * observation cascade, so a question never outlives either of them; the run
+ * reference is nulled instead, because a question must survive the loss of
+ * its producer. The subject carries no foreign key: the question is bound to
+ * the revision, not to the identity's row.
+ */
+export const intelligenceInsights = sqliteTable(
+  "intelligence_insights",
+  {
+    id: text("id").primaryKey(),
+    /** The deduplication identity of the capability version and the source revision. */
+    businessKey: text("business_key").notNull(),
+    /** The account the question belongs to; the account cascades. */
+    accountId: text("account_id")
+      .notNull()
+      .references(() => accounts.id, { onDelete: "cascade" }),
+    /** The trade identity the question is about; no foreign key on purpose. */
+    subjectId: text("subject_id").notNull(),
+    /** The observation the question was generated from; it cascades. */
+    observationId: text("observation_id")
+      .notNull()
+      .references(() => intelligenceObservations.id, { onDelete: "cascade" }),
+    /** The projection revision id the question was generated from. */
+    sourceRevision: text("source_revision").notNull(),
+    /** The version of the capability that produced the question. */
+    capabilityVersion: text("capability_version").notNull(),
+    /** The validated question text. */
+    question: text("question").notNull(),
+    /** The run that produced the question; nulled when the run is gone. */
+    runId: text("run_id").references(() => intelligenceRuns.id, { onDelete: "set null" }),
+    createdAt: integer("created_at").notNull(),
+  },
+  (table) => [
+    uniqueIndex("intelligence_insights_business_key_unique").on(table.businessKey),
+    index("intelligence_insights_account_idx").on(table.accountId),
+    index("intelligence_insights_subject_idx").on(table.subjectId),
+    index("intelligence_insights_source_revision_idx").on(table.sourceRevision),
+    index("intelligence_insights_created_at_idx").on(table.createdAt),
+  ],
+);
