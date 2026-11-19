@@ -4,9 +4,9 @@ Plan of record for Phase A of the optional-AI feature (the three-phase plan live
 repository). Scope: the storage only. No provider call, no job enqueue, no change to the scoped
 GET, no UI. Schema allocation: **one forward migration, `0008`**.
 
-This phase closes the gap Phase 19 recorded: *"The optional-AI node of the design chain is not
+This phase closes the gap Phase 19 recorded: _"The optional-AI node of the design chain is not
 wired. The chain's AI leg has no persisted home in the current schema (an opportunity carries no
-text) and a provider call may not happen inside a write transaction."* The persisted home is
+text) and a provider call may not happen inside a write transaction."_ The persisted home is
 created here; Phase B connects it to a fenced provider job and Phase C shows it.
 
 ## Objective
@@ -20,28 +20,28 @@ created here; Phase B connects it to a fenced provider job and Phase C shows it.
 3. **The derived data is wired into the deletion guarantees**: an account purge takes its insights,
    a reset takes them, a restore re-applies the ledger so a purged question cannot come back, and
    the retention prune cannot take a question a live record still names.
-4. **A source correction hides the older question immediately**: the read resolves the *current*
+4. **A source correction hides the older question immediately**: the read resolves the _current_
    projection revision of the subject, not the revision the question was generated from.
 
 ## Ownership
 
-| File                                                        | Change                                                                       |
-| ----------------------------------------------------------- | ---------------------------------------------------------------------------- |
-| `apps/web/src/db/migrations/0008-ai-insights.ts`            | new: the additive DDL and the migration source                               |
-| `apps/web/src/db/schema.ts`                                 | the typed Drizzle table                                                      |
-| `apps/web/src/db/migrations.ts`                             | the registry entry                                                           |
-| `apps/web/src/db/migration-checksums.json`                  | the regenerated checksum artifact                                             |
-| `apps/web/src/db/bootstrap.ts`                              | the final-schema snapshot                                                    |
-| `apps/web/src/server/intelligence/contracts/insights.ts`    | new: the capability version, the business key and the store port             |
-| `apps/web/src/server/intelligence/infrastructure/insight-store.ts` | new: the SQLite adapter of the port                                    |
-| `apps/web/src/server/intelligence/infrastructure/retention.ts` | the purge, the reset and the knowledge prune take the insights           |
-| `apps/web/tests/intelligence-insights.test.ts`              | new: the store, the purge, the reset, the cascade and the prune               |
-| `apps/web/tests/intelligence-migrations.test.ts`            | extend: the upgrade from `0007`                                             |
-| `apps/web/tests/intelligence-backup.test.ts`                | extend: the restore of a purged question                                    |
-| `docs/intelligence-operations.md`                           | extend: the table, the retention class and the deletion guarantees          |
-| `docs/database-migrations.md`                               | extend: the `0008` row of the history table                                  |
-| `docs/superpowers/plans/ai-native-journal/phase-22.md`      | this plan                                                                    |
-| `docs/superpowers/reports/ai-native-journal-phase-22.md`    | the phase report                                                             |
+| File                                                               | Change                                                             |
+| ------------------------------------------------------------------ | ------------------------------------------------------------------ |
+| `apps/web/src/db/migrations/0008-ai-insights.ts`                   | new: the additive DDL and the migration source                     |
+| `apps/web/src/db/schema.ts`                                        | the typed Drizzle table                                            |
+| `apps/web/src/db/migrations.ts`                                    | the registry entry                                                 |
+| `apps/web/src/db/migration-checksums.json`                         | the regenerated checksum artifact                                  |
+| `apps/web/src/db/bootstrap.ts`                                     | the final-schema snapshot                                          |
+| `apps/web/src/server/intelligence/contracts/insights.ts`           | new: the capability version, the business key and the store port   |
+| `apps/web/src/server/intelligence/infrastructure/insight-store.ts` | new: the SQLite adapter of the port                                |
+| `apps/web/src/server/intelligence/infrastructure/retention.ts`     | the purge, the reset and the knowledge prune take the insights     |
+| `apps/web/tests/intelligence-insights.test.ts`                     | new: the store, the purge, the reset, the cascade and the prune    |
+| `apps/web/tests/intelligence-migrations.test.ts`                   | extend: the upgrade from `0007`                                    |
+| `apps/web/tests/intelligence-backup.test.ts`                       | extend: the restore of a purged question                           |
+| `docs/intelligence-operations.md`                                  | extend: the table, the retention class and the deletion guarantees |
+| `docs/database-migrations.md`                                      | extend: the `0008` row of the history table                        |
+| `docs/superpowers/plans/ai-native-journal/phase-22.md`             | this plan                                                          |
+| `docs/superpowers/reports/ai-native-journal-phase-22.md`           | the phase report                                                   |
 
 No other file changes. `apps/web/src/app/**`, `apps/web/src/components/**`, the AI runtime, the
 model policy, the worker, the scoped GET and every component stay untouched: Phase B owns the
@@ -51,18 +51,18 @@ provider leg and Phase C owns the display leg.
 
 `intelligence_insights` — one row per generated question.
 
-| Column              | SQL                    | Type    | Notes                                                      |
-| ------------------- | ---------------------- | ------- | ---------------------------------------------------------- |
-| `id`                | `id`                   | TEXT PK | a `newUuid()`                                               |
-| `business_key`      | `business_key`         | TEXT    | NOT NULL, unique — the deduplication identity              |
-| `account_id`        | `account_id`           | TEXT    | NOT NULL, FK `accounts(id)` ON DELETE CASCADE              |
-| `subject_id`        | `subject_id`           | TEXT    | NOT NULL — the trade identity the question is about         |
-| `observation_id`    | `observation_id`       | TEXT    | NOT NULL, FK `intelligence_observations(id)` ON DELETE CASCADE |
-| `source_revision`   | `source_revision`      | TEXT    | NOT NULL — the projection revision the question was made from |
-| `capability_version`| `capability_version`   | TEXT    | NOT NULL — the version of the capability that produced it   |
-| `question`          | `question`             | TEXT    | NOT NULL — the validated question text                      |
-| `run_id`            | `run_id`               | TEXT    | nullable, FK `intelligence_runs(id)` ON DELETE SET NULL     |
-| `created_at`        | `created_at`           | INTEGER | NOT NULL — epoch milliseconds                               |
+| Column               | SQL                  | Type    | Notes                                                          |
+| -------------------- | -------------------- | ------- | -------------------------------------------------------------- |
+| `id`                 | `id`                 | TEXT PK | a `newUuid()`                                                  |
+| `business_key`       | `business_key`       | TEXT    | NOT NULL, unique — the deduplication identity                  |
+| `account_id`         | `account_id`         | TEXT    | NOT NULL, FK `accounts(id)` ON DELETE CASCADE                  |
+| `subject_id`         | `subject_id`         | TEXT    | NOT NULL — the trade identity the question is about            |
+| `observation_id`     | `observation_id`     | TEXT    | NOT NULL, FK `intelligence_observations(id)` ON DELETE CASCADE |
+| `source_revision`    | `source_revision`    | TEXT    | NOT NULL — the projection revision the question was made from  |
+| `capability_version` | `capability_version` | TEXT    | NOT NULL — the version of the capability that produced it      |
+| `question`           | `question`           | TEXT    | NOT NULL — the validated question text                         |
+| `run_id`             | `run_id`             | TEXT    | nullable, FK `intelligence_runs(id)` ON DELETE SET NULL        |
+| `created_at`         | `created_at`         | INTEGER | NOT NULL — epoch milliseconds                                  |
 
 Indexes: the unique index over `business_key`
 (`intelligence_insights_business_key_unique`), an index over `account_id`
@@ -79,7 +79,7 @@ empties and the account purge deletes, and the question must survive the loss of
 reference becomes null; the question stays.
 
 **No foreign key on `subject_id`.** The subject is a trade identity, and the question must not
-disappear because the identity was re-keyed; the row is bound to the *revision*, not to the
+disappear because the identity was re-keyed; the row is bound to the _revision_, not to the
 identity's row. This mirrors `intelligence_observations.subject_id`, which carries no foreign key
 for the same reason.
 
@@ -134,7 +134,7 @@ version because a new capability version is a new question, not a revision of th
 `intelligence_observations.source_revision` is TEXT and holds `trade_projection_revisions.id` — the
 UUID of the revision row — and the insight follows the observation it was generated from, so it
 holds the same UUID. (The knowledge tables' `source_revision` is an INTEGER ordinal of a
-*knowledge* source revision; that is a different chain and is not used here.) The UUID matters:
+_knowledge_ source revision; that is a different chain and is not used here.) The UUID matters:
 the ordinal is only unique inside one trade, so two trades of one account at the same ordinal would
 collide on the unique index and silently drop the second question.
 
@@ -150,15 +150,17 @@ disappear with the 30-day transport sweep.
    and the knowledge class prunes on the row's own age;
 2. it is no longer current — the observation it was generated from is no longer `active`, or its
    `source_revision` is no longer the current projection revision of its subject;
-3. nothing live names it — the live reference index names no observation id and no revision id of
-   the insight.
+3. nothing live names it — the live reference index names neither the observation id nor the
+   revision id of the insight.
 
 Rule 2 mirrors the knowledge rule ("a record is prunable when it is not the newest version of
 its subject"), and rule 3 is the existing live-reference guard: a live workflow, opportunity or
 conversation that names the observation or the revision keeps the question alive.
 
-The insight does **not** add ids to the live reference index. The index names observations and
-revisions; an insight is protected by the observation and the revision it already carries.
+The insight does **not** add ids to the live reference index. The index names observation ids and
+projection revision ids, and those are the two id spaces the insight's own ids live in, so the
+guard is two checks in the same space: the index must not hold the insight's observation id, and
+it must not hold the insight's source revision.
 
 ## How a source correction hides an older question
 
@@ -198,25 +200,38 @@ export interface InsightStore {
 }
 ```
 
-`infrastructure/insight-store.ts` implements it over Drizzle. The validation lives at the store
-boundary: the question is trimmed, must not be empty and must not exceed
-`MAX_INSIGHT_QUESTION_LENGTH` (2000 characters). **An invalid question stores nothing and the port
-returns null** — the caller can tell "not stored" from "stored".
+`infrastructure/insight-store.ts` implements it over Drizzle and exposes it through
+`createInsightStore(): InsightStore`, the factory the repo's other stores use
+(`createExperienceStore`, `createJobStore`). The factory is the only public surface of the
+adapter: a sibling domain injects the port and never reaches the implementation, so the boundary
+rule holds and the compiler catches drift between the port and the adapter.
+
+The validation lives at the store boundary: the question is trimmed, must not be empty and must
+not exceed `MAX_INSIGHT_QUESTION_LENGTH` (2000 characters). **An invalid question stores nothing
+and the port returns null** — the caller can tell "not stored" from "stored".
 
 **A repeated write returns the id of the row that is already there.** The insert uses
 `onConflictDoNothing` on the `business_key` unique index, and the row is then read back by its
 business key — the same shape `infrastructure/jobs.ts` uses for an `idempotency_key` conflict. So a
 duplicate write yields one row and one id, and the id always names a row that exists.
 
+**The read names one capability version.** The query takes an optional `capabilityVersion` and
+defaults to the current one. A new capability version is a new question, not a revision of the
+old one, so both rows are legitimate and the read must not return whichever one it finds first.
+
 ## The deletion guarantees
 
-| Path                         | What happens to the insights                                                     |
-| ---------------------------- | ------------------------------------------------------------------------------- |
-| account purge                | the account's insights are deleted with the account's other intelligence         |
-| account reset                | the reset calls the purge, so the insights go with it                            |
-| restore                      | the restore re-applies the ledger, so a purged account's question cannot return  |
-| knowledge prune              | only an insight older than 90 days, no longer current and named by nothing live  |
-| account deletion             | the `accounts` cascade takes them                                               |
+| Path             | What happens to the insights                                                    |
+| ---------------- | ------------------------------------------------------------------------------- |
+| account purge    | the account's insights are deleted with the account's other intelligence        |
+| account reset    | the reset calls the purge, so the insights go with it                           |
+| restore          | the restore re-applies the ledger, so a purged account's question cannot return |
+| knowledge prune  | only an insight older than 90 days, no longer current and named by nothing live |
+| account deletion | the `accounts` cascade takes them                                               |
+
+The purge deletes the insights by their account id, because the purge does not delete the account
+row and the cascade therefore does not fire. The insights of the account's observations go with
+the observations themselves: their foreign key cascades.
 
 ## The migration
 

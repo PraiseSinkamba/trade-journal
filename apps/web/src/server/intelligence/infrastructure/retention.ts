@@ -9,6 +9,7 @@ import {
   executionEvidence,
   executions,
   intelligenceConversations,
+  intelligenceInsights,
   intelligenceJobs,
   intelligenceObservations,
   intelligenceOpportunities,
@@ -32,6 +33,7 @@ import { decryptJson } from "@/server/crypto";
 import { deleteAccountExecutionsInTx } from "@/server/executions";
 import { liveReferenceIndex } from "./experience-store";
 import { createJobStore, deleteTerminalJobsForEventInTx } from "./jobs";
+import { pruneInsightsInTx } from "./insight-store";
 import { pruneKnowledgeInTx, pruneObservationsInTx } from "./knowledge-store";
 
 /**
@@ -280,6 +282,11 @@ export const purgeAccountIntelligence = (tx: JournalTx, accountId: string): void
   tx.delete(knowledgePatterns).where(eq(knowledgePatterns.accountId, accountId)).run();
   tx.delete(knowledgeSources).where(eq(knowledgeSources.accountId, accountId)).run();
 
+  // The insights of the account: the generated questions. The account cascade
+  // does not fire here — the purge does not delete the account row — so they
+  // are deleted explicitly.
+  tx.delete(intelligenceInsights).where(eq(intelligenceInsights.accountId, accountId)).run();
+
   // The experience of the account: its workflows (their transitions, their
   // commands and their conversation links cascade with them), its opportunities
   // and its conversations with their messages.
@@ -302,6 +309,8 @@ export const purgeAccountIntelligence = (tx: JournalTx, accountId: string): void
     tx.delete(intelligenceConversations)
       .where(inArray(intelligenceConversations.subjectId, chunk))
       .run();
+    // The insights of those observations went with the observations themselves:
+    // their foreign key cascades.
   });
 
   // The background runs of the account: the account id leaves the scope, and a
@@ -612,6 +621,9 @@ export const pruneSupersededKnowledgeInTx = (
   const live = liveReferenceIndex(tx);
   let removed = 0;
   removed += pruneKnowledgeInTx(tx, before, limit - removed, live);
+  if (removed < limit) {
+    removed += pruneInsightsInTx(tx, before, limit - removed, live);
+  }
   if (removed < limit) {
     removed += pruneObservationsInTx(tx, before, limit - removed, live);
   }

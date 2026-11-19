@@ -286,7 +286,11 @@ describe("Phase 16 workflow commands", () => {
       db.$client.exec("DROP TABLE interaction_commands");
       db.$client.exec("DROP TABLE workflow_transitions");
       db.$client.exec("DROP TABLE intelligence_workflows");
-      db.$client.exec("DELETE FROM journal_migrations WHERE version = 7");
+      // The insights arrived with migration 0008, so a journal that predates
+      // this phase does not have them either and the ledger holds nothing
+      // past 0006.
+      db.$client.exec("DROP TABLE intelligence_insights");
+      db.$client.exec("DELETE FROM journal_migrations WHERE version >= 7");
 
       applyMigrations(db.$client);
 
