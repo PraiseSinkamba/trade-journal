@@ -1,7 +1,7 @@
 {
   "schemaVersion": 1,
   "feature": "ai-native-journal",
-  "updatedAt": "2026-11-18T20:20:01Z",
+  "updatedAt": "2026-11-19T11:42:59Z",
   "owner": "parent OMP coordinator (exclusive owner of this record)",
   "repository": {
     "name": "trade-journal",
@@ -35,7 +35,7 @@
     },
     "featureBranch": "codex/ai-native-journal",
     "featureBootstrapSha": "0a278503fd67c0f9e82138dfecb744f4bfd307ad",
-    "featureHeadSha": "3340519c02a46cbac406c240c78d6b8809ccc73e",
+    "featureHeadSha": "1b63ebcd4c0374e7c4ce973095bda6248a813a76",
     "featureHeadShaNote": "feature branch HEAD; the twenty-one phases are integrated and the optional-AI insight work continues from this tip on its own phase branches",
     "featureCheckpointCommits": [
       "0a278503fd67c0f9e82138dfecb744f4bfd307ad",
@@ -90,7 +90,8 @@
       "697da39df21000b6defadd8d5e952e48d54234d3",
       "b4b0422b6c69656a60e95820f34f25248ce12ad2",
       "16cc4f9d46eb2d67dc620bf44e021d763744cbb1",
-      "cc9e991ca9a372fc938daaa62b51f64f33167d8f"
+      "cc9e991ca9a372fc938daaa62b51f64f33167d8f",
+      "1b63ebcd4c0374e7c4ce973095bda6248a813a76"
     ],
     "featureBranchNote": "Orca slugified the requested name to codex-ai-native-journal at creation; the coordinator renamed the newly created, exclusively owned branch to the contract-required codex/ai-native-journal. Orca reads the renamed ref live (refs/heads/codex/ai-native-journal). No pre-existing branch was overwritten."
   },
@@ -1945,7 +1946,7 @@
   "optionalAiInsightWork": {
     "plan": "C:/Users/4004/Documents/Codex/2026-11-18/report-from-implementing-agent-e-4004/minimax-slice-b-ai-plan.md",
     "startTip": "3340519c02a46cbac406c240c78d6b8809ccc73e",
-    "startTipNote": "the plan names this SHA as the reviewed implementation; it is the current verified feature tip, so there were no subsequent fixes to record",
+    "startTipNote": "Phase A started from this tip and is merged; Phase B continues from the Phase A merge.",
     "gap": "Phase 19 left the optional-AI node of the design chain unwired: the chain had no persisted home, so the producer was deterministic and provider-free and the no-provider path became the only path. The Phase 19 report named a persisted home for an AI-assisted insight as its next-phase input.",
     "phases": [
       {
@@ -1954,8 +1955,13 @@
         "dispatch": "ctx_79f34d9942e6",
         "branch": "codex/ai-native-journal-p22",
         "plan": "docs/superpowers/plans/ai-native-journal/phase-22.md",
-        "report": "docs/superpowers/reports/ai-native-journal-phase-22.md",
-        "scope": "storage only: a dedicated revision-bound insights table in migration 0008, the store, the shared business key and capability-version constant, and the purge, reset, retention and restore integration. No provider call, no job enqueue, no UI."
+        "report": "docs/superpowers/reports/ai-native-journal-integration-22.md",
+        "scope": "storage only: a dedicated revision-bound insights table in migration 0008, the store, the shared business key and capability-version constant, and the purge, reset, retention and restore integration. No provider call, no job enqueue, no UI.",
+        "state": "integrated",
+        "merge": "dd30430086cf4eb0c21153f359dc851db159b2db",
+        "verification": "the destination gate passed on the destination branch: 8 of 8 commands exit 0, pnpm test 1387 passed in 117 files",
+        "review": "the implementation-diff review returned PASS on all ten requirements; the coordinator proved six behaviours decisive by mutation and recorded that the account foreign-key cascade is redundant with the observation cascade, which is the load-bearing one",
+        "note": "undefined Migration 0008 and the revision-bound insight store are integrated and verified. The account cascade and the explicit purge delete are defence in depth on top of the observation cascade."
       },
       {
         "key": "B",
