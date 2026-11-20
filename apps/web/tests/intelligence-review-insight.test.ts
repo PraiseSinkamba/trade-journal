@@ -1210,4 +1210,35 @@ describe("the review insight", () => {
       await new Promise<void>((resolve) => server.close(() => resolve()));
     }
   });
+
+  it("refuses a capability job's run in the legacy background path", async () => {
+    createAccount(ACCOUNT);
+    configureProvider();
+    enablePolicy([ACCOUNT]);
+    // The change that raises the observation and queues the capability job.
+    deliverChange(ACCOUNT, false);
+    const run = runRows()[0];
+    expect(run).toBeDefined();
+
+    // The legacy path handles no capability: it refuses the run before it
+    // reserves an attempt and before it reaches a provider, so a bare
+    // provider response can never complete a capability job's run.
+    const fetcher = vi.fn();
+    vi.stubGlobal("fetch", fetcher);
+    const result = await composition.executeBackgroundRun({
+      runId: run?.id ?? "",
+      system: "System",
+      prompt: "Prompt",
+      signal: new AbortController().signal,
+      now: NOW,
+    });
+
+    expect(result).toMatchObject({ status: "failed", reason: "unhandled_capability" });
+    expect(fetcher).not.toHaveBeenCalled();
+    // The run is untouched: the fenced final transaction of the capability
+    // job is the only way to finish it.
+    expect(runRows()[0]?.status).not.toBe("completed");
+    expect(db.select().from(intelligenceBudgetReservations).all()).toHaveLength(0);
+    expect(insightRows()).toHaveLength(0);
+  });
 });

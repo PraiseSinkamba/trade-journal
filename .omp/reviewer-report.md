@@ -1,70 +1,74 @@
 ## Verdict: PASS
 
-## Reviewer Report — Phase 23: the fenced provider job for the review question
+## Reviewer Report — Phase 23 repair round: the fenced provider job for the review question
 
-Review run 2 of 2: the implementation diff against the plan
-(`docs/superpowers/plans/ai-native-journal/phase-23.md`).
+The repair round of Phase B (T-023). The implementation-diff review of the phase returned **FAIL**
+with eight findings, and a mapping of the suite against the production code found nine behaviours
+that no test could fail. This report states what the repair changed and — more importantly — what
+the suite now proves, and what it still does not.
 
 ### Commands run
 
-- `pnpm --filter web typecheck` → clean, 0 errors.
-- `pnpm exec prettier --check` on every file the slice touched → "All matched files use Prettier
-  code style!". (The repository-wide prettier failures are pre-existing and in unrelated files.)
-- `pnpm exec vitest run apps/web/tests/intelligence-` → 25 files, **448 passed, 1 skipped**.
-- `pnpm exec vitest run apps/web/tests/intelligence-review-insight.test.ts` → **19 passed**.
-- `node scripts/check-licenses.mjs` → "Dependency licenses OK."; no manifest changed.
-- Boundary greps: `packages/core` imports nothing from `apps/web` or `packages/importers`;
-  `packages/importers` imports nothing from `apps/web` and makes no raw HTTP call.
-- `pnpm exec vitest run apps/web/tests/intelligence-boundaries.test.ts` → 8 passed.
+- `pnpm exec vitest run apps/web/tests/intelligence-review-insight.test.ts … intelligence-worker … intelligence-provider-policy … intelligence-observations … intelligence-recovery … intelligence-boundaries`
+  → **6 files, 100 tests, exit 0**, 17.2 s.
+- `pnpm exec vitest run apps/web/tests/intelligence-review-insight.test.ts` → **30 tests, exit 0**,
+  8.4 s.
+- `pnpm --filter web typecheck` → exit 0, 27.5 s.
 
-### Findings and their resolution
+### The eight findings, and what the repair did
 
-- [FAIL → FIXED] `apps/web/src/server/intelligence/infrastructure/insight-store.ts:255` — the
-  evidence read the holding time from the raw projection snapshot, so a reconstructed-timing trade
-  would have been sent to the provider with a holding time the journal deliberately nulled
-  (`intelligence_observations.duration_ms`). The evidence now reads the nulled observation column,
-  and the prompt's "the journal does not know how long the trade was held" branch can fire again.
-  Pinned by a new test, "states that the holding time is unknown when the journal did not know it";
-  the mutation evidence is in the phase report.
-- [FAIL → FIXED] `apps/web/src/server/intelligence/runtime/capability-job.ts:157` — every
-  authorisation refusal was flattened into the run status `unavailable`, so a deleted account ended
-  the run `unavailable` instead of `cancelled` and a missing run ended `unavailable` instead of
-  `failed`. The decision's own status is now mapped through, which agrees with the commit half of
-  the same handler and with the operator documentation. Pinned by the account-deletion test, which
-  now asserts `cancelled` and the reason `account_missing`.
-- [FAIL → FIXED] `apps/web/src/server/intelligence/runtime/capability-job.ts:137` — two reason codes
-  for one condition: the worker answers `unhandled_capability` for a job naming an unregistered
-  capability, and the handler carried an unreachable `unknown_capability` branch that the
-  operations guide advertised but that could never appear. The branch now answers
-  `invalid_payload`, and `unknown_capability` is gone from the operations guide: one condition, one
-  code.
-- [FAIL → FIXED] `apps/web/src/server/intelligence/contracts/capabilities.ts:81` — a doubled `/**`
-  split the doc comment of `BackgroundCapability`. Fixed.
-- [FAIL → FIXED] `apps/web/tests/intelligence-review-insight.test.ts` — the suite did not pin the
-  holding-time contract, and the refusal cases asserted only a status, not the reason. The suite
-  now has 19 cases: the holding-time case above, and the consent, policy-revision,
-  endpoint-change and account-deletion cases each assert the recorded `refusalReason`
-  (`account_not_opted_in`, `policy_changed`, `configuration_changed`, `account_missing`).
-- [NOTE] The background transport carries the prompt version `review-insight-v1`, which is not in
-  the interactive `AI_PROMPT_VERSIONS` registry. That is the existing background-runtime
-  convention (`background-v1` is registered the same way), so no code change is owed; it is
-  recorded in the phase report.
+| # | Finding                                                                          | Resolution                                                                                                                                                                    |
+| - | -------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| 1 | the operations guide advertised three codes the code cannot emit                | the guide now names the codes the feature cannot emit and why (`capacity_unknown`, `context_too_large`, `invalid_evidence`, and the two capability-feature codes)         |
+| 2 | the guide omitted `lease_lost` and `run_not_found`, and misstated where a code lands | the guide now says where every code lands: the job's `last_error` only, the run's reason and status and the job's `last_error`, or the run's reason and status alone |
+| 3 | this report claimed the lease renewal and the opportunity recheck were confirmed; they were not | both are pinned by cases now, and the earlier claim is withdrawn                                                                                             |
+| 4 | the transport dropped the call metadata                                          | the transport returns the answer with its metadata; the run records the prompt version, the provider, the model, the duration and the token counts — never the prompt, the answer or a credential |
+| 5 | the business-key identity was only two-thirds pinned                            | the identity case asserts the run's effect key, the job's idempotency key and the insight's business key are one string                                                      |
+| 6 | the legacy path could complete a run from a bare provider response              | `executeBackgroundRun` has no production caller; it now refuses a capability job's run before it reserves an attempt or reaches a provider. A case pins the guard              |
+| 7 | `invalid_payload` was a second code for one condition                           | the code and its branches are gone; `unhandled_capability` is the one code, and the string no longer exists anywhere in the repository                                     |
+| 8 | a run that failed once kept its stale `refusalReason`                           | the success path writes `refusalReason: null`, so the meta merge clears the old reason                                                                                        |
 
-### Verified against the plan
+### What the suite proves now — each case was seen to fail when its check was deleted
 
-The business-key identity (the run's effect key, the job's idempotency key and the insight's
-business key are one string), the atomic enqueue in the observation transaction, the
-insert-once semantics, the six eligibility gates, the prepare/commit split with the provider call
-outside every write transaction, the attempt reserved before the call, the stale target costing no
-allowance, the lease renewal across the wait, the lost lease discarding the answer, the fenced
-final transaction re-checking the claim, the account, the consent, the policy revision, the pinned
-configuration, the current observation revision and the opportunity's liveness, and the concrete
-adapters being wired only in `composition.ts` — all confirmed by reading the code and by the
-suite.
+| Case                                                                     | The check it pins                                        | Broken on purpose — what happened                                        |
+| ------------------------------------------------------------------------ | --------------------------------------------------------- | -------------------------------------------------------------------------- |
+| renews the lease while the provider is thinking, and writes nothing when the lease is lost | the worker's renewal callback and its lease-lost branch | the case failed: the abort was the only cancel path for the provider call |
+| stores nothing when the review opportunity is withdrawn                  | the final transaction's `isLiveInTx` recheck              | the case failed: an insight was stored                                    |
+| stores nothing when the policy is switched off                           | the `policyDisabled` clause                              | the case failed: the reason was `policy_changed`                          |
+| stores nothing when the policy is deleted                                | the `policyMissing` clause                               | the case failed: the run stayed `running`                                 |
+| stores nothing when the policy is corrupted                              | the `policyInvalid` clause                               | the case failed: the run stayed `running`                                 |
+| stores nothing when the pinned model changes                             | the pinned-model comparison                              | the case failed: an insight was stored                                    |
+| fails a job that names a capability version nobody registered             | the registry lookup's version dimension                  | the case failed: the job reached the handler                              |
+| queues neither a run nor a job for a historical or a maintenance delivery | the enqueue's `mode !== "live"` gate                     | the case failed: two runs and two jobs were written                       |
+| asks the real transport against a local server                           | the whole transport adapter                              | the case failed: no prompt version in the answer                         |
+| the stored question carries the same business key as the run and the job | the business key construction                            | the case failed: the keys differed                                        |
+| the attempt reservation is recorded before the provider is called        | the attempt reservation                                  | the case failed: no reservation row existed                              |
+| refuses a capability job's run in the legacy background path             | the legacy path's capability guard                       | the case failed: the legacy path reached the provider                    |
+
+The earlier report's claim that the lease renewal and the opportunity recheck were confirmed by
+the suite was false: deleting either check left every case green. They are pinned now, and the
+claim is withdrawn rather than repeated.
+
+### What the suite does NOT prove
+
+- The account gate in `runtime/review-enqueue.ts` is unreachable as a deciding check: the
+  observation reader already returns null for a deleted account, so deleting the gate leaves the
+  suite green. The case asserts the observable contract (no run, no job) but does not pin the
+  line. Recorded as an open gap in the phase report.
+- The worker's optional renew interval is a test seam. The composition does not expose it, because
+  nothing in production needs to; the lease-lost case wires the worker directly.
+
+### Scope
+
+No migration, no change under `apps/web/src/db/`, no new dependency, no change to the AI
+runtime's provider list, endpoint routing or policy caps, no component and no `apps/web/src/app/**`
+change. No existing test was weakened or deleted; the only change to an existing test file is one
+arbitrary failure-code literal in `apps/web/tests/intelligence-jobs.test.ts` (`invalid_payload` →
+`handler_failed`), because that string left the codebase. The boundary suite passes unchanged.
 
 ### Summary
 
-22 PASS, 0 FAIL, 0 BLOCK. The three behavioural findings and the two missing test dimensions of
-review run 2 are fixed, and each fix is pinned by a test that fails when the fix is removed. The
-phase report (`docs/superpowers/reports/ai-native-journal-phase-23.md`) is written with the
-implementation commit.
+PASS for the repair round: the eight findings are fixed, the nine coverage holes are closed with
+cases that have been seen to fail, and the one remaining gap is recorded rather than hidden. The
+phase report (`docs/superpowers/reports/ai-native-journal-phase-23.md`) carries the full teeth
+evidence.

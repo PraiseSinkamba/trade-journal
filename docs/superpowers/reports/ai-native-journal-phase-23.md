@@ -9,6 +9,7 @@ Phase B of the optional-AI feature · the provider leg of the design chain · **
 | Plan commit           | `ad49145fdc` — _docs: plan the fenced provider job for the review question_                |
 | Implementation commit | `340b4d12d3` — _ask the provider one review question per live trade, through a fenced job_ |
 | Report commit         | _docs: record the Phase 23 provider job evidence_                                          |
+| Repair commits        | `576678d` (the code), `a5a15aa` (the guide), `e7f9210` (the cases), this report            |
 | Migrations            | none. `0001`–`0008` are byte-unchanged; the job payload rides the existing table           |
 
 ## What was built
@@ -138,10 +139,11 @@ yields no visible output.
 
 ## The exit evidence
 
-`apps/web/tests/intelligence-review-insight.test.ts` — 19 cases, driving the **production** worker
+`apps/web/tests/intelligence-review-insight.test.ts` — 30 cases, driving the **production** worker
 registration (`createIntelligenceWorker`) against a real file-backed SQLite journal with an
 injected transport. The compatible provider points at a fake local URL, so no real network call
-can happen.
+can happen. Eleven of the cases were added by the repair round; they are listed in
+[the repair round](#the-repair-round) below.
 
 | Case                                                         | What it proves                                                   |
 | ------------------------------------------------------------ | ---------------------------------------------------------------- |
@@ -178,6 +180,59 @@ Each behaviour was broken on purpose and seen to fail.
 | the holding time read from the nulled observation column (`insight-store.ts`) | "states that the holding time is unknown when the journal did not know it" failed: the prompt said `holding time: 3600000 ms` for a reconstructed trade |
 | the daily allowance reservation (`policy-store.ts`)                           | the day's ten attempts are spent; the provider is never asked                                                                                           |
 
+## The repair round
+
+The implementation-diff review of this phase returned **FAIL** with eight findings, and a second
+mapping of the suite against the production code found nine behaviours that no test could fail.
+The repair keeps the design and closes both.
+
+### The eight findings
+
+| #   | Finding                                                                                        | What the repair did                                                                                                                                                                                                                                                                                                                                                                        |
+| --- | ---------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| 1   | the operations guide advertised three codes the code cannot emit                               | the guide now says which codes the feature cannot emit and why: `capacity_unknown` (the policy schema demands a positive int, so a bad value is `policy_invalid`), `context_too_large` (the enqueue drops an over-budget change silently), `invalid_evidence` (the reader returns null, so the case is `target_stale`), and the two capability-feature codes (the run requires no feature) |
+| 2   | the guide omitted `lease_lost` and `run_not_found`, and misstated where a code lands           | the guide now names every code and exactly where it lands: the job's `last_error` only, the run's reason and status and the job's `last_error`, or the run's reason and status alone (the job is then acknowledged completed with `last_error` NULL)                                                                                                                                       |
+| 3   | the report claimed the lease renewal and the opportunity recheck were confirmed; they were not | both are now pinned by cases that fail when the check is removed, and the claim in the reviewer report is corrected                                                                                                                                                                                                                                                                        |
+| 4   | the transport dropped the call metadata                                                        | the transport returns the answer with its metadata, and the run records the prompt version, the provider, the model, the duration and the token counts — no prompt text, no answer text, no credential                                                                                                                                                                                     |
+| 5   | the business-key identity was only two-thirds pinned                                           | the identity case now asserts the run's effect key, the job's idempotency key and the insight's business key are one string                                                                                                                                                                                                                                                                |
+| 6   | the legacy path could complete a run from a bare provider response                             | `executeBackgroundRun` has no production caller; it now refuses a run that carries a capability id before it reserves an attempt or reaches a provider, and it never completes such a run. A case pins the guard                                                                                                                                                                           |
+| 7   | `invalid_payload` was a second code for the unregistered-capability condition                  | the code and both of its branches are gone; the handler narrows the payload and throws on an impossible one, and `unhandled_capability` stays the one code                                                                                                                                                                                                                                 |
+| 8   | a run that failed once kept its stale `refusalReason`                                          | the success path writes `refusalReason: null`, so the meta merge clears the old reason                                                                                                                                                                                                                                                                                                     |
+
+### The new cases, and the teeth they have
+
+Eleven cases were added and two existing ones were extended. Every behaviour was broken on
+purpose — the production check it pins was deleted — and seen to fail; the file was then restored
+and the case seen to pass again.
+
+| Case                                                                                       | The production check it pins                            | What happened when the check was deleted                                                                          |
+| ------------------------------------------------------------------------------------------ | ------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------- |
+| renews the lease while the provider is thinking, and writes nothing when the lease is lost | the worker's renewal callback and its lease-lost branch | the case failed: the abort was the only thing that cancelled the provider call, so the answer was never discarded |
+| stores nothing when the review opportunity is withdrawn while the answer is held           | the final transaction's `isLiveInTx` recheck            | the case failed: an insight was stored for a withdrawn opportunity                                                |
+| stores nothing when the policy is switched off while the answer is held                    | the `policyDisabled` clause                             | the case failed: the run reported `policy_changed` instead of `policy_disabled`                                   |
+| stores nothing when the policy is deleted while the answer is held                         | the `policyMissing` clause                              | the case failed: the run stayed `running`                                                                         |
+| stores nothing when the policy is corrupted while the answer is held                       | the `policyInvalid` clause                              | the case failed: the run stayed `running`                                                                         |
+| stores nothing when the pinned model changes while the answer is held                      | the pinned-model comparison                             | the case failed: an insight was stored for a run pinned to another model                                          |
+| fails a job that names a capability version nobody registered                              | the registry lookup's version dimension                 | the case failed: the job reached the handler instead of failing with `unhandled_capability`                       |
+| queues neither a run nor a job for a historical or a maintenance delivery                  | the enqueue's `mode !== "live"` gate                    | the case failed: two runs and two jobs were written for the historical delivery                                   |
+| asks the real transport against a local server                                             | the whole transport adapter                             | the case failed: the answer carried no prompt version                                                             |
+| the stored question carries the same business key as the run and the job                   | the business key construction                           | the case failed: the job's idempotency key differed from the run's effect key                                     |
+| the attempt reservation is recorded before the provider is called                          | the attempt reservation                                 | the case failed: no reservation row existed, and the day's allowance could never be spent                         |
+| refuses a capability job's run in the legacy background path                               | the legacy path's capability guard                      | the case failed: the legacy path reached the provider instead of refusing the run                                 |
+
+### The one gap that is still open, and why
+
+The case "queues neither a run nor a job when the account does not exist" asserts the observable
+contract, but it does **not** fail when the account gate in `runtime/review-enqueue.ts` is
+deleted: the observation reader already returns null for a deleted account, and the foreign key
+removes the observation with it. The gate is therefore unreachable as a deciding check. It is
+kept — it is cheap and it documents the intent — and it is recorded here as an open gap rather
+than papered over.
+
+The worker takes an optional renew interval, so a case can exercise the lease-lost branch
+without waiting the real fifteen seconds. The seam is used by the test that wires the worker
+directly; the composition does not expose it, because nothing in production needs to.
+
 ## The review
 
 Two reviewer runs, both against the plan and the implementation.
@@ -202,6 +257,19 @@ provider call still landed a question. Fixed, and pinned by a test.
 4. the suite did not pin the holding-time contract, and the refusal cases asserted only a status.
    The suite grew from 17 to 19 cases and now asserts the recorded reason on every refusal.
 5. a doubled `/**` split a doc comment. Fixed.
+
+**Run 3 (the implementation diff of this phase, after the repair round)** is the coordinator's
+review of the repair. This report's own earlier claim — that the lease renewal and the
+opportunity recheck were confirmed by the suite — was false: no case could fail when either
+check was deleted. Both are pinned now, and the claim in the reviewer report has been corrected.
+
+## The verification of the repair round
+
+| Command                                                                                                                                                                                                      | Exit | Runtime            |
+| ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ | ---- | ------------------ |
+| `pnpm exec vitest run apps/web/tests/intelligence-review-insight.test.ts`                                                                                                                                    | 0    | 8.4 s              |
+| `pnpm exec vitest run apps/web/tests/intelligence-review-insight.test.ts … intelligence-worker … intelligence-provider-policy … intelligence-observations … intelligence-recovery … intelligence-boundaries` | 0    | 17.2 s (100 tests) |
+| `pnpm --filter web typecheck`                                                                                                                                                                                | 0    | 27.5 s             |
 
 ## What this phase does not do
 
