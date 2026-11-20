@@ -94,7 +94,7 @@ const isBusy = (error: unknown): boolean =>
   String((error as { code: unknown }).code).startsWith("SQLITE_BUSY");
 
 /** The reason a job records when its capability is not registered. */
-const UNHANDLED_CAPABILITY = "unhandled_capability";
+export const UNHANDLED_CAPABILITY = "unhandled_capability";
 
 /** The reason a job records when a lease was lost while the work ran. */
 const LEASE_LOST = "lease_lost";
@@ -124,6 +124,16 @@ export const createWorkerService = (deps: {
   enabled?: boolean;
   pollIntervalMs?: number;
   dispatchLimit?: number;
+  /**
+   * How often the job lease and the worker lease are renewed while a
+   * provider answer is awaited.
+   *
+   * It is the seam a test needs to exercise the lease-lost branch without
+   * waiting the real fifteen seconds: production renews every
+   * `JOB_RENEW_INTERVAL_MS`, and a test sets it to a few milliseconds so the
+   * renewal happens while the provider is still thinking.
+   */
+  renewIntervalMs?: number;
   /** The durable scheduler, ticked on the worker's own connection and clock. */
   scheduler?: { scheduleDue(now: number): number };
 }): WorkerService & {
@@ -135,6 +145,7 @@ export const createWorkerService = (deps: {
   const enabled = deps.enabled ?? true;
   const pollIntervalMs = deps.pollIntervalMs ?? POLL_INTERVAL_MS;
   const dispatchLimit = deps.dispatchLimit ?? DISPATCH_LIMIT;
+  const renewIntervalMs = deps.renewIntervalMs ?? JOB_RENEW_INTERVAL_MS;
 
   let state: WorkerState = enabled ? "idle" : "disabled";
   let fence: number | null = null;
@@ -325,7 +336,7 @@ export const createWorkerService = (deps: {
         controller.abort();
       }
     };
-    const timer = setInterval(renew, JOB_RENEW_INTERVAL_MS);
+    const timer = setInterval(renew, renewIntervalMs);
 
     const prepared = await (async () => {
       try {

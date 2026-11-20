@@ -13,7 +13,8 @@ import type { AiProvider } from "@/lib/ai-settings";
  *
  * Phase 23 adds the background capability that produces one question: the
  * minimum authorised evidence it reads, the bounded answer it returns, the
- * evidence reader it needs and the provider transport it calls.
+ * metadata of the provider call that produced it, the evidence reader it
+ * needs and the provider transport it calls.
  */
 
 /**
@@ -53,6 +54,45 @@ export const MAX_INSIGHT_QUESTION_LENGTH = 2000;
 export const reviewAnswerSchema = z.string().trim().min(1).max(MAX_INSIGHT_QUESTION_LENGTH);
 
 /**
+ * The metadata one provider call produced.
+ *
+ * It holds only what the journal may keep: the version of the prompt that
+ * was sent, the provider and the model that answered, how long the call took
+ * and the token counts the provider reported. The prompt, the answer and the
+ * credential never travel in it, so it is safe to store as run diagnostics.
+ */
+export interface ReviewQuestionAnswerMeta {
+  /** The version of the prompt the call was made under. */
+  readonly promptVersion: string;
+  /** The provider that answered. */
+  readonly provider: string;
+  /** The model that answered. */
+  readonly model: string;
+  /** How long the call took, in milliseconds. */
+  readonly durationMs: number;
+  /** The tokens the provider reported it read, when it reported them. */
+  readonly inputTokens?: number;
+  /** The tokens the provider reported it wrote, when it reported them. */
+  readonly outputTokens?: number;
+  /** Why the provider stopped, when it said. */
+  readonly finishReason?: string;
+}
+
+/**
+ * One answer of the provider.
+ *
+ * The text is the question; the metadata describes the call that produced
+ * it. The two travel together because the run has to record which prompt
+ * produced the question.
+ */
+export interface ReviewQuestionAnswer {
+  /** The plain-text answer of the provider. */
+  readonly text: string;
+  /** The metadata of the call. */
+  readonly meta: ReviewQuestionAnswerMeta;
+}
+
+/**
  * The provider transport one review question needs.
  *
  * The transport is the only place the background runtime reaches a provider.
@@ -61,7 +101,13 @@ export const reviewAnswerSchema = z.string().trim().min(1).max(MAX_INSIGHT_QUEST
  * the provider again.
  */
 export interface ReviewQuestionTransport {
-  /** Calls the pinned provider once and returns its plain-text answer. */
+  /**
+   * Calls the pinned provider once and returns its answer.
+   *
+   * The answer carries the metadata of the call, so the run can record the
+   * prompt version, the provider, the model, the duration and the token
+   * counts.
+   */
   ask(input: {
     readonly provider: AiProvider;
     readonly model: string;
@@ -75,7 +121,7 @@ export interface ReviewQuestionTransport {
     readonly system: string;
     readonly prompt: string;
     readonly signal: AbortSignal;
-  }): Promise<string>;
+  }): Promise<ReviewQuestionAnswer>;
 }
 
 /**

@@ -37,6 +37,22 @@ export const createReviewQuestionTransport = (): ReviewQuestionTransport => ({
       abortSignal: signal,
     });
     // The raw answer travels back untouched: the capability validates it.
-    return result.output;
+    // The metadata of the call travels with it, because the run has to
+    // record the prompt version, the provider, the model and the token
+    // counts — the only fields the journal may keep. A count the provider
+    // did not report stays out of the meta rather than becoming a zero.
+    const meta = result.meta;
+    return {
+      text: result.output,
+      meta: {
+        promptVersion: REVIEW_QUESTION_PROMPT_VERSION,
+        provider: meta.provider,
+        model: meta.modelId,
+        durationMs: meta.durationMs,
+        ...(typeof meta.inputTokens === "number" ? { inputTokens: meta.inputTokens } : {}),
+        ...(typeof meta.outputTokens === "number" ? { outputTokens: meta.outputTokens } : {}),
+        ...(typeof meta.finishReason === "string" ? { finishReason: meta.finishReason } : {}),
+      },
+    };
   },
 });

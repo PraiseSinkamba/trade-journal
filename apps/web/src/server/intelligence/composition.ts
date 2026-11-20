@@ -108,6 +108,7 @@ import {
   createWorkerService,
   RETENTION_HANDLER_ID,
   RETENTION_HANDLER_VERSION,
+  UNHANDLED_CAPABILITY,
   type JobHandler,
   type WorkerService,
   type WorkerStatus,
@@ -631,6 +632,13 @@ export { reserveBackgroundAttempt };
  * The order is fixed: authorise, reserve, then call the provider. The
  * reservation is committed before the request, the provider is the one the
  * run was approved against, and the caller's abort signal stops the request.
+ *
+ * The legacy path has no production caller: the only caller in the
+ * repository is the existing provider-policy test, so the function is
+ * retained for that test alone. The guard below is what keeps a
+ * capability-job run out of it: such a run belongs to the capability job,
+ * which finishes it in a fenced final transaction, and it must never be
+ * completed by a bare provider response.
  */
 export const executeBackgroundRun = async (input: {
   runId: string;
@@ -640,10 +648,17 @@ export const executeBackgroundRun = async (input: {
   now?: number;
 }): Promise<Outcome<BackgroundRunOutput>> => {
   const now = input.now ?? Date.now();
+  // A capability job's run carries the capability it was queued for
+  // (`runtime/review-enqueue.ts` writes `meta.capabilityId`). This path
+  // handles no capability at all, so it refuses the run before it reserves
+  // an attempt and before it reaches a provider, and it never marks such a
+  // run completed.
+  const run = backgroundStore.readRun(input.runId);
+  if (run && typeof run.meta.capabilityId === "string")
+    return { status: "failed", reason: UNHANDLED_CAPABILITY };
   const authorization = authorizeBackgroundRun(input.runId, now, input.signal);
   if (authorization.status !== "completed")
     return { status: authorization.status, reason: authorization.reason };
-  const run = backgroundStore.readRun(input.runId);
   if (!run) return { status: "failed", reason: BACKGROUND_FAILURE.runNotFound };
   // The provider, the model and the endpoint are the ones the run was approved
   // against. The fingerprint is checked again here, so a configuration change

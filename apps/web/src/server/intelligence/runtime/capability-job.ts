@@ -1,9 +1,11 @@
 import type { JournalTx } from "@/db/transaction";
 import type { BackgroundCapability } from "../contracts/capabilities";
 import type {
+  InsightInput,
   InsightStore,
   ObservationEvidenceReader,
   ReviewOpportunityReader,
+  ReviewQuestionAnswerMeta,
   ReviewQuestionTransport,
 } from "../contracts/insights";
 import type {
@@ -40,12 +42,10 @@ import { evaluateBackgroundAuthorization } from "./model-policy";
  *   then stores the question and finishes the run.
  *
  * Every refusal is a stable reason code. No prompt, no provider answer and no
- * credential is ever stored: the run meta holds a reason and the capability
- * id and version, nothing else.
+ * credential is ever stored: the run meta holds a reason, the capability id
+ * and version and the metadata of the call that produced the question, and
+ * nothing else.
  */
-
-/** The reason a job records when its payload is not a capability job. */
-const INVALID_PAYLOAD = "invalid_payload";
 
 /** The reason a job records when the evidence does not match the schema. */
 const INVALID_EVIDENCE = "invalid_evidence";
@@ -64,6 +64,15 @@ const OPPORTUNITY_NOT_LIVE = "opportunity_not_live";
 
 /** The payload of the job this handler runs. */
 type CapabilityJobPayload = Extract<JobPayload, { type: "run_capability" }>;
+
+/**
+ * What the provider produced: the question and the metadata of the call.
+ *
+ * The metadata travels with the answer because the run has to record which
+ * prompt, which provider and which model produced the question. The insight
+ * store ignores it: only the question is stored.
+ */
+type CapabilityAnswer = InsightInput & { readonly providerMeta: ReviewQuestionAnswerMeta };
 
 /** What the capability job needs from the outside world. */
 export interface CapabilityJobDeps {
@@ -130,11 +139,15 @@ export const createCapabilityJobHandler = (deps: CapabilityJobDeps): AsyncJobHan
    */
   const prepare = async (context: AsyncJobContext): Promise<AsyncJobOutcome> => {
     const payload = context.job.payload;
-    if (payload.type !== "run_capability") return refusal(INVALID_PAYLOAD, "failed");
-    // The worker only dispatches a payload that names this capability, so a
-    // payload this handler will not run is an invalid payload and nothing
-    // else: one condition, one reason code.
-    if (!isOurPayload(payload)) return refusal(INVALID_PAYLOAD, "failed");
+    // The worker only dispatches a payload whose capability id and version
+    // match a registered handler, so this is a narrowing, not a check: a
+    // payload that does not name this capability cannot reach this handler.
+    // An impossible payload is a programming error, not a run outcome, so it
+    // throws instead of recording a second reason code for the one condition
+    // the worker already refuses with `unhandled_capability`; the worker
+    // turns the throw into `handler_failed`.
+    if (!isOurPayload(payload))
+      throw new Error("The capability job does not name this capability.");
 
     const run = context.runInTransaction((tx) => deps.runs.readRunInTx(tx, payload.runId));
     if (!run) return refusal(BACKGROUND_FAILURE.runNotFound, "failed");
@@ -200,7 +213,7 @@ export const createCapabilityJobHandler = (deps: CapabilityJobDeps): AsyncJobHan
     if (!reserved) return refusal(BACKGROUND_RUN_FAILURE.dailyBudgetExhausted, "unavailable");
 
     const { system, prompt } = deps.capability.buildPrompt(parsedEvidence.data);
-    const raw = await deps.transport
+    const call = await deps.transport
       .ask({
         provider: run.provider,
         model: run.model,
@@ -212,29 +225,34 @@ export const createCapabilityJobHandler = (deps: CapabilityJobDeps): AsyncJobHan
         signal: context.signal,
       })
       .catch(() => null);
-    if (raw === null) {
+    if (call === null) {
       // The attempt stays spent: the reservation is never given back. The
       // job's own retry policy bounds the attempts.
       return refusal(PROVIDER_ERROR, "queued", true);
     }
 
-    const parsedAnswer = deps.capability.outputSchema.safeParse(raw);
+    // The text of the answer is what the capability validates; the metadata
+    // of the call is what the run records.
+    const parsedAnswer = deps.capability.outputSchema.safeParse(call.text);
     if (!parsedAnswer.success) return refusal(INVALID_OUTPUT, "failed");
     const question: unknown = parsedAnswer.data;
     if (typeof question !== "string") return refusal(INVALID_OUTPUT, "failed");
 
+    const answer: CapabilityAnswer = {
+      accountId: observation.accountId,
+      subjectId: observation.subjectId,
+      observationId: observation.observationId,
+      sourceRevision: observation.sourceRevision,
+      question,
+      runId: run.id,
+      capabilityVersion: deps.capability.version,
+      createdAt: now,
+      providerMeta: call.meta,
+    };
+
     return {
       status: "completed",
-      answer: {
-        accountId: observation.accountId,
-        subjectId: observation.subjectId,
-        observationId: observation.observationId,
-        sourceRevision: observation.sourceRevision,
-        question,
-        runId: run.id,
-        capabilityVersion: deps.capability.version,
-        createdAt: now,
-      },
+      answer,
     };
   };
 
@@ -264,7 +282,9 @@ export const createCapabilityJobHandler = (deps: CapabilityJobDeps): AsyncJobHan
       return;
     }
 
-    const answer = outcome.answer;
+    // The outcome is this handler's own: `prepare` built the answer, so the
+    // metadata of the provider call travels with it.
+    const answer = outcome.answer as CapabilityAnswer | null;
     if (!answer) {
       deps.runs.updateRunStatusInTx(tx, run.id, "failed", now);
       deps.runs.updateRunMetaInTx(tx, run.id, meta({ refusalReason: INVALID_OUTPUT }), now);
@@ -347,12 +367,27 @@ export const createCapabilityJobHandler = (deps: CapabilityJobDeps): AsyncJobHan
     });
     deps.runs.updateRunStatusInTx(tx, run.id, "completed", now);
     if (insightId !== null) {
+      // The meta of the run says which capability produced the question and
+      // which call produced it: the prompt version, the provider and the
+      // model the call actually used, how long it took and the token counts
+      // the provider reported. The refusal of an earlier attempt is cleared
+      // with an explicit null, because the meta merge spreads the new value
+      // over the old one: a run that failed once and then succeeded must not
+      // keep reporting the old refusal.
+      const call = answer.providerMeta;
       deps.runs.updateRunMetaInTx(
         tx,
         run.id,
         meta({
           capabilityId: deps.capability.id,
           capabilityVersion: deps.capability.version,
+          promptVersion: call.promptVersion,
+          provider: call.provider,
+          model: call.model,
+          durationMs: call.durationMs,
+          ...(call.inputTokens !== undefined ? { inputTokens: call.inputTokens } : {}),
+          ...(call.outputTokens !== undefined ? { outputTokens: call.outputTokens } : {}),
+          refusalReason: null,
         }),
         now,
       );
