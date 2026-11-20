@@ -1,7 +1,7 @@
 {
   "schemaVersion": 1,
   "feature": "ai-native-journal",
-  "updatedAt": "2026-11-20T10:24:24Z",
+  "updatedAt": "2026-11-20T11:14:43Z",
   "owner": "parent OMP coordinator (exclusive owner of this record)",
   "repository": {
     "name": "trade-journal",
@@ -35,7 +35,7 @@
     },
     "featureBranch": "codex/ai-native-journal",
     "featureBootstrapSha": "0a278503fd67c0f9e82138dfecb744f4bfd307ad",
-    "featureHeadSha": "fba7d500e2c9560dedc6985402eb57030796d973",
+    "featureHeadSha": "a3f3aa28f1db375b9e3102b4035a3db7c62ac1ab",
     "featureHeadShaNote": "feature branch HEAD; the twenty-one phases are integrated and the optional-AI insight work continues from this tip on its own phase branches",
     "featureCheckpointCommits": [
       "0a278503fd67c0f9e82138dfecb744f4bfd307ad",
@@ -92,7 +92,8 @@
       "16cc4f9d46eb2d67dc620bf44e021d763744cbb1",
       "cc9e991ca9a372fc938daaa62b51f64f33167d8f",
       "1b63ebcd4c0374e7c4ce973095bda6248a813a76",
-      "96115f9170201da2fd581bc6ade2aec922c32b67"
+      "96115f9170201da2fd581bc6ade2aec922c32b67",
+      "a3f3aa28f1db375b9e3102b4035a3db7c62ac1ab"
     ],
     "featureBranchNote": "Orca slugified the requested name to codex-ai-native-journal at creation; the coordinator renamed the newly created, exclusively owned branch to the contract-required codex/ai-native-journal. Orca reads the renamed ref live (refs/heads/codex/ai-native-journal). No pre-existing branch was overwritten."
   },
@@ -1970,18 +1971,21 @@
         "dispatch": "ctx_3abe4455593d",
         "branch": "codex/ai-native-journal-p23",
         "plan": "docs/superpowers/plans/ai-native-journal/phase-23.md",
-        "report": "docs/superpowers/reports/ai-native-journal-phase-23.md",
+        "report": "docs/superpowers/reports/ai-native-journal-integration-23.md",
         "scope": "the fenced asynchronous provider job: a versioned capability, an atomic run and job enqueue in the observation transaction, an async worker path that calls the provider outside any write transaction, and a final transaction that rechecks the fence, consent, pinned policy, current revision and opportunity eligibility before inserting the unique insight.",
         "workerHandle": "term_182b8c9b-c0fe-48af-a3e6-11ea89ada4f7",
-        "state": "repair-round-2",
+        "state": "integrated",
         "startTip": "96115f9170201da2fd581bc6ade2aec922c32b67",
-        "note": "undefined Dispatched after the Phase A merge was verified; the brief pins the two boundaries the sources name exactly: the worker runs the handler inside the effect transaction and must gain an asynchronous path that calls the provider outside any write transaction, and executeBackgroundRun marks its own run completed and must be refactored so a successful network response alone cannot mark the insight job complete. The implementation-diff review returned FAIL on the first pass; the repair round keeps the same worktree and branch and adds commits on top. One reviewer run remains for this phase and it is scoped to the eight findings and the nine coverage holes. The review budget for the phase is spent: two implementation-diff reviews ran and both narrowed to a shrinking set of findings, so the final repair is verified by the coordinator reading the diff against the code and by re-running the teeth proof, not by a third review.",
-        "review": "the first implementation-diff review returned FAIL with eight findings; the repair round fixed all eight, and the final scoped review confirmed findings 1, 2, 3, 5, 6, 7 and 8 fixed and the nine coverage-hole cases genuinely decisive, but returned FAIL on two documentation findings: the operations guide still claimed that nothing about the provider call is stored after the repair started storing the prompt version, the provider, the model, the duration and the token counts, and the guide claimed every refusal code ends the job when lease_lost is failed as retryable and the provider is called again",
+        "note": "undefined Dispatched after the Phase A merge was verified; the brief pins the two boundaries the sources name exactly: the worker runs the handler inside the effect transaction and must gain an asynchronous path that calls the provider outside any write transaction, and executeBackgroundRun marks its own run completed and must be refactored so a successful network response alone cannot mark the insight job complete. The implementation-diff review returned FAIL on the first pass; the repair round keeps the same worktree and branch and adds commits on top. One reviewer run remains for this phase and it is scoped to the eight findings and the nine coverage holes. The review budget for the phase is spent: two implementation-diff reviews ran and both narrowed to a shrinking set of findings, so the final repair is verified by the coordinator reading the diff against the code and by re-running the teeth proof, not by a third review. The phase carries the provider leg end to end: the capability, the atomic run-plus-job enqueue, the asynchronous worker path that calls the provider outside every write transaction, and the fenced final transaction that rechecks the claim fence, the account, the consent, the policy revision, the pinned configuration, the current observation revision and the opportunity liveness before it writes the question. The legacy background path now refuses any run carrying a capability id, so a successful provider response alone can never complete an insight job.",
+        "review": "the coordinator issued the PASS verdict after two implementation-diff reviews narrowed to two documentation findings, both of which the second repair round fixed; the coordinator then ran an independent twelve-mutation teeth proof in which every mutation broke its targeted case and every restore made it pass again",
         "coverage": "the coordinator mapped the suite against the production code independently and found nine claimed behaviours that no test can fail: the lease renewal and the lost-lease path, the opportunity liveness recheck, the stored business key, a disabled policy, a changed model, an unregistered capability version, the recorded reservation, a historical delivery, and the whole real transport adapter",
         "repairDispatch": "ctx_685aea2f4cc8",
         "repairWorkerHandle": "term_c970ecf2-683f-450d-9774-5881e9d728bb",
         "repairTip": "91101732620efae926ab458ca57e76a47c6229d4",
-        "teeth": "the coordinator ran an independent twelve-mutation teeth proof over the repaired code: eleven mutations were decisive, each breaking its targeted case and passing again after the restore, and the M9 mutation was NOT decisive because the executions write requires the account row and rolls the delivery transaction back before the enqueue is reached, so the enqueue own account gate is defence in depth that nothing pins"
+        "teeth": "the coordinator ran an independent twelve-mutation teeth proof over the repaired code: eleven mutations were decisive, each breaking its targeted case and passing again after the restore, and the M9 mutation was NOT decisive because the executions write requires the account row and rolls the delivery transaction back before the enqueue is reached, so the enqueue own account gate is defence in depth that nothing pins",
+        "merge": "06a443fd5a1f299363b9cee1be76b18fb4048107",
+        "tip": "86c979e3956e4bd3c261a53c4d0f6e3de081f2b5",
+        "verification": "the destination gate passed on the destination branch: 8 of 8 commands exit 0, pnpm test 1418 passed in 118 files"
       },
       {
         "key": "C",
