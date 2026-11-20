@@ -1,7 +1,7 @@
 {
   "schemaVersion": 1,
   "feature": "ai-native-journal",
-  "updatedAt": "2026-11-19T11:51:12Z",
+  "updatedAt": "2026-11-20T08:09:50Z",
   "owner": "parent OMP coordinator (exclusive owner of this record)",
   "repository": {
     "name": "trade-journal",
@@ -35,7 +35,7 @@
     },
     "featureBranch": "codex/ai-native-journal",
     "featureBootstrapSha": "0a278503fd67c0f9e82138dfecb744f4bfd307ad",
-    "featureHeadSha": "96115f9170201da2fd581bc6ade2aec922c32b67",
+    "featureHeadSha": "bb32c3e3b67919091a313aa757ef9b494161f723",
     "featureHeadShaNote": "feature branch HEAD; the twenty-one phases are integrated and the optional-AI insight work continues from this tip on its own phase branches",
     "featureCheckpointCommits": [
       "0a278503fd67c0f9e82138dfecb744f4bfd307ad",
@@ -1973,9 +1973,14 @@
         "report": "docs/superpowers/reports/ai-native-journal-phase-23.md",
         "scope": "the fenced asynchronous provider job: a versioned capability, an atomic run and job enqueue in the observation transaction, an async worker path that calls the provider outside any write transaction, and a final transaction that rechecks the fence, consent, pinned policy, current revision and opportunity eligibility before inserting the unique insight.",
         "workerHandle": "term_182b8c9b-c0fe-48af-a3e6-11ea89ada4f7",
-        "state": "dispatched",
+        "state": "review-failed",
         "startTip": "96115f9170201da2fd581bc6ade2aec922c32b67",
-        "note": "undefined Dispatched after the Phase A merge was verified; the brief pins the two boundaries the sources name exactly: the worker runs the handler inside the effect transaction and must gain an asynchronous path that calls the provider outside any write transaction, and executeBackgroundRun marks its own run completed and must be refactored so a successful network response alone cannot mark the insight job complete."
+        "note": "undefined Dispatched after the Phase A merge was verified; the brief pins the two boundaries the sources name exactly: the worker runs the handler inside the effect transaction and must gain an asynchronous path that calls the provider outside any write transaction, and executeBackgroundRun marks its own run completed and must be refactored so a successful network response alone cannot mark the insight job complete. The implementation-diff review returned FAIL on the first pass; the repair round keeps the same worktree and branch and adds commits on top. One reviewer run remains for this phase and it is scoped to the eight findings and the nine coverage holes.",
+        "review": "the coordinator implementation-diff review returned FAIL with eight findings: two documentation tables that disagree with the code in both directions, an unproven claim that the suite confirms the lease renewal and the opportunity liveness, the transport dropping the prompt version and call metadata, the stored insight business key never asserted, the orphaned executeBackgroundRun still able to complete a run from a bare provider response, a duplicate invalid_payload reason code, and a stale refusalReason left on a run that later succeeded",
+        "coverage": "the coordinator mapped the suite against the production code independently and found nine claimed behaviours that no test can fail: the lease renewal and the lost-lease path, the opportunity liveness recheck, the stored business key, a disabled policy, a changed model, an unregistered capability version, the recorded reservation, a historical delivery, and the whole real transport adapter",
+        "repairDispatch": "ctx_f733dcdd62af",
+        "repairWorkerHandle": "term_39205ac0-5a2e-4760-be6e-0231edd7a5ad",
+        "repairTip": "865fa2be054ae3ae93cbe34619e8d55af39e38a8"
       },
       {
         "key": "C",
