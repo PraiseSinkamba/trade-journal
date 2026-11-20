@@ -344,8 +344,8 @@ describe("failing a job", () => {
     const id = enqueue();
     const claim = jobs.claim(OWNER, NOW)!;
 
-    expect(jobs.fail(claim, "invalid_payload", NOW, false)).toBe(true);
-    expect(jobRow(id)).toMatchObject({ status: "failed", lastError: "invalid_payload" });
+    expect(jobs.fail(claim, "handler_failed", NOW, false)).toBe(true);
+    expect(jobRow(id)).toMatchObject({ status: "failed", lastError: "handler_failed" });
   });
 
   it("refuses to fail a claim that was taken over", () => {

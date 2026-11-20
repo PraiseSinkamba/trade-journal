@@ -1,10 +1,16 @@
 import { afterAll, afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { mkdtempSync, rmSync } from "node:fs";
+import { createServer } from "node:http";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { eq } from "drizzle-orm";
 import type { ImportedExecution } from "@luxalgo/journal-importers";
-import type { ReviewQuestionTransport } from "../src/server/intelligence/contracts/insights";
+import type { ChangeMode } from "../src/server/domain-events";
+import {
+  AI_INSIGHT_CAPABILITY_VERSION,
+  type ReviewQuestionTransport,
+} from "../src/server/intelligence/contracts/insights";
+import { JOURNAL_CAPABILITY_IDS } from "../src/server/intelligence/contracts/capabilities";
 import type { JobRecord } from "../src/server/intelligence/contracts/jobs";
 import type { IntelligenceWorker } from "../src/server/intelligence/composition";
 
@@ -64,10 +70,14 @@ const { withConnectionTransaction, withJournalTransaction } = await import("../s
 const { insertExecutionsInTx } = await import("../src/server/executions");
 const { changeContext } = await import("../src/server/trading/reconcile");
 const { setSetting } = await import("../src/server/settings");
-const { createJobStore, JOB_LEASE_MS, MAX_JOB_ATTEMPTS } =
+const { createJobStore, createEffectStore, JOB_LEASE_MS, MAX_JOB_ATTEMPTS } =
   await import("../src/server/intelligence/infrastructure/jobs");
 const { createPolicyStore } =
   await import("../src/server/intelligence/infrastructure/policy-store");
+const { createWorkerService } = await import("../src/server/intelligence/infrastructure/worker");
+const { createOutboxDispatcher } = await import("../src/server/intelligence/infrastructure/outbox");
+const { createReviewQuestionTransport, REVIEW_QUESTION_PROMPT_VERSION } =
+  await import("../src/server/intelligence/infrastructure/review-transport");
 const { BACKGROUND_DAILY_ATTEMPT_LIMIT } =
   await import("../src/server/intelligence/contracts/policy");
 const composition = await import("../src/server/intelligence/composition");
@@ -83,6 +93,8 @@ const SERVER = "http://localhost:11434/v1";
 const MOVED_SERVER = "http://localhost:11435/v1";
 const MODEL = "llama-fixture";
 const ANSWER = "What would you change about this trade next time?";
+/** The duration the stub reports for its call. */
+const DURATION_MS = 42;
 
 const jobs = createJobStore(db);
 const policyStore = createPolicyStore({ db });
@@ -131,13 +143,21 @@ const createGate = (): ProviderGate => {
  * The provider stub.
  *
  * It records every request it is given and answers what the case asks it to
- * answer: a plain answer, a failure, or an answer that is held until the
- * case releases it.
+ * answer: a plain answer, a failure, an answer that is held until the case
+ * releases it, or an answer that only arrives when the call is cancelled.
+ *
+ * The answer carries the metadata of the call, exactly as the real transport
+ * does: the run records the prompt version, the provider, the model and the
+ * duration of the call that produced the question.
  */
 const createTransport = (options: {
   readonly answer?: string;
   readonly failure?: Error;
   readonly gate?: ProviderGate;
+  /** The answer waits for the abort signal instead of the case's gate. */
+  readonly untilAbort?: boolean;
+  /** The token counts the provider reports. */
+  readonly tokens?: { readonly inputTokens: number; readonly outputTokens: number };
 }): { readonly calls: ProviderCall[]; readonly transport: ReviewQuestionTransport } => {
   const calls: ProviderCall[] = [];
   const transport: ReviewQuestionTransport = {
@@ -150,12 +170,29 @@ const createTransport = (options: {
         prompt: input.prompt,
       });
       const gate = options.gate;
-      if (gate) {
-        gate.signalEntered();
+      if (gate) gate.signalEntered();
+      if (options.untilAbort) {
+        // The answer only arrives when the call is cancelled: the case holds
+        // the provider open for exactly as long as it needs.
+        const { promise, reject } = Promise.withResolvers<void>();
+        const abort = (): void => reject(new Error("The provider call was aborted."));
+        if (input.signal.aborted) abort();
+        else input.signal.addEventListener("abort", abort, { once: true });
+        await promise;
+      } else if (gate) {
         await gate.waiting;
       }
       if (options.failure) throw options.failure;
-      return options.answer ?? ANSWER;
+      return {
+        text: options.answer ?? ANSWER,
+        meta: {
+          promptVersion: REVIEW_QUESTION_PROMPT_VERSION,
+          provider: input.provider,
+          model: input.model,
+          durationMs: DURATION_MS,
+          ...(options.tokens ?? {}),
+        },
+      };
     },
   };
   return { calls, transport };
@@ -165,12 +202,56 @@ const createTransport = (options: {
 const createWorker = (transport: ReviewQuestionTransport): IntelligenceWorker =>
   createIntelligenceWorker({ db, clock: () => now, owner: OWNER, transport });
 
+/**
+ * The production worker service, with the renewal interval open.
+ *
+ * The composition wires the worker without the interval, so the case that
+ * exercises the lease-lost branch builds the same worker here: the same
+ * services, the same job store, the same dispatcher, with the interval the
+ * case needs so the renewal happens in milliseconds and not in fifteen
+ * seconds.
+ */
+const createWorkerWithRenewal = (
+  transport: ReviewQuestionTransport,
+  renewIntervalMs: number,
+): IntelligenceWorker => {
+  const services = createIntelligenceServices({ db, clock: () => now, transport });
+  const store = createJobStore(db);
+  return createWorkerService({
+    db,
+    clock: () => now,
+    owner: OWNER,
+    jobs: store,
+    effects: createEffectStore(),
+    dispatcher: createOutboxDispatcher({ db, jobs: store, handlers: services.outboxHandlers }),
+    handlers: services.handlers,
+    asyncHandlers: [services.capabilityHandler],
+    renewIntervalMs,
+  });
+};
+
 /** Runs the worker until it has nothing left to claim. */
 const drain = async (worker: IntelligenceWorker): Promise<void> => {
   for (let attempt = 0; attempt < 20; attempt += 1) {
     if (!(await worker.tick(now))) return;
   }
   throw new Error("The worker did not settle.");
+};
+
+/**
+ * Waits until the condition holds.
+ *
+ * The lease is renewed on a real timer inside the worker, so the case polls
+ * for the effect it wants to observe instead of assuming a duration. Fake
+ * timers are not an option here: they would freeze the very clock the worker
+ * reads to renew the lease.
+ */
+const waitFor = async (condition: () => boolean, timeoutMs = 2_000): Promise<void> => {
+  const deadline = Date.now() + timeoutMs;
+  while (!condition()) {
+    if (Date.now() > deadline) throw new Error("The condition never held.");
+    await new Promise((resolve) => setTimeout(resolve, 5));
+  }
 };
 
 /** An account that owns nothing but the fills the case inserts. */
@@ -199,16 +280,16 @@ const exit: ImportedExecution = {
 };
 
 /** Inserts the fill of one open trade, exactly like an ingestion does. */
-const insertEntry = (accountId: string): void => {
+const insertEntry = (accountId: string, mode: ChangeMode = "live"): void => {
   withJournalTransaction((tx) => {
-    insertExecutionsInTx(tx, accountId, [entry], "import", changeContext("user", "live"));
+    insertExecutionsInTx(tx, accountId, [entry], "import", changeContext("user", mode));
   });
 };
 
 /** Inserts the fills of one closed trade, exactly like an ingestion does. */
-const insertTrade = (accountId: string): void => {
+const insertTrade = (accountId: string, mode: ChangeMode = "live"): void => {
   withJournalTransaction((tx) => {
-    insertExecutionsInTx(tx, accountId, [entry, exit], "import", changeContext("user", "live"));
+    insertExecutionsInTx(tx, accountId, [entry, exit], "import", changeContext("user", mode));
   });
 };
 
@@ -406,6 +487,13 @@ describe("the review insight", () => {
     // The business key is the run's effect key and the job's idempotency key.
     expect(runs[0]?.effectKey).toBe(`insight:1:${ACCOUNT}:${sourceRevision}`);
     expect(capability[0]?.idempotencyKey).toBe(`insight:1:${ACCOUNT}:${sourceRevision}`);
+    // The stored question carries the very same key, so one source revision
+    // yields one run, one job and one question: the key is the identity of the
+    // whole effect, not of one of its rows.
+    const insights = insightRows();
+    expect(insights).toHaveLength(1);
+    expect(insights[0]?.businessKey).toBe(runs[0]?.effectKey);
+    expect(insights[0]?.businessKey).toBe(capability[0]?.idempotencyKey);
   });
 
   it("leaves neither a run nor a job behind when the transaction rolls back", () => {
@@ -439,7 +527,7 @@ describe("the review insight", () => {
     configureProvider();
     enablePolicy([ACCOUNT]);
     insertTrade(ACCOUNT);
-    const { transport, calls } = createTransport({});
+    const { transport, calls } = createTransport({ tokens: { inputTokens: 11, outputTokens: 7 } });
     await drain(createWorker(transport));
 
     expect(calls).toHaveLength(1);
@@ -447,6 +535,28 @@ describe("the review insight", () => {
     expect(insights).toHaveLength(1);
     expect(insights[0]?.question).toBe(ANSWER);
     expect(runRows()[0]?.status).toBe("completed");
+    // The run records the call that produced the question: the capability, the
+    // prompt version, the provider, the model, the duration and the token
+    // counts the provider reported. The refusal of an earlier attempt is
+    // cleared with an explicit null.
+    const meta = JSON.parse(runRows()[0]?.metaJson ?? "{}") as Record<string, unknown>;
+    expect(meta).toMatchObject({
+      capabilityId: JOURNAL_CAPABILITY_IDS.reviewInsight,
+      capabilityVersion: AI_INSIGHT_CAPABILITY_VERSION,
+      promptVersion: REVIEW_QUESTION_PROMPT_VERSION,
+      provider: "compatible",
+      model: MODEL,
+      durationMs: DURATION_MS,
+      inputTokens: 11,
+      outputTokens: 7,
+      refusalReason: null,
+    });
+    // The attempt is reserved and committed before the provider is called, so
+    // a crashed attempt keeps its allowance.
+    const reservations = db.select().from(intelligenceBudgetReservations).all();
+    expect(reservations).toHaveLength(1);
+    expect(reservations[0]?.runId).toBe(runRows()[0]?.id);
+    expect(reservations[0]?.attempt).toBe(1);
   });
 
   it("lets another connection write while the answer is held", async () => {
@@ -623,6 +733,168 @@ describe("the review insight", () => {
     expect(runRows()[0]?.status).not.toBe("completed");
   });
 
+  it("renews the lease while the provider is thinking and writes nothing when the lease is lost", async () => {
+    createAccount(ACCOUNT);
+    configureProvider();
+    enablePolicy([ACCOUNT]);
+    insertTrade(ACCOUNT);
+    const gate = createGate();
+    // The answer only arrives when the call is cancelled.
+    const { transport } = createTransport({ gate, untilAbort: true });
+    // The renewal runs every five milliseconds, so the case never waits the
+    // fifteen seconds production waits.
+    const worker = createWorkerWithRenewal(transport, 5);
+
+    await worker.tick(now);
+    const pending = worker.tick(now);
+    await gate.entered;
+    // The lease is renewed while the provider is thinking: the claim's lease
+    // moves forward with the clock.
+    const leaseBefore = capabilityJobs()[0]?.leaseUntil ?? 0;
+    now += 1_000;
+    await waitFor(() => (capabilityJobs()[0]?.leaseUntil ?? 0) > leaseBefore);
+    // The lease then runs out: the renewal cannot extend it any more, so the
+    // worker loses its claim, cancels the call and throws the answer away.
+    now += JOB_LEASE_MS + 1;
+    await pending;
+
+    expect(insightRows()).toHaveLength(0);
+    const capability = capabilityJobs()[0];
+    expect(capability?.lastError).toBe("lease_lost");
+    expect(capability?.status).not.toBe("completed");
+    expect(runRows()[0]?.status).not.toBe("completed");
+  });
+
+  it("stores nothing when the review opportunity is withdrawn while the answer is held", async () => {
+    createAccount(ACCOUNT);
+    configureProvider();
+    enablePolicy([ACCOUNT]);
+    insertTrade(ACCOUNT);
+    const gate = createGate();
+    const { transport } = createTransport({ gate });
+    const worker = createWorker(transport);
+
+    await worker.tick(now);
+    const pending = worker.tick(now);
+    await gate.entered;
+    // The journal withdraws the review the question was made for: a question
+    // about a review nobody will see is a question nobody asked for.
+    const opportunity = opportunityRows()[0];
+    db.update(intelligenceOpportunities)
+      .set({ status: "dismissed", updatedAt: now })
+      .where(eq(intelligenceOpportunities.id, opportunity?.id ?? ""))
+      .run();
+    gate.release();
+    await pending;
+
+    expect(insightRows()).toHaveLength(0);
+    expect(runRows()[0]?.status).toBe("cancelled");
+    expect(refusalReason()).toBe("opportunity_not_live");
+  });
+
+  it("stores nothing when the policy is switched off while the answer is held", async () => {
+    createAccount(ACCOUNT);
+    configureProvider();
+    enablePolicy([ACCOUNT]);
+    insertTrade(ACCOUNT);
+    const gate = createGate();
+    const { transport } = createTransport({ gate });
+    const worker = createWorker(transport);
+
+    await worker.tick(now);
+    const pending = worker.tick(now);
+    await gate.entered;
+    // The operator switches background AI off while the provider is thinking.
+    composition.saveBackgroundPolicy({
+      enabled: false,
+      accounts: [ACCOUNT],
+      capabilities: { tools: false, structuredOutput: false },
+      maxInputCharacters: 8000,
+    });
+    gate.release();
+    await pending;
+
+    expect(insightRows()).toHaveLength(0);
+    expect(runRows()[0]?.status).toBe("unavailable");
+    expect(refusalReason()).toBe("policy_disabled");
+  });
+
+  it("stores nothing when the policy is deleted while the answer is held", async () => {
+    createAccount(ACCOUNT);
+    configureProvider();
+    enablePolicy([ACCOUNT]);
+    insertTrade(ACCOUNT);
+    const gate = createGate();
+    const { transport } = createTransport({ gate });
+    const worker = createWorker(transport);
+
+    await worker.tick(now);
+    const pending = worker.tick(now);
+    await gate.entered;
+    // The policy document is gone: a run that has no policy authorises
+    // nothing.
+    db.delete(intelligencePolicy).run();
+    gate.release();
+    await pending;
+
+    expect(insightRows()).toHaveLength(0);
+    expect(runRows()[0]?.status).toBe("unavailable");
+    expect(refusalReason()).toBe("policy_missing");
+  });
+
+  it("stores nothing when the policy is corrupted while the answer is held", async () => {
+    createAccount(ACCOUNT);
+    configureProvider();
+    enablePolicy([ACCOUNT]);
+    insertTrade(ACCOUNT);
+    const gate = createGate();
+    const { transport } = createTransport({ gate });
+    const worker = createWorker(transport);
+
+    await worker.tick(now);
+    const pending = worker.tick(now);
+    await gate.entered;
+    // The newest revision of the policy does not parse: a policy that does
+    // not parse authorises nothing either.
+    db.insert(intelligencePolicy)
+      .values({
+        id: "background",
+        revision: 99,
+        settingsJson: JSON.stringify({ schemaVersion: 1 }),
+        recordedAt: now,
+      })
+      .run();
+    gate.release();
+    await pending;
+
+    expect(insightRows()).toHaveLength(0);
+    expect(runRows()[0]?.status).toBe("unavailable");
+    expect(refusalReason()).toBe("policy_invalid");
+  });
+
+  it("stores nothing when the pinned model changes while the answer is held", async () => {
+    createAccount(ACCOUNT);
+    configureProvider();
+    enablePolicy([ACCOUNT]);
+    insertTrade(ACCOUNT);
+    const gate = createGate();
+    const { transport } = createTransport({ gate });
+    const worker = createWorker(transport);
+
+    await worker.tick(now);
+    const pending = worker.tick(now);
+    await gate.entered;
+    // The operator moves the run to another model: the run stays bound to the
+    // model it was approved against and is never rerouted.
+    setSetting("compatibleModel", "llama-other");
+    gate.release();
+    await pending;
+
+    expect(insightRows()).toHaveLength(0);
+    expect(runRows()[0]?.status).toBe("unavailable");
+    expect(refusalReason()).toBe("configuration_changed");
+  });
+
   it("keeps one run, one job, one insight and one request after a duplicate delivery", async () => {
     createAccount(ACCOUNT);
     configureProvider();
@@ -712,6 +984,37 @@ describe("the review insight", () => {
     expect(insightRows()).toHaveLength(0);
   });
 
+  it("fails a job that names a capability version nobody registered", async () => {
+    const { transport, calls } = createTransport({});
+    const worker = createWorker(transport);
+    // The right capability id, a version nobody registered: a job is refused
+    // for the version it names, never silently upgraded.
+    const key = `hand:${JOURNAL_CAPABILITY_IDS.reviewInsight}:999`;
+    withJournalTransaction((tx) => {
+      jobs.enqueue(
+        tx,
+        key,
+        {
+          type: "run_capability",
+          runId: "run-unknown",
+          capabilityId: JOURNAL_CAPABILITY_IDS.reviewInsight,
+          capabilityVersion: "999",
+          observationId: "observation-unknown",
+        },
+        now,
+      );
+    });
+
+    await worker.tick(now);
+
+    const job = jobRows().find((row) => row.idempotencyKey === key);
+    expect(job?.status).toBe("failed");
+    expect(job?.lastError).toBe("unhandled_capability");
+    expect(calls).toHaveLength(0);
+    expect(runRows()).toHaveLength(0);
+    expect(insightRows()).toHaveLength(0);
+  });
+
   it("asks no provider and ends the run when the day's allowance is spent", async () => {
     createAccount(ACCOUNT);
     configureProvider();
@@ -748,6 +1051,41 @@ describe("the review insight", () => {
     expect(capabilityJobs()).toHaveLength(0);
     expect(insightRows()).toHaveLength(0);
     expect(calls).toHaveLength(0);
+  });
+
+  it("queues neither a run nor a job for a historical or a maintenance delivery", async () => {
+    createAccount(ACCOUNT);
+    createAccount(CONTROL);
+    configureProvider();
+    enablePolicy([ACCOUNT, CONTROL]);
+    // A reconstruction is not the trader's own experience, and a maintenance
+    // change is not a trade at all: neither is worth a question.
+    insertTrade(ACCOUNT, "historical");
+    insertTrade(CONTROL, "maintenance");
+    const { transport, calls } = createTransport({});
+    await drain(createWorker(transport));
+
+    // The changes are observed all the same: only the question is withheld.
+    expect(observationRows()).toHaveLength(2);
+    expect(runRows()).toHaveLength(0);
+    expect(capabilityJobs()).toHaveLength(0);
+    expect(insightRows()).toHaveLength(0);
+    expect(calls).toHaveLength(0);
+  });
+
+  it("queues neither a run nor a job when the account does not exist", () => {
+    createAccount(ACCOUNT);
+    configureProvider();
+    enablePolicy([ACCOUNT]);
+    insertTrade(ACCOUNT);
+    // The operator deletes the account before the change is delivered.
+    db.delete(accounts).where(eq(accounts.id, ACCOUNT)).run();
+    // The change belongs to an account that is gone, so the journal refuses it
+    // and keeps neither a run nor a job for it.
+    expect(() => deliverChange(ACCOUNT, false)).toThrow();
+    expect(runRows()).toHaveLength(0);
+    expect(capabilityJobs()).toHaveLength(0);
+    expect(insightRows()).toHaveLength(0);
   });
 
   it("keeps the deterministic review working without a background policy", async () => {
@@ -824,5 +1162,52 @@ describe("the review insight", () => {
     const tradeKey = db.select().from(tradeProjectionRevisions).all()[0]?.tradeKey;
     expect(tradeKey).toBeDefined();
     expect(call?.prompt).not.toContain(tradeKey ?? "");
+  });
+
+  it("asks the real transport against a local server", async () => {
+    // A local server answers the provider request, so the real adapter runs
+    // without a request ever leaving the machine.
+    const server = createServer((request, response) => {
+      request.resume();
+      request.on("end", () => {
+        response.writeHead(200, { "content-type": "application/json" });
+        response.end(
+          JSON.stringify({
+            id: "chatcmpl_local",
+            object: "chat.completion",
+            created: 1,
+            model: MODEL,
+            choices: [
+              { index: 0, message: { role: "assistant", content: ANSWER }, finish_reason: "stop" },
+            ],
+            usage: { prompt_tokens: 10, completion_tokens: 5, total_tokens: 15 },
+          }),
+        );
+      });
+    });
+    await new Promise<void>((resolve) => server.listen(0, "127.0.0.1", resolve));
+    const address = server.address();
+    const port = typeof address === "object" && address !== null ? address.port : 0;
+    try {
+      const transport = createReviewQuestionTransport();
+      const answer = await transport.ask({
+        provider: "compatible",
+        model: MODEL,
+        baseUrl: `http://127.0.0.1:${port}/v1`,
+        system: "System",
+        prompt: "Prompt",
+        signal: new AbortController().signal,
+      });
+
+      expect(answer.text).toBe(ANSWER);
+      expect(answer.meta.promptVersion).toBe(REVIEW_QUESTION_PROMPT_VERSION);
+      expect(answer.meta.provider).toBe("compatible");
+      expect(answer.meta.model).toBe(MODEL);
+    } finally {
+      // The server leaves no handle behind: the pooled connection is closed
+      // with it.
+      server.closeAllConnections();
+      await new Promise<void>((resolve) => server.close(() => resolve()));
+    }
   });
 });
