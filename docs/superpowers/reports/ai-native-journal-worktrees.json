@@ -1,7 +1,7 @@
 {
   "schemaVersion": 1,
   "feature": "ai-native-journal",
-  "updatedAt": "2026-11-20T11:14:43Z",
+  "updatedAt": "2026-11-20T11:19:30Z",
   "owner": "parent OMP coordinator (exclusive owner of this record)",
   "repository": {
     "name": "trade-journal",
@@ -35,7 +35,7 @@
     },
     "featureBranch": "codex/ai-native-journal",
     "featureBootstrapSha": "0a278503fd67c0f9e82138dfecb744f4bfd307ad",
-    "featureHeadSha": "a3f3aa28f1db375b9e3102b4035a3db7c62ac1ab",
+    "featureHeadSha": "036a69f27a09e04dc5b0a9039c52c46cd073a982",
     "featureHeadShaNote": "feature branch HEAD; the twenty-one phases are integrated and the optional-AI insight work continues from this tip on its own phase branches",
     "featureCheckpointCommits": [
       "0a278503fd67c0f9e82138dfecb744f4bfd307ad",
@@ -93,7 +93,8 @@
       "cc9e991ca9a372fc938daaa62b51f64f33167d8f",
       "1b63ebcd4c0374e7c4ce973095bda6248a813a76",
       "96115f9170201da2fd581bc6ade2aec922c32b67",
-      "a3f3aa28f1db375b9e3102b4035a3db7c62ac1ab"
+      "a3f3aa28f1db375b9e3102b4035a3db7c62ac1ab",
+      "036a69f27a09e04dc5b0a9039c52c46cd073a982"
     ],
     "featureBranchNote": "Orca slugified the requested name to codex-ai-native-journal at creation; the coordinator renamed the newly created, exclusively owned branch to the contract-required codex/ai-native-journal. Orca reads the renamed ref live (refs/heads/codex/ai-native-journal). No pre-existing branch was overwritten."
   },
@@ -1990,11 +1991,15 @@
       {
         "key": "C",
         "native": "task_f06df023a532",
-        "dispatch": "",
+        "dispatch": "ctx_4847f7ece496",
         "branch": "codex/ai-native-journal-p24",
         "plan": "docs/superpowers/plans/ai-native-journal/phase-24.md",
         "report": "docs/superpowers/reports/ai-native-journal-phase-24.md",
-        "scope": "the scoped GET and the labelled rendering with the existing privacy masking, and the end-to-end Slice B proof through the real observation-to-command path, with the full suite, the typecheck, the migrations check and the bundled worker smoke."
+        "scope": "the scoped GET and the labelled rendering with the existing privacy masking, and the end-to-end Slice B proof through the real observation-to-command path, with the full suite, the typecheck, the migrations check and the bundled worker smoke.",
+        "workerHandle": "term_98b62b6d-9be1-45f4-8bba-95cbb72b4ce3",
+        "state": "dispatched",
+        "startTip": "036a69f27a09e04dc5b0a9039c52c46cd073a982",
+        "note": "undefined Dispatched after the Phase B merge was verified. It owns the scoped observation-review GET, the shared presentation DTO, the interaction card and the end-to-end Slice B test, and it must prove the chain observation to job to worker to scoped GET to user command, including that reading the inbox never triggers a paid request, that a corrected source hides the question, and that the bundled worker starts, consumes the job and serves the stored result."
       }
     ],
     "rules": [
