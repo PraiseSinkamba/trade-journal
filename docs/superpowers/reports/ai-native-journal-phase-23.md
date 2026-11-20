@@ -139,11 +139,12 @@ yields no visible output.
 
 ## The exit evidence
 
-`apps/web/tests/intelligence-review-insight.test.ts` — 30 cases, driving the **production** worker
+`apps/web/tests/intelligence-review-insight.test.ts` — 31 cases, driving the **production** worker
 registration (`createIntelligenceWorker`) against a real file-backed SQLite journal with an
 injected transport. The compatible provider points at a fake local URL, so no real network call
-can happen. Eleven of the cases were added by the repair round; they are listed in
-[the repair round](#the-repair-round) below.
+can happen. Eleven of the cases were added by the repair round and one by the second repair
+round; they are listed in [the repair round](#the-repair-round) and
+[the second repair round](#the-second-repair-round) below.
 
 | Case                                                         | What it proves                                                   |
 | ------------------------------------------------------------ | ---------------------------------------------------------------- |
@@ -166,6 +167,7 @@ can happen. Eleven of the cases were added by the repair round; they are listed 
 | the deterministic review still works                         | the ordinary review is unaffected by the provider path           |
 | the holding time is unknown when the journal did not know it | the prompt never states a fact the journal withheld              |
 | the pinned provider and the hidden account                   | the request goes to the pinned endpoint and names no account     |
+| the enqueue's own account gate refuses the account           | no run and no job, decided by the enqueue's own gate             |
 
 The neighbouring suites stay green: `pnpm exec vitest run apps/web/tests/intelligence-` → **25
 files, 448 passed, 1 skipped**. `pnpm --filter web typecheck` → 0 errors.
@@ -220,18 +222,84 @@ and the case seen to pass again.
 | the attempt reservation is recorded before the provider is called                          | the attempt reservation                                 | the case failed: no reservation row existed, and the day's allowance could never be spent                         |
 | refuses a capability job's run in the legacy background path                               | the legacy path's capability guard                      | the case failed: the legacy path reached the provider instead of refusing the run                                 |
 
-### The one gap that is still open, and why
+### The account gate: what it does, and what it does not do
 
-The case "queues neither a run nor a job when the account does not exist" asserts the observable
-contract, but it does **not** fail when the account gate in `runtime/review-enqueue.ts` is
-deleted: the observation reader already returns null for a deleted account, and the foreign key
-removes the observation with it. The gate is therefore unreachable as a deciding check. It is
-kept — it is cheap and it documents the intent — and it is recorded here as an open gap rather
-than papered over.
+The enqueue's account gate (`runtime/review-enqueue.ts`, `existingAccountIds.includes(...)`) is
+**not reachable through the production delivery path**. Two earlier checks stand in front of it:
+
+1. the executions write requires the account row (`insertExecutionsInTx` throws `Account not
+found.`), so a delivery for a deleted account is refused before the observation handler and
+   the enqueue run at all; and
+2. the observation reader returns null when the account row is gone, and the observation cascades
+   with the account, so the enqueue's own observation gate refuses first.
+
+The earlier case therefore proved something real — a deleted account produces no run and no job —
+but it proved it through the delivery's refusal, not through the enqueue's gate. It is renamed
+"refuses the whole delivery when the account no longer exists", and it says so in a comment.
+
+The gate is kept: it is the enqueue's own guard, it costs one membership test, and it is the
+check that would decide if the two earlier checks ever changed. It is now pinned **directly** by
+a new case, "queues neither a run nor a job when the enqueue's own account gate refuses the
+account": the case drives the enqueue with a journal that reports no account at all, and asserts
+that no run and no job are written while the observation and its opportunity exist.
+
+**The teeth.** The gate line was deleted from `runtime/review-enqueue.ts`, the case was run, and
+it failed:
+
+```
+× the review insight > queues neither a run nor a job when the enqueue's own account gate refuses the account
+  → expected [ { …(11) } ] to have a length of +0 but got 1
+```
+
+The gate was restored and the case passed again. No production code was changed by this round.
 
 The worker takes an optional renew interval, so a case can exercise the lease-lost branch
 without waiting the real fifteen seconds. The seam is used by the test that wires the worker
 directly; the composition does not expose it, because nothing in production needs to.
+
+## The second repair round
+
+The final scoped review of this phase returned **FAIL** with two documentation findings, and the
+coordinator's independent teeth proof found the unpinned gate above. All three are fixed, and no
+production code changed.
+
+### Finding 1 — the guide contradicted the code about what is stored
+
+The guide said: "Nothing about the call is stored. The run's diagnostics hold the reason code, the
+capability id and the capability version." That was false after the repair round: the success path
+writes the call metadata into the run's `meta_json` — the prompt version, the provider, the model,
+the duration and the token counts the provider reported.
+
+The guide now says exactly what is kept (the refusal reason, the capability id and version, and
+the call metadata of a successful call) and keeps the guarantee that is true and worth stating:
+never the prompt text, never the provider's answer text, never a credential.
+
+### Finding 2 — the guide was false about retries
+
+The guide said `provider_error` was the only retryable code and that every other code ends the
+job. That was false for two codes: the worker fails a lost lease with `retryable=true`
+(`worker.ts`), and it fails a thrown handler with `retryable=true` unless the throw was a schema
+violation. So `lease_lost` does not end the job, and the next attempt can call the provider
+again; `handler_failed` is retried too, while `validation_failed` is not.
+
+The guide now says which codes are retried (`provider_error`, `lease_lost`, `handler_failed`),
+which is not (`validation_failed`), and that every other code ends the job.
+
+### Finding 3 — the unpinned account gate
+
+Closed as described above: the gate is kept and pinned directly, and the delivery-path case is
+renamed to state what it proves.
+
+### The verification of the second repair round
+
+| Command                                                                                                                                                                      | Exit | Runtime |
+| ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ---- | ------- |
+| `pnpm exec vitest run apps/web/tests/intelligence-review-insight.test.ts apps/web/tests/intelligence-provider-policy.test.ts apps/web/tests/intelligence-boundaries.test.ts` | 0    | 9.5 s   |
+| `pnpm --filter web typecheck`                                                                                                                                                | 0    | 29.5 s  |
+| `pnpm exec prettier --check` on the changed files                                                                                                                            | 0    | —       |
+
+The mutation proof for the account gate is recorded above: the gate deleted, the case failed, the
+gate restored, the suite green.
 
 ## The review
 

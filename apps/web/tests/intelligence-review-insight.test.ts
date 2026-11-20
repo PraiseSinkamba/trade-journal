@@ -12,6 +12,7 @@ import {
 } from "../src/server/intelligence/contracts/insights";
 import { JOURNAL_CAPABILITY_IDS } from "../src/server/intelligence/contracts/capabilities";
 import type { JobRecord } from "../src/server/intelligence/contracts/jobs";
+import type { BackgroundEnvironmentReader } from "../src/server/intelligence/contracts/policy";
 import type { IntelligenceWorker } from "../src/server/intelligence/composition";
 
 /**
@@ -81,6 +82,14 @@ const { createReviewQuestionTransport, REVIEW_QUESTION_PROMPT_VERSION } =
 const { BACKGROUND_DAILY_ATTEMPT_LIMIT } =
   await import("../src/server/intelligence/contracts/policy");
 const composition = await import("../src/server/intelligence/composition");
+const { createReviewQuestionEnqueuer } =
+  await import("../src/server/intelligence/runtime/review-enqueue");
+const { createReviewInsightCapability } =
+  await import("../src/server/intelligence/runtime/review-insight");
+const { createObservationEvidenceReader, createReviewOpportunityReader } =
+  await import("../src/server/intelligence/infrastructure/insight-store");
+const { REVIEW_QUESTION_SYSTEM_PROMPT, buildReviewQuestionPrompt } =
+  await import("../src/server/ai-review-insight");
 
 const { createIntelligenceWorker, createIntelligenceServices } = composition;
 
@@ -1073,7 +1082,7 @@ describe("the review insight", () => {
     expect(calls).toHaveLength(0);
   });
 
-  it("queues neither a run nor a job when the account does not exist", () => {
+  it("refuses the whole delivery when the account no longer exists", () => {
     createAccount(ACCOUNT);
     configureProvider();
     enablePolicy([ACCOUNT]);
@@ -1082,7 +1091,101 @@ describe("the review insight", () => {
     db.delete(accounts).where(eq(accounts.id, ACCOUNT)).run();
     // The change belongs to an account that is gone, so the journal refuses it
     // and keeps neither a run nor a job for it.
+    // The delivery itself is refused before the enqueue is ever reached: the
+    // executions write requires the account row, so the transaction rolls
+    // back earlier than the enqueue's own account gate. That gate has its
+    // own case below.
     expect(() => deliverChange(ACCOUNT, false)).toThrow();
+    expect(runRows()).toHaveLength(0);
+    expect(capabilityJobs()).toHaveLength(0);
+    expect(insightRows()).toHaveLength(0);
+  });
+
+  it("queues neither a run nor a job when the enqueue's own account gate refuses the account", () => {
+    createAccount(ACCOUNT);
+    configureProvider();
+    enablePolicy([ACCOUNT]);
+    // The review-free handler: the production enqueue never runs, so the
+    // enqueue's own account gate is the only check that can refuse the trade.
+    const reviewFreeHandler = composition.createTradeObservationHandler({ clock: () => now });
+    withJournalTransaction((tx) => {
+      insertExecutionsInTx(tx, ACCOUNT, [entry, exit], "import", changeContext("user", "live"));
+      const event = tx.select().from(domainOutbox).all().at(-1);
+      if (!event) throw new Error("The trade change was not recorded.");
+      const jobId = `job-review-${ACCOUNT}`;
+      const job: JobRecord = {
+        id: jobId,
+        type: "evaluate_trade",
+        payload: {
+          type: "evaluate_trade",
+          eventId: event.id,
+          handlerId: composition.OBSERVATION_HANDLER_ID,
+          handlerVersion: composition.OBSERVATION_HANDLER_VERSION,
+        },
+        status: "pending",
+        attempts: 0,
+        availableAt: now,
+        owner: null,
+        fence: 0,
+        leaseUntil: null,
+        cancelRequested: false,
+        lastError: null,
+        createdAt: now,
+        updatedAt: now,
+      };
+      tx.insert(intelligenceJobs)
+        .values({
+          id: jobId,
+          idempotencyKey: `${event.id}:${composition.OBSERVATION_HANDLER_ID}:1`,
+          type: "evaluate_trade",
+          payloadJson: JSON.stringify(job.payload),
+          status: "pending",
+          attempts: 0,
+          availableAt: now,
+          owner: null,
+          fence: 0,
+          leaseUntil: null,
+          cancelRequested: false,
+          lastError: null,
+          createdAt: now,
+          updatedAt: now,
+        })
+        .run();
+      reviewFreeHandler.run(tx, job);
+    });
+
+    const observationId = observationRows()[0]?.id;
+    if (!observationId) throw new Error("The observation was not persisted.");
+
+    // The journal reports that it holds no account at all, so the enqueue's
+    // own account gate refuses the trade even though the row is still there.
+    const environment: BackgroundEnvironmentReader = {
+      readEnvironmentInTx: () => ({
+        existingAccountIds: [],
+        providerConfigured: true,
+        providerConfiguration: { provider: "compatible", model: MODEL, baseUrl: SERVER },
+      }),
+    };
+    const enqueuer = createReviewQuestionEnqueuer({
+      capability: createReviewInsightCapability({
+        system: REVIEW_QUESTION_SYSTEM_PROMPT,
+        build: buildReviewQuestionPrompt,
+      }),
+      runs: policyStore,
+      jobs,
+      observations: createObservationEvidenceReader(),
+      opportunities: createReviewOpportunityReader(),
+      environment,
+      clock: () => now,
+    });
+    withJournalTransaction((tx) => {
+      enqueuer.enqueueInTx(tx, { observationId, mode: "live", timeZone: "UTC" });
+    });
+
+    // The trade was observed and its opportunity is live, so the refusal came
+    // from the enqueue's own account gate and from nothing else.
+    expect(observationRows()).toHaveLength(1);
+    expect(opportunityRows()).toHaveLength(1);
     expect(runRows()).toHaveLength(0);
     expect(capabilityJobs()).toHaveLength(0);
     expect(insightRows()).toHaveLength(0);

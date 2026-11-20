@@ -219,10 +219,12 @@ its row stays in the table.
 Only a `live` change queues a question. A `historical` reconstruction and a `maintenance` change
 never do: the first is not your own experience, the second is not a trade at all.
 
-Nothing about the call is stored. The run's diagnostics hold the reason code, the capability id
-and the capability version — never the prompt, never the provider's answer, never a credential. The
-question itself is bounded at 2000 characters, and an answer outside the bound is refused and
-stored nowhere.
+The run's diagnostics (`meta_json`) hold what can be kept of the call, never the call itself: the
+reason code of a refusal, the capability id and the capability version, and — for a call that
+succeeded — the metadata of the call: the prompt version, the provider, the model, how long the
+call took and the token counts the provider reported. The prompt text, the provider's answer text
+and a credential are never among them. The question itself is bounded at 2000 characters, and an
+answer outside the bound is refused and stored nowhere.
 
 ### Turning it on
 
@@ -296,11 +298,11 @@ transaction rolls back and the job belongs to whoever holds it now.
 
 **The job's `last_error` only — no run reason, no run status.**
 
-| The reason             | When it happens                                                                       | What to do                                     |
-| ---------------------- | ------------------------------------------------------------------------------------- | ---------------------------------------------- |
-| `unhandled_capability` | the worker found no async handler for the capability id and version the job names     | deploy the build that registers the capability |
-| `lease_lost`           | the job lease or the worker lease could not be renewed while the provider was awaited | nothing; the answer was discarded              |
-| `run_not_found`        | the job names a run row that no longer exists                                         | nothing; the run is gone                       |
+| The reason             | When it happens                                                                       | What to do                                               |
+| ---------------------- | ------------------------------------------------------------------------------------- | -------------------------------------------------------- |
+| `unhandled_capability` | the worker found no async handler for the capability id and version the job names     | deploy the build that registers the capability           |
+| `lease_lost`           | the job lease or the worker lease could not be renewed while the provider was awaited | nothing; the answer was discarded and the job is retried |
+| `run_not_found`        | the job names a run row that no longer exists                                         | nothing; the run is gone                                 |
 
 `unhandled_capability` is terminal: an unknown capability id or a version that is no longer
 registered never reaches a provider. `lease_lost` discards the answer, so no refusal reason and no
@@ -328,8 +330,13 @@ code.
 | `invalid_output`          | `failed`      | the provider's answer was not a bounded question                                  | check the provider and the model; the answer is not stored                       |
 | `provider_error`          | `queued`      | the provider call failed                                                          | the attempt stays spent and the job is retried — check key, endpoint and network |
 
-`provider_error` is the only retryable code: the job goes back to `retry_wait` while it has attempts
-left and the run stays `queued`. Every other code ends the job.
+`provider_error` is retried: the job goes back to `retry_wait` while it has attempts left and the run
+stays `queued`. `lease_lost` is retried too — the worker fails that claim as retryable, so a lost
+lease does not end the job and the next attempt can call the provider again — and so is the
+worker's own `handler_failed`, while `validation_failed` is not, because a schema violation never
+succeeds on a retry. Every other code ends the job: `unhandled_capability`, `run_not_found`, the
+policy, account, configuration, target, opportunity and allowance refusals, `invalid_output` and the
+worker's `unhandled_job`.
 
 **The run only — a refusal decided in the final transaction.** The run's `meta_json` holds the code
 as `refusalReason` and the run's status changes. The job is acknowledged `completed` and its
