@@ -254,7 +254,8 @@ is saved, so a stale reference never locks the settings surface out.
 The capability that produces the question is `journal.review-insight`, version 1. It declares no
 tools and no model features, so the declared capabilities do not have to be turned on for it. What
 the policy does bound is the context: a change whose evidence does not fit inside
-`maxInputCharacters` is refused with `context_too_large`.
+`maxInputCharacters` is dropped at the enqueue, so it leaves no run, no job and no reason code
+behind.
 
 ### The daily allowance
 
@@ -269,8 +270,8 @@ When the day's ten are spent, the next attempt is refused with `daily_budget_exh
 ends `unavailable` **without** a provider request. The day is a UTC day: it changes at 00:00 UTC,
 not at local midnight.
 
-Every refusal that happens before the call costs nothing: a missing provider, a stale target, a
-withdrawn opportunity and invalid evidence are all decided before the attempt is reserved.
+Every refusal that happens before the call costs nothing: a missing provider, a stale target and a
+withdrawn opportunity are all decided before the attempt is reserved.
 
 ```sql
 -- Today's reservations, and the run that spent each one.
@@ -288,29 +289,80 @@ WHERE day = CAST(strftime('%s', 'now') AS INTEGER) / 86400;
 
 ### The refusal reasons
 
-Every refusal is a stable reason code. It is written to the run's `meta_json` as `refusalReason`,
-and the job's `last_error` holds the same code. `unhandled_capability` is the one exception: the
-worker never reaches the run, so it lands in `last_error` only.
+Every refusal is a stable reason code, but a code does not always land in the same place. The tables
+below say where each one lands. A code reaches the job's `last_error` only while the worker still
+holds the claim: a claim that was lost in the meantime records nothing at all, because the
+transaction rolls back and the job belongs to whoever holds it now.
 
-| The reason                | When it happens                                                          | What to do                                                                       |
-| ------------------------- | ------------------------------------------------------------------------ | -------------------------------------------------------------------------------- |
-| `policy_missing`          | no background policy has ever been saved                                 | save the policy once; the default document is off and lists no account           |
-| `policy_invalid`          | a policy row exists but its document does not parse                      | save the policy again from the settings surface; an unknown field is refused     |
-| `policy_disabled`         | the policy is off                                                        | turn on **Allow background AI** and save                                         |
-| `account_not_opted_in`    | the account is not in the policy's account list                          | tick the account in the **Background AI** card and save                          |
-| `account_missing`         | the account no longer exists in the journal                              | nothing — the account was deleted and the run is cancelled                       |
-| `policy_changed`          | the run was queued under an older policy revision                        | reschedule the run explicitly; a revision never applies retroactively            |
-| `configuration_changed`   | the provider, the model or the endpoint changed after the run was queued | nothing for that run — it is never rerouted; new runs pin the new configuration  |
-| `capacity_unknown`        | the policy's maximum context characters is not a positive whole number   | save a valid maximum context characters value                                    |
-| `context_too_large`       | the question's context is larger than the policy allows                  | raise `maxInputCharacters`, or accept the refusal                                |
-| `provider_not_configured` | no provider is configured, so nobody could answer                        | configure the provider: a key, or a base URL and a model. It costs no allowance  |
-| `daily_budget_exhausted`  | the day's ten attempts are spent                                         | wait for the next UTC day; no provider request was made                          |
-| `target_stale`            | the observation is no longer current — a correction replaced it          | nothing; the correction is the newer truth                                       |
-| `opportunity_not_live`    | the review opportunity was withdrawn or suppressed                       | nothing; the journal decided not to show that review                             |
-| `invalid_output`          | the provider's answer was not a bounded question                         | check the provider and the model; the answer is not stored                       |
-| `provider_error`          | the provider call failed                                                 | the attempt stays spent and the job is retried — check key, endpoint and network |
-| `invalid_evidence`        | the observation's evidence does not match the capability's schema        | nothing; the journal keeps its own facts                                         |
-| `unhandled_capability`    | the worker found no handler for the capability the job names             | deploy the build that registers the capability                                   |
+**The job's `last_error` only — no run reason, no run status.**
+
+| The reason             | When it happens                                                                       | What to do                                     |
+| ---------------------- | ------------------------------------------------------------------------------------- | ---------------------------------------------- |
+| `unhandled_capability` | the worker found no async handler for the capability id and version the job names     | deploy the build that registers the capability |
+| `lease_lost`           | the job lease or the worker lease could not be renewed while the provider was awaited | nothing; the answer was discarded              |
+| `run_not_found`        | the job names a run row that no longer exists                                         | nothing; the run is gone                       |
+
+`unhandled_capability` is terminal: an unknown capability id or a version that is no longer
+registered never reaches a provider. `lease_lost` discards the answer, so no refusal reason and no
+question are written to the run. `run_not_found` has no run left to write to.
+
+**The run and the job — a refusal decided before the provider call.** The run's `meta_json` holds
+the code as `refusalReason`, the run's status changes, and the job's `last_error` holds the same
+code.
+
+| The reason                | Run status    | When it happens                                                                   | What to do                                                                       |
+| ------------------------- | ------------- | --------------------------------------------------------------------------------- | -------------------------------------------------------------------------------- |
+| `policy_missing`          | `unavailable` | no background policy has ever been saved                                          | save the policy once; the default document is off and lists no account           |
+| `policy_invalid`          | `unavailable` | a policy row exists but its document does not parse                               | save the policy again from the settings surface; an unknown field is refused     |
+| `policy_disabled`         | `unavailable` | the policy is off                                                                 | turn on **Allow background AI** and save                                         |
+| `policy_changed`          | `unavailable` | the run was queued under an older policy revision                                 | reschedule the run explicitly; a revision never applies retroactively            |
+| `account_not_opted_in`    | `unavailable` | the account is not in the policy's account list                                   | tick the account in the **Background AI** card and save                          |
+| `account_missing`         | `cancelled`   | the account no longer exists in the journal                                       | nothing — the account was deleted and the run is cancelled                       |
+| `configuration_changed`   | `unavailable` | the provider, the model or the endpoint changed after the run was queued          | nothing for that run — it is never rerouted; new runs pin the new configuration  |
+| `cancelled`               | `cancelled`   | the run was already cancelled, or the worker was stopping when it claimed the job | nothing; the run was cancelled                                                   |
+| `run_finished`            | `failed`      | the run had already ended when the worker claimed it                              | reschedule the run explicitly                                                    |
+| `provider_not_configured` | `unavailable` | no provider is configured, so nobody could answer                                 | configure the provider: a key, or a base URL and a model. It costs no allowance  |
+| `daily_budget_exhausted`  | `unavailable` | the day's ten attempts are spent                                                  | wait for the next UTC day; no provider request was made                          |
+| `target_stale`            | `cancelled`   | the observation is no longer current — a correction replaced it                   | nothing; the correction is the newer truth                                       |
+| `opportunity_not_live`    | `cancelled`   | the review opportunity was withdrawn or suppressed                                | nothing; the journal decided not to show that review                             |
+| `invalid_output`          | `failed`      | the provider's answer was not a bounded question                                  | check the provider and the model; the answer is not stored                       |
+| `provider_error`          | `queued`      | the provider call failed                                                          | the attempt stays spent and the job is retried — check key, endpoint and network |
+
+`provider_error` is the only retryable code: the job goes back to `retry_wait` while it has attempts
+left and the run stays `queued`. Every other code ends the job.
+
+**The run only — a refusal decided in the final transaction.** The run's `meta_json` holds the code
+as `refusalReason` and the run's status changes. The job is acknowledged `completed` and its
+`last_error` is left alone — NULL on a first attempt: the job did its work, and only the question
+was refused.
+
+| The reason              | Run status    | When it happens                                                                  |
+| ----------------------- | ------------- | -------------------------------------------------------------------------------- |
+| `account_missing`       | `cancelled`   | the account was deleted while the provider was answering                         |
+| `policy_missing`        | `unavailable` | no background policy has ever been saved                                         |
+| `policy_invalid`        | `unavailable` | the stored policy document does not parse                                        |
+| `policy_disabled`       | `unavailable` | the policy was turned off while the provider was answering                       |
+| `account_not_opted_in`  | `unavailable` | the account was removed from the policy's account list                           |
+| `policy_changed`        | `unavailable` | the policy was revised while the provider was answering                          |
+| `configuration_changed` | `unavailable` | the provider, the model or the endpoint changed while the provider was answering |
+| `target_stale`          | `cancelled`   | the observation was corrected while the provider was answering                   |
+| `opportunity_not_live`  | `cancelled`   | the opportunity was withdrawn while the provider was answering                   |
+
+**Codes the feature cannot emit.** These codes exist in the policy decision and in the capability
+job, but the review question never reaches them.
+
+| The reason                      | Why it cannot happen here                                                                                           |
+| ------------------------------- | ------------------------------------------------------------------------------------------------------------------- |
+| `capacity_unknown`              | the policy schema demands a positive whole number, so a bad value is a policy that does not parse: `policy_invalid` |
+| `context_too_large`             | an over-budget change is dropped at the enqueue: no run, no job, no code                                            |
+| `tools_unsupported`             | the run's scope requires no model feature, so the policy's declared capabilities are never consulted                |
+| `structured_output_unsupported` | the same                                                                                                            |
+| `invalid_evidence`              | the evidence reader returns null for evidence that does not parse, so the run sees a stale target: `target_stale`   |
+
+**The worker's own codes.** A job the worker cannot run at all is recorded in the worker's
+vocabulary, not in this feature's: `unhandled_job` (an unknown job kind or an unknown handler
+version), `handler_failed` (the handler threw) and `validation_failed` (the handler threw a schema
+violation). A reason that is not a code is recorded as `job_failed`.
 
 A retried attempt reserves a slot of its own, so a provider that keeps failing spends the day's
 allowance one slot at a time.
