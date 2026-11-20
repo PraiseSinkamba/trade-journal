@@ -88,6 +88,9 @@ export const getCurrencyConversion = () => {
 /** Journal display timezone (IANA), default UTC. */
 export const getTimeZone = (): string => getSetting("timeZone") ?? "UTC";
 
+/** Journal display timezone (IANA), as the given transaction sees it. */
+export const getTimeZoneInTx = (tx: JournalTx): string => getSettingInTx(tx, "timeZone") ?? "UTC";
+
 /** Preserve the legacy parsing default until a separate import zone is saved. */
 export const getImportTimeZone = (): string => getSetting("importTimeZone") ?? getTimeZone();
 
@@ -113,11 +116,16 @@ export const aiKeyEnvironment = (provider: AiProvider): string | null => {
   return (variable && process.env[variable]?.trim()) || null;
 };
 
-/** Provider keys are stored separately and encrypted like broker credentials. */
-export const getAiKey = (provider: AiProvider): string | null => {
+/**
+ * The provider key as the given transaction sees it.
+ *
+ * The environment variable still wins: a key that never touches the journal
+ * is read from the process, not from the transaction.
+ */
+export const getAiKeyInTx = (tx: JournalTx, provider: AiProvider): string | null => {
   const environment = aiKeyEnvironment(provider);
   if (environment) return environment;
-  const envelope = getSetting(`${provider}KeyEnc`);
+  const envelope = getSettingInTx(tx, `${provider}KeyEnc`);
   if (!envelope) return null;
   try {
     const key = decryptJson<unknown>(envelope);
@@ -126,6 +134,9 @@ export const getAiKey = (provider: AiProvider): string | null => {
     return null;
   }
 };
+
+/** Provider keys are stored separately and encrypted like broker credentials. */
+export const getAiKey = (provider: AiProvider): string | null => getAiKeyInTx(journal, provider);
 
 export const setAiKey = (provider: AiProvider, key: string | null): void => {
   if (key === null) deleteSetting(`${provider}KeyEnc`);
@@ -194,9 +205,18 @@ export const getAiModel = (provider: AiProvider): string =>
 
 /** Hosted providers need a key. A compatible server needs a URL and model; its key is optional. */
 export const aiProviderConfigured = (provider: AiProvider): boolean =>
+  aiProviderConfiguredInTx(journal, provider);
+
+/**
+ * Whether the provider can be reached, as the given transaction sees it.
+ *
+ * A hosted provider needs its key, a compatible server its URL and model: the
+ * same rule the settings surface uses, read inside the caller's transaction.
+ */
+export const aiProviderConfiguredInTx = (tx: JournalTx, provider: AiProvider): boolean =>
   provider === "compatible"
-    ? Boolean(getCompatibleBaseUrl() && getAiModel(provider))
-    : getAiKey(provider) !== null;
+    ? Boolean(getCompatibleBaseUrlInTx(tx) && getAiModelInTx(tx, provider))
+    : getAiKeyInTx(tx, provider) !== null;
 
 export const getAiSettings = (): AiSettingsPayload => {
   const aiProvider = getAiProvider();
@@ -258,6 +278,43 @@ export const getCurrentProviderConfiguration = (): {
     baseUrl: provider === "compatible" ? getCompatibleBaseUrl() : null,
   };
 };
+
+/**
+ * The provider configuration as the given transaction sees it.
+ *
+ * The background runtime reads the configuration inside the transaction that
+ * pins it, so the run that is written and the configuration it is compared
+ * against come from the same snapshot.
+ */
+export const getCurrentProviderConfigurationInTx = (
+  tx: JournalTx,
+): {
+  provider: AiProvider;
+  modelId: string;
+  baseUrl: string | null;
+} => {
+  const provider = getAiProviderInTx(tx);
+  return {
+    provider,
+    modelId: getAiModelInTx(tx, provider),
+    baseUrl: provider === "compatible" ? getCompatibleBaseUrlInTx(tx) : null,
+  };
+};
+
+/** The selected provider, as the given transaction sees it. */
+export const getAiProviderInTx = (tx: JournalTx): AiProvider => {
+  const selected = getSettingInTx(tx, "aiProvider");
+  if (isAiProvider(selected)) return selected;
+  return !getAiKeyInTx(tx, "anthropic") && getAiKeyInTx(tx, "openai") ? "openai" : "anthropic";
+};
+
+/** The model of one provider, as the given transaction sees it. */
+export const getAiModelInTx = (tx: JournalTx, provider: AiProvider): string =>
+  getSettingInTx(tx, aiModelSetting(provider))?.trim() || AI_DEFAULT_MODELS[provider];
+
+/** The compatible server URL, as the given transaction sees it. */
+export const getCompatibleBaseUrlInTx = (tx: JournalTx): string | null =>
+  getSettingInTx(tx, "compatibleBaseUrl");
 
 /**
  * Statement parsing stays on the hosted providers: they accept PDFs and strict

@@ -1,4 +1,5 @@
 import type { ExecutionContext, Outcome } from "../contracts/execution";
+import type { AiProvider } from "@/lib/ai-settings";
 import {
   BACKGROUND_EXECUTION_LIMITS,
   BACKGROUND_FAILURE,
@@ -30,7 +31,7 @@ import {
 
 /** The provider configuration a background run is compared against. */
 export interface CurrentProviderConfiguration {
-  provider: string;
+  provider: AiProvider;
   model: string;
   baseUrl: string | null;
 }

@@ -1,7 +1,10 @@
-import { and, eq, lt } from "drizzle-orm";
+import { and, eq, inArray, lt } from "drizzle-orm";
+import { z } from "zod";
 import {
+  accounts,
   intelligenceInsights,
   intelligenceObservations,
+  intelligenceOpportunities,
   tradeIdentities,
   tradeProjectionRevisions,
 } from "@/db/schema";
@@ -11,11 +14,17 @@ import {
   AI_INSIGHT_CAPABILITY_VERSION,
   MAX_INSIGHT_QUESTION_LENGTH,
   insightBusinessKey,
+  reviewEvidenceSchema,
   type InsightInput,
   type InsightQuery,
   type InsightRow,
   type InsightStore,
+  type ObservationEvidenceReader,
+  type ReviewEvidence,
+  type ReviewObservation,
+  type ReviewOpportunityReader,
 } from "../contracts/insights";
+import { opportunityKey } from "../contracts/experience";
 import type { LiveReferenceIndex } from "./experience-store";
 
 /**
@@ -201,6 +210,144 @@ const isSuperseded = (
 export const createInsightStore = (): InsightStore => ({
   persistInsightInTx,
   readCurrentInsightInTx,
+});
+
+/**
+ * The permissive shape of a projection snapshot.
+ *
+ * The snapshot carries many more facts than a review question may rest on, so
+ * only the fields the evidence needs are picked out of it and the picked
+ * object is what the strict evidence schema validates.
+ */
+const reviewEvidencePickSchema = z.object({
+  symbol: z.string(),
+  direction: z.string(),
+  status: z.string(),
+  currency: z.string(),
+  netPnl: z.number(),
+  fees: z.number(),
+  durationMs: z.number().nullish(),
+  timingQuality: z.string(),
+});
+
+/**
+ * The evidence of one observation, read from its snapshot.
+ *
+ * The holding time comes from the observation row, not from the snapshot: the
+ * journal nulls the duration unless the source stated the times, and a
+ * question must not state a holding time the journal deliberately withheld.
+ *
+ * A snapshot that does not parse into the evidence schema is no evidence: the
+ * reader returns null rather than a guess.
+ */
+const parseReviewEvidence = (raw: string, durationMs: number | null): ReviewEvidence | null => {
+  let snapshot: unknown;
+  try {
+    snapshot = JSON.parse(raw);
+  } catch {
+    return null;
+  }
+  const picked = reviewEvidencePickSchema.safeParse(snapshot);
+  if (!picked.success) return null;
+  const parsed = reviewEvidenceSchema.safeParse({
+    symbol: picked.data.symbol,
+    direction: picked.data.direction,
+    status: picked.data.status,
+    currency: picked.data.currency,
+    netPnl: picked.data.netPnl,
+    fees: picked.data.fees,
+    durationMs,
+    timingQuality: picked.data.timingQuality,
+  });
+  return parsed.success ? parsed.data : null;
+};
+
+/**
+ * The current observation of one id, with the evidence a question may rest on.
+ *
+ * The observation is current only when it is still `active`, when it was
+ * derived from the subject's current projection revision and when its account
+ * still exists. A correction hides the older observation, exactly as it hides
+ * the older question.
+ */
+const readCurrentObservationInTx = (
+  tx: JournalTx,
+  observationId: string,
+): ReviewObservation | null => {
+  const observation = tx
+    .select({
+      id: intelligenceObservations.id,
+      subjectId: intelligenceObservations.subjectId,
+      accountId: intelligenceObservations.accountId,
+      sourceRevision: intelligenceObservations.sourceRevision,
+      status: intelligenceObservations.status,
+      durationMs: intelligenceObservations.durationMs,
+      directFactsJson: intelligenceObservations.directFactsJson,
+    })
+    .from(intelligenceObservations)
+    .where(eq(intelligenceObservations.id, observationId))
+    .get();
+  if (!observation || observation.status !== "active") return null;
+
+  const currentRevisionId = currentProjectionRevisionId(tx, observation.subjectId);
+  if (!currentRevisionId || currentRevisionId !== observation.sourceRevision) return null;
+
+  const account = tx
+    .select({ id: accounts.id })
+    .from(accounts)
+    .where(eq(accounts.id, observation.accountId))
+    .get();
+  if (!account) return null;
+
+  const evidence = parseReviewEvidence(observation.directFactsJson, observation.durationMs);
+  if (!evidence) return null;
+
+  return {
+    observationId: observation.id,
+    subjectId: observation.subjectId,
+    accountId: observation.accountId,
+    sourceRevision: observation.sourceRevision,
+    evidence,
+  };
+};
+
+/**
+ * The opportunity statuses that are still live.
+ *
+ * A suppressed opportunity is one the journal decided never to show, so it is
+ * not live here: a question about that trade would push back at the trader
+ * what the journal deliberately kept quiet about.
+ */
+const LIVE_REVIEW_OPPORTUNITY_STATUSES = ["pending", "eligible"] as const;
+
+/**
+ * Whether the observation still has a review opportunity worth a question.
+ *
+ * The opportunity of an observation is the one the producer named after it,
+ * so its stored key is the producer key under the opportunity prefix.
+ */
+const isLiveInTx = (tx: JournalTx, observationId: string): boolean => {
+  const row = tx
+    .select({ id: intelligenceOpportunities.id })
+    .from(intelligenceOpportunities)
+    .where(
+      and(
+        eq(intelligenceOpportunities.dedupKey, opportunityKey(`observation/${observationId}`)),
+        inArray(intelligenceOpportunities.status, [...LIVE_REVIEW_OPPORTUNITY_STATUSES]),
+      ),
+    )
+    .get();
+  return row !== undefined;
+};
+
+/** The reader that answers what is still true about an observation. */
+export const createObservationEvidenceReader = (): ObservationEvidenceReader => ({
+  readCurrentObservationInTx,
+});
+
+/** The reader that answers whether a review opportunity is still live. */
+export const createReviewOpportunityReader = (): ReviewOpportunityReader => ({
+  isLiveInTx,
 });
 
 /**

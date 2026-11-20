@@ -23,6 +23,7 @@ import {
   getIntelligenceControls,
   getIntelligenceControlsInTx,
   getTimeZone,
+  getTimeZoneInTx,
 } from "@/server/settings";
 import { newUuid } from "@/server/ids";
 import { runBackgroundAi } from "@/server/ai-runtime";
@@ -68,6 +69,24 @@ import {
 import { persistObservationInTx } from "./infrastructure/knowledge-store";
 import { applySourceChange, nextSourceRevision } from "./infrastructure/knowledge-revisions";
 import { createOutboxDispatcher, type OutboxHandler } from "./infrastructure/outbox";
+import { createBackgroundEnvironmentReader } from "./infrastructure/environment";
+import { createReviewQuestionTransport } from "./infrastructure/review-transport";
+import {
+  createInsightStore,
+  createObservationEvidenceReader,
+  createReviewOpportunityReader,
+} from "./infrastructure/insight-store";
+import { createCapabilityJobHandler } from "./runtime/capability-job";
+import { createReviewInsightCapability } from "./runtime/review-insight";
+import {
+  buildReviewQuestionPrompt,
+  REVIEW_QUESTION_SYSTEM_PROMPT,
+} from "@/server/ai-review-insight";
+import {
+  createReviewQuestionEnqueuer,
+  type ReviewQuestionEnqueuer,
+} from "./runtime/review-enqueue";
+import type { ReviewQuestionTransport } from "./contracts/insights";
 import {
   createScheduleHandler,
   createScheduler,
@@ -148,6 +167,13 @@ const tradeChangedOf = (row: typeof domainOutbox.$inferSelect): TradeChanged =>
  */
 export const createTradeObservationHandler = (deps?: {
   readonly clock?: () => number;
+  /**
+   * The enqueue of the review question, bound to the same transaction.
+   *
+   * It is absent in the paths that only observe: the deterministic review
+   * stays available, and no provider request is ever made for it.
+   */
+  readonly review?: ReviewQuestionEnqueuer;
 }): JobHandler => ({
   id: OBSERVATION_HANDLER_ID,
   version: OBSERVATION_HANDLER_VERSION,
@@ -266,6 +292,14 @@ export const createTradeObservationHandler = (deps?: {
       getIntelligenceControlsInTx(tx),
       now,
     );
+    // The review question is queued in the same transaction as the
+    // observation and its opportunity: a rollback leaves neither a run nor a
+    // job behind, and a repeated delivery reuses the same business key.
+    deps?.review?.enqueueInTx(tx, {
+      observationId: stored.id,
+      mode: event.payload.mode,
+      timeZone: getTimeZoneInTx(tx),
+    });
   },
 });
 
@@ -276,9 +310,50 @@ export const createIntelligenceServices = (deps: {
   readonly seedBatchSize?: number;
   /** The schedules the durable scheduler drives. */
   readonly schedules?: readonly ScheduleDefinition[];
+  /**
+   * The transport the review question is asked through.
+   *
+   * It is the real provider transport by default and an injected one in the
+   * tests, so the tests drive the production registration with a stub
+   * provider.
+   */
+  readonly transport?: ReviewQuestionTransport;
 }) => {
   const clock = deps.clock ?? Date.now;
   const jobs = createJobStore(deps.db);
+  // The run ledger of this journal: the run, the policy and the attempts.
+  const runs = createPolicyStore({ db: deps.db });
+  const capability = createReviewInsightCapability({
+    system: REVIEW_QUESTION_SYSTEM_PROMPT,
+    build: buildReviewQuestionPrompt,
+  });
+  const transport = deps.transport ?? createReviewQuestionTransport();
+  const environment = createBackgroundEnvironmentReader();
+  const observations = createObservationEvidenceReader();
+  const opportunities = createReviewOpportunityReader();
+  // The handler of the capability job: the slow half asks the provider, the
+  // fast half writes the question.
+  const capabilityHandler = createCapabilityJobHandler({
+    capability,
+    runs,
+    insights: createInsightStore(),
+    observations,
+    opportunities,
+    transport,
+    environment,
+    clock,
+  });
+  // The enqueue of the review question, bound to the transaction that
+  // persists the observation and raises its opportunity.
+  const review = createReviewQuestionEnqueuer({
+    capability,
+    runs,
+    jobs,
+    observations,
+    opportunities,
+    environment,
+    clock,
+  });
   const backfill = createBackfillService({
     db: deps.db,
     jobs,
@@ -309,7 +384,10 @@ export const createIntelligenceServices = (deps: {
       );
     },
   };
-  const handlers: readonly JobHandler[] = [createTradeObservationHandler({ clock }), seedHandler];
+  const handlers: readonly JobHandler[] = [
+    createTradeObservationHandler({ clock, review }),
+    seedHandler,
+  ];
   const outboxHandlers: readonly OutboxHandler[] = [
     { id: OBSERVATION_HANDLER_ID, version: OBSERVATION_HANDLER_VERSION },
   ];
@@ -333,6 +411,8 @@ export const createIntelligenceServices = (deps: {
     outboxHandlers,
     scheduler,
     workflows,
+    /** The handler of the capability job, bound to this journal. */
+    capabilityHandler,
   };
 };
 
@@ -343,9 +423,22 @@ export const createIntelligenceWorker = (deps: {
   readonly enabled?: boolean;
   readonly owner?: string;
   readonly schedules?: readonly ScheduleDefinition[];
+  /**
+   * The transport the review question is asked through.
+   *
+   * It is the real provider transport by default and an injected one in the
+   * tests, so the tests drive the production registration with a stub
+   * provider.
+   */
+  readonly transport?: ReviewQuestionTransport;
 }): IntelligenceWorker => {
   const clock = deps.clock ?? Date.now;
-  const services = createIntelligenceServices({ db: deps.db, clock, schedules: deps.schedules });
+  const services = createIntelligenceServices({
+    db: deps.db,
+    clock,
+    schedules: deps.schedules,
+    transport: deps.transport,
+  });
   const jobs = createJobStore(deps.db);
   return createWorkerService({
     db: deps.db,
@@ -360,6 +453,7 @@ export const createIntelligenceWorker = (deps: {
       handlers: services.outboxHandlers,
     }),
     handlers: services.handlers,
+    asyncHandlers: [services.capabilityHandler],
     scheduler: services.scheduler,
   });
 };
