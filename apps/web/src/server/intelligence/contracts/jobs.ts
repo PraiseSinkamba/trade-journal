@@ -1,5 +1,7 @@
 import { z } from "zod";
 import type { JournalTx } from "@/db/transaction";
+import type { InsightInput } from "./insights";
+import type { BackgroundRunStatus } from "./policy";
 
 /**
  * The durable job contract (Phase 04).
@@ -40,6 +42,11 @@ const runCapabilityPayload = z
   .object({
     type: z.literal("run_capability"),
     runId: z.string().min(1),
+    /** The capability the job runs, and the version it was queued for. */
+    capabilityId: z.string().min(1),
+    capabilityVersion: z.string().min(1),
+    /** The observation the capability reads. */
+    observationId: z.string().min(1),
   })
   .strict();
 
@@ -102,6 +109,80 @@ export type JobClaim = Readonly<{
   fence: number;
   leaseUntil: number;
 }>;
+
+/**
+ * The result of an asynchronous job.
+ *
+ * The slow half of the job runs outside every write transaction: it awaits
+ * the provider. What it produced is either an answer the final transaction
+ * can commit, or a refusal that ends the run without an answer.
+ */
+export type AsyncJobOutcome =
+  /** The work produced an answer the final transaction can commit. */
+  | { readonly status: "completed"; readonly answer: InsightInput | null }
+  /**
+   * The work ended without an answer.
+   *
+   * `runStatus` is the state the run ends in. A retryable failure returns the
+   * run to `queued`, so the next attempt may run it again; a terminal one
+   * leaves the run finished.
+   */
+  | {
+      readonly status: "failed";
+      readonly reason: string;
+      readonly retryable: boolean;
+      readonly runStatus: BackgroundRunStatus;
+    };
+
+/**
+ * A handler whose work spans an await.
+ *
+ * The provider call must not sit inside a write transaction, so an
+ * asynchronous handler is split in two: `prepare` does the slow work with no
+ * transaction open, and `commit` writes the outcome inside the caller's
+ * transaction, where the claim fence and the acknowledgement land together.
+ */
+export interface AsyncJobHandler {
+  /** The capability this handler serves. */
+  readonly id: string;
+  /** The capability version this handler serves. */
+  readonly version: string;
+  /**
+   * The slow half. It runs with no write transaction open, so it may await
+   * the provider and be aborted when the worker stops.
+   */
+  prepare(context: AsyncJobContext): Promise<AsyncJobOutcome>;
+  /**
+   * The commit half. It runs inside the caller's transaction: the claim
+   * fence, the writes and the acknowledgement commit together or not at all.
+   */
+  commit(tx: JournalTx, job: JobRecord, outcome: AsyncJobOutcome): void;
+}
+
+/**
+ * What the slow half of an asynchronous job is given.
+ *
+ * The context never carries a transaction: the slow half must not hold one
+ * open while it awaits. It runs short transactions of its own through
+ * `runInTransaction`, on the worker's own connection.
+ */
+export interface AsyncJobContext {
+  /** The job being run. */
+  readonly job: JobRecord;
+  /** The claim that authorises the work. */
+  readonly claim: JobClaim;
+  /** The worker's clock. */
+  readonly now: number;
+  /**
+   * Cancelled when the worker stops or the lease is lost. The provider call
+   * stops when it fires, and the answer is discarded.
+   */
+  readonly signal: AbortSignal;
+  /** Runs one short transaction on the worker's own connection. */
+  readonly runInTransaction: <T>(
+    fn: (tx: JournalTx) => T extends PromiseLike<unknown> ? never : T,
+  ) => T;
+}
 
 /** A stored job, as the worker sees it. */
 export interface JobRecord {

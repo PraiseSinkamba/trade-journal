@@ -206,6 +206,252 @@ A change to the provider, the model or the endpoint invalidates the runs that we
 the old configuration: they become `unavailable` and must be rescheduled explicitly. The journal
 never silently reroutes a run to a different model or endpoint.
 
+## The background review-question job
+
+One committed **live** trade change produces one short review question, asked by a background
+provider job. The deterministic review — the facts the journal derives from your own trades — is
+unaffected: it never needed a provider and still does not get one.
+
+The question is bound to the source revision the change produced, not to the trade. A correction
+makes a new revision, so the older question stops being the current question for that trade while
+its row stays in the table.
+
+Only a `live` change queues a question. A `historical` reconstruction and a `maintenance` change
+never do: the first is not your own experience, the second is not a trade at all.
+
+The run's diagnostics (`meta_json`) hold what can be kept of the call, never the call itself: the
+reason code of a refusal, the capability id and the capability version, and — for a call that
+succeeded — the metadata of the call: the prompt version, the provider, the model, how long the
+call took and the token counts the provider reported. The prompt text, the provider's answer text
+and a credential are never among them. The question itself is bounded at 2000 characters, and an
+answer outside the bound is refused and stored nowhere.
+
+### Turning it on
+
+Three things have to hold, and the journal checks all three:
+
+| The requirement   | Where it lives                                              |
+| ----------------- | ----------------------------------------------------------- |
+| the policy is on  | `intelligence_policy`, the document with `enabled: true`    |
+| the account is in | the `accounts` list of that document                        |
+| a provider is set | the journal's AI settings: a key, or a base URL and a model |
+
+The policy is edited on the **Background AI** card of the settings page and saved through
+`PATCH /api/settings`, under the `backgroundAi` key:
+
+```sh
+curl -X PATCH http://localhost:3000/api/settings \
+  -H 'content-type: application/json' \
+  -b 'journal_session=<your session cookie>' \
+  -d '{"backgroundAi":{"enabled":true,"accounts":["<account id>"],"maxInputCharacters":8000}}'
+```
+
+Read the policy back with `GET /api/settings` (the `backgroundAi` field) or
+`GET /api/intelligence/status` (`status.backgroundPolicy`). The route calls `saveBackgroundPolicy`,
+which records a new revision — and the revision is what a queued run is pinned to. Saving a changed
+policy records a new revision; saving the same policy keeps the old one, so saving twice never
+invalidates a queued run. An account that no longer exists is dropped from the list when the policy
+is saved, so a stale reference never locks the settings surface out.
+
+The capability that produces the question is `journal.review-insight`, version 1. It declares no
+tools and no model features, so the declared capabilities do not have to be turned on for it. What
+the policy does bound is the context: a change whose evidence does not fit inside
+`maxInputCharacters` is dropped at the enqueue, so it leaves no run, no job and no reason code
+behind.
+
+### The daily allowance
+
+A journal may spend **ten background attempts per UTC day**. The allowance is journal-wide, not per
+account: it bounds the provider spend of the whole journal.
+
+The attempt is reserved **before** the provider is called, in the same transaction that moves the run
+to `running`. A reservation is never deleted, so an attempt that crashed, timed out or was refused
+still consumes its slot — the allowance is spent conservatively rather than handed back.
+
+When the day's ten are spent, the next attempt is refused with `daily_budget_exhausted` and the run
+ends `unavailable` **without** a provider request. The day is a UTC day: it changes at 00:00 UTC,
+not at local midnight.
+
+Every refusal that happens before the call costs nothing: a missing provider, a stale target and a
+withdrawn opportunity are all decided before the attempt is reserved.
+
+```sql
+-- Today's reservations, and the run that spent each one.
+SELECT b.day, b.attempt, b.reserved_at, r.effect_key, r.status
+FROM intelligence_budget_reservations b
+JOIN intelligence_runs r ON r.id = b.run_id
+WHERE b.day = CAST(strftime('%s', 'now') AS INTEGER) / 86400
+ORDER BY b.reserved_at;
+
+-- How much of today's ten is left.
+SELECT 10 - count(*) AS attempts_left
+FROM intelligence_budget_reservations
+WHERE day = CAST(strftime('%s', 'now') AS INTEGER) / 86400;
+```
+
+### The refusal reasons
+
+Every refusal is a stable reason code, but a code does not always land in the same place. The tables
+below say where each one lands. A code reaches the job's `last_error` only while the worker still
+holds the claim: a claim that was lost in the meantime records nothing at all, because the
+transaction rolls back and the job belongs to whoever holds it now.
+
+**The job's `last_error` only — no run reason, no run status.**
+
+| The reason             | When it happens                                                                       | What to do                                               |
+| ---------------------- | ------------------------------------------------------------------------------------- | -------------------------------------------------------- |
+| `unhandled_capability` | the worker found no async handler for the capability id and version the job names     | deploy the build that registers the capability           |
+| `lease_lost`           | the job lease or the worker lease could not be renewed while the provider was awaited | nothing; the answer was discarded and the job is retried |
+| `run_not_found`        | the job names a run row that no longer exists                                         | nothing; the run is gone                                 |
+
+`unhandled_capability` is terminal: an unknown capability id or a version that is no longer
+registered never reaches a provider. `lease_lost` discards the answer, so no refusal reason and no
+question are written to the run. `run_not_found` has no run left to write to.
+
+**The run and the job — a refusal decided before the provider call.** The run's `meta_json` holds
+the code as `refusalReason`, the run's status changes, and the job's `last_error` holds the same
+code.
+
+| The reason                | Run status    | When it happens                                                                   | What to do                                                                       |
+| ------------------------- | ------------- | --------------------------------------------------------------------------------- | -------------------------------------------------------------------------------- |
+| `policy_missing`          | `unavailable` | no background policy has ever been saved                                          | save the policy once; the default document is off and lists no account           |
+| `policy_invalid`          | `unavailable` | a policy row exists but its document does not parse                               | save the policy again from the settings surface; an unknown field is refused     |
+| `policy_disabled`         | `unavailable` | the policy is off                                                                 | turn on **Allow background AI** and save                                         |
+| `policy_changed`          | `unavailable` | the run was queued under an older policy revision                                 | reschedule the run explicitly; a revision never applies retroactively            |
+| `account_not_opted_in`    | `unavailable` | the account is not in the policy's account list                                   | tick the account in the **Background AI** card and save                          |
+| `account_missing`         | `cancelled`   | the account no longer exists in the journal                                       | nothing — the account was deleted and the run is cancelled                       |
+| `configuration_changed`   | `unavailable` | the provider, the model or the endpoint changed after the run was queued          | nothing for that run — it is never rerouted; new runs pin the new configuration  |
+| `cancelled`               | `cancelled`   | the run was already cancelled, or the worker was stopping when it claimed the job | nothing; the run was cancelled                                                   |
+| `run_finished`            | `failed`      | the run had already ended when the worker claimed it                              | reschedule the run explicitly                                                    |
+| `provider_not_configured` | `unavailable` | no provider is configured, so nobody could answer                                 | configure the provider: a key, or a base URL and a model. It costs no allowance  |
+| `daily_budget_exhausted`  | `unavailable` | the day's ten attempts are spent                                                  | wait for the next UTC day; no provider request was made                          |
+| `target_stale`            | `cancelled`   | the observation is no longer current — a correction replaced it                   | nothing; the correction is the newer truth                                       |
+| `opportunity_not_live`    | `cancelled`   | the review opportunity was withdrawn or suppressed                                | nothing; the journal decided not to show that review                             |
+| `invalid_output`          | `failed`      | the provider's answer was not a bounded question                                  | check the provider and the model; the answer is not stored                       |
+| `provider_error`          | `queued`      | the provider call failed                                                          | the attempt stays spent and the job is retried — check key, endpoint and network |
+
+`provider_error` is retried: the job goes back to `retry_wait` while it has attempts left and the run
+stays `queued`. `lease_lost` is retried too — the worker fails that claim as retryable, so a lost
+lease does not end the job and the next attempt can call the provider again — and so is the
+worker's own `handler_failed`, while `validation_failed` is not, because a schema violation never
+succeeds on a retry. Every other code ends the job: `unhandled_capability`, `run_not_found`, the
+policy, account, configuration, target, opportunity and allowance refusals, `invalid_output` and the
+worker's `unhandled_job`.
+
+**The run only — a refusal decided in the final transaction.** The run's `meta_json` holds the code
+as `refusalReason` and the run's status changes. The job is acknowledged `completed` and its
+`last_error` is left alone — NULL on a first attempt: the job did its work, and only the question
+was refused.
+
+| The reason              | Run status    | When it happens                                                                  |
+| ----------------------- | ------------- | -------------------------------------------------------------------------------- |
+| `account_missing`       | `cancelled`   | the account was deleted while the provider was answering                         |
+| `policy_missing`        | `unavailable` | no background policy has ever been saved                                         |
+| `policy_invalid`        | `unavailable` | the stored policy document does not parse                                        |
+| `policy_disabled`       | `unavailable` | the policy was turned off while the provider was answering                       |
+| `account_not_opted_in`  | `unavailable` | the account was removed from the policy's account list                           |
+| `policy_changed`        | `unavailable` | the policy was revised while the provider was answering                          |
+| `configuration_changed` | `unavailable` | the provider, the model or the endpoint changed while the provider was answering |
+| `target_stale`          | `cancelled`   | the observation was corrected while the provider was answering                   |
+| `opportunity_not_live`  | `cancelled`   | the opportunity was withdrawn while the provider was answering                   |
+
+**Codes the feature cannot emit.** These codes exist in the policy decision and in the capability
+job, but the review question never reaches them.
+
+| The reason                      | Why it cannot happen here                                                                                           |
+| ------------------------------- | ------------------------------------------------------------------------------------------------------------------- |
+| `capacity_unknown`              | the policy schema demands a positive whole number, so a bad value is a policy that does not parse: `policy_invalid` |
+| `context_too_large`             | an over-budget change is dropped at the enqueue: no run, no job, no code                                            |
+| `tools_unsupported`             | the run's scope requires no model feature, so the policy's declared capabilities are never consulted                |
+| `structured_output_unsupported` | the same                                                                                                            |
+| `invalid_evidence`              | the evidence reader returns null for evidence that does not parse, so the run sees a stale target: `target_stale`   |
+
+**The worker's own codes.** A job the worker cannot run at all is recorded in the worker's
+vocabulary, not in this feature's: `unhandled_job` (an unknown job kind or an unknown handler
+version), `handler_failed` (the handler threw) and `validation_failed` (the handler threw a schema
+violation). A reason that is not a code is recorded as `job_failed`.
+
+A retried attempt reserves a slot of its own, so a provider that keeps failing spends the day's
+allowance one slot at a time.
+
+### Turning it off
+
+Turn off **Allow background AI** and save. That records a new policy revision, and:
+
+- **new runs stop at once.** The enqueue reads the policy in the same transaction that persists the
+  change and raises its review opportunity, so an off policy — or one that no longer lists the
+  account — queues neither a run nor a job. The deterministic review is unaffected.
+- **queued runs are not deleted.** They stay in `intelligence_runs` as `queued`. When the worker
+  claims them, the authorisation is recomputed against the policy as it is now: the run ends
+  `unavailable` with `refusalReason: "policy_disabled"` and the job ends `failed` with the same
+  code. Nothing is sent to the provider and no attempt is reserved.
+- **a policy edit is not a switch-off.** A run queued under an older revision of a policy that is
+  still on ends `unavailable` with `policy_changed`. It has to be rescheduled explicitly; no
+  revision applies retroactively.
+- **stored questions stay.** Turning the policy off does not delete a question. The retention prune
+  still owns them, under the knowledge rules.
+
+### The tables and the business key
+
+Three tables carry the same string, and that string is the identity of the whole effect:
+
+| The table               | The column        | What it is                             |
+| ----------------------- | ----------------- | -------------------------------------- |
+| `intelligence_runs`     | `effect_key`      | the queued run; the key is unique      |
+| `intelligence_jobs`     | `idempotency_key` | the durable job; the key is unique     |
+| `intelligence_insights` | `business_key`    | the stored question; the key is unique |
+
+The key is `insight:<capability version>:<account id>:<source revision>` — with the current
+capability, `insight:1:<account id>:<projection revision id>`. One source revision therefore
+yields exactly one run, one job and one question. A repeated delivery of the same change finds the
+rows that already exist and writes nothing: the run is never re-pinned, the job is never queued
+twice, and no second provider request is spent on it.
+
+```sql
+-- The run, the job and the question of one source revision.
+SELECT r.id AS run_id, r.status AS run_status, r.meta_json,
+       j.id AS job_id, j.status AS job_status, j.last_error,
+       i.id AS insight_id, i.created_at AS question_at
+FROM intelligence_runs r
+LEFT JOIN intelligence_jobs j ON j.idempotency_key = r.effect_key
+LEFT JOIN intelligence_insights i ON i.business_key = r.effect_key
+WHERE r.effect_key = '<business key>';
+
+-- The background runs, newest first, with the reason each one ended.
+SELECT id, effect_key, status, provider, model, policy_revision, meta_json, created_at
+FROM intelligence_runs
+ORDER BY created_at DESC LIMIT 20;
+
+-- The questions the background job stored, newest first.
+SELECT id, account_id, subject_id, source_revision, capability_version, created_at
+FROM intelligence_insights
+ORDER BY created_at DESC LIMIT 20;
+```
+
+### Troubleshooting
+
+**No question appears.** Work down this list:
+
+1. The policy is on and lists the account — `GET /api/settings`, the `backgroundAi` field.
+2. A provider is configured — the provider, the model and the key (or the base URL and the model,
+   for a compatible server) are set.
+3. The day's allowance is not spent — the reservation count for today is under ten.
+4. The change was a live change — `historical` and `maintenance` changes never queue a question.
+5. The opportunity was not suppressed — the review opportunity of the observation is `pending` or
+   `eligible`, not `dismissed`, `expired` or `suppressed`.
+6. The run's `meta_json` holds the reason — that is the refusal code, and the table above says what
+   to do about it.
+
+```sql
+-- The review opportunity of one observation: 'pending' or 'eligible' is live.
+SELECT id, status, dedup_key FROM intelligence_opportunities
+WHERE dedup_key = 'opportunity/observation/<observation id>';
+```
+
+**The question looks out of date.** A question is bound to the revision it was made from, so a
+correction produces a new revision and a new question. The older question stays in the table but is
+no longer the current question for that trade.
+
 ## Retention
 
 Retention removes what is finished and unreferenced. It never removes a live reference — a
@@ -224,7 +470,10 @@ corrected, or the observation it rests on is no longer active — and nothing li
 question is bound to the revision it was made from, so a correction hides the older question at
 once: the row stays in the table, but it is no longer the current question for that trade.
 
-Nothing generates a question yet — the table holds the storage, and no provider call writes to it.
+A question is written by the background review-question job: one live trade change produces one
+question, through a provider call the worker makes outside any write transaction. The question
+lands in the same fenced transaction that acknowledges the job, so a worker that lost its claim
+writes nothing.
 
 The prune is bounded: one call removes at most the number of rows you give it, so a retention run
 cannot hold the write lock for an unbounded time.

@@ -8,9 +8,16 @@ import {
   WORKFLOW_EFFECT_HANDLER_ID,
   WORKFLOW_EFFECT_HANDLER_VERSION,
 } from "../contracts/experience";
-import type { EffectStore, JobRecord, JobStore } from "../contracts/jobs";
+import type {
+  AsyncJobHandler,
+  EffectStore,
+  JobClaim,
+  JobRecord,
+  JobStore,
+} from "../contracts/jobs";
 import {
   DISPATCH_LIMIT,
+  JOB_RENEW_INTERVAL_MS,
   POLL_INTERVAL_MS,
   StaleClaimError,
   WORKER_LEASE_MS,
@@ -86,6 +93,12 @@ const isBusy = (error: unknown): boolean =>
   "code" in error &&
   String((error as { code: unknown }).code).startsWith("SQLITE_BUSY");
 
+/** The reason a job records when its capability is not registered. */
+export const UNHANDLED_CAPABILITY = "unhandled_capability";
+
+/** The reason a job records when a lease was lost while the work ran. */
+const LEASE_LOST = "lease_lost";
+
 /**
  * Creates the worker.
  *
@@ -98,11 +111,29 @@ export const createWorkerService = (deps: {
   effects: EffectStore;
   dispatcher: OutboxDispatcher;
   handlers: readonly JobHandler[];
+  /**
+   * The handlers of the jobs that span an await.
+   *
+   * An asynchronous handler is bound to one capability: its id and version
+   * are the capability's, and a job that names another one is refused before
+   * it reaches a provider.
+   */
+  asyncHandlers?: readonly AsyncJobHandler[];
   clock: () => number;
   owner?: string;
   enabled?: boolean;
   pollIntervalMs?: number;
   dispatchLimit?: number;
+  /**
+   * How often the job lease and the worker lease are renewed while a
+   * provider answer is awaited.
+   *
+   * It is the seam a test needs to exercise the lease-lost branch without
+   * waiting the real fifteen seconds: production renews every
+   * `JOB_RENEW_INTERVAL_MS`, and a test sets it to a few milliseconds so the
+   * renewal happens while the provider is still thinking.
+   */
+  renewIntervalMs?: number;
   /** The durable scheduler, ticked on the worker's own connection and clock. */
   scheduler?: { scheduleDue(now: number): number };
 }): WorkerService & {
@@ -114,11 +145,14 @@ export const createWorkerService = (deps: {
   const enabled = deps.enabled ?? true;
   const pollIntervalMs = deps.pollIntervalMs ?? POLL_INTERVAL_MS;
   const dispatchLimit = deps.dispatchLimit ?? DISPATCH_LIMIT;
+  const renewIntervalMs = deps.renewIntervalMs ?? JOB_RENEW_INTERVAL_MS;
 
   let state: WorkerState = enabled ? "idle" : "disabled";
   let fence: number | null = null;
   let leaseUntil: number | null = null;
   let lastHeartbeatAt: number | null = null;
+  /** Aborted when the worker stops, so an in-flight call is cancelled. */
+  let stopController: AbortController | null = null;
   let processed = 0;
   let failed = 0;
   let lastErrorCode: string | null = null;
@@ -243,10 +277,154 @@ export const createWorkerService = (deps: {
           handler.version === WORKFLOW_EFFECT_HANDLER_VERSION,
       );
     }
+    if (payload.type === "run_capability") {
+      // A capability job spans an await: it never runs through a synchronous
+      // handler, and its payload names no handler of its own.
+      return undefined;
+    }
     if (payload.type !== "evaluate_trade" && payload.type !== "schedule_trigger") return undefined;
     return deps.handlers.find(
       (handler) => handler.id === payload.handlerId && handler.version === payload.handlerVersion,
     );
+  };
+
+  /**
+   * Runs one capability job: the slow half outside every transaction, the
+   * fast half inside one.
+   *
+   * The provider is asked while no write transaction is open. The job lease
+   * and the worker lease are renewed on a timer while the answer is awaited,
+   * and a lease that cannot be renewed aborts the call and discards the
+   * answer: a worker that lost the journal writes nothing.
+   */
+  const runCapabilityJob = async (
+    job: JobRecord,
+    claim: JobClaim,
+    now: number,
+  ): Promise<boolean> => {
+    const payload = job.payload;
+    if (payload.type !== "run_capability") return false;
+    const handler = deps.asyncHandlers?.find(
+      (candidate) =>
+        candidate.id === payload.capabilityId && candidate.version === payload.capabilityVersion,
+    );
+    if (!handler) {
+      // A capability nobody registered is terminal: it would fail the same
+      // way forever, and it must never reach a provider.
+      deps.jobs.fail(claim, UNHANDLED_CAPABILITY, now, false);
+      failed += 1;
+      lastErrorCode = UNHANDLED_CAPABILITY;
+      state = "idle";
+      return true;
+    }
+
+    const controller = new AbortController();
+    // The call is cancelled when the worker stops, exactly as it is when the
+    // lease is lost.
+    const workerStop = stopController?.signal ?? null;
+    const cancelOnStop = (): void => controller.abort();
+    workerStop?.addEventListener("abort", cancelOnStop, { once: true });
+    let leaseLost = false;
+    const renew = (): void => {
+      const at = deps.clock();
+      const workerHeld = holdLease(at);
+      const jobHeld = deps.jobs.renew(claim, at);
+      if (!workerHeld || !jobHeld) {
+        // The journal is no longer ours: the call is cancelled and whatever
+        // it answers is thrown away.
+        leaseLost = true;
+        controller.abort();
+      }
+    };
+    const timer = setInterval(renew, renewIntervalMs);
+
+    const prepared = await (async () => {
+      try {
+        const outcome = await handler.prepare({
+          job,
+          claim,
+          now,
+          signal: controller.signal,
+          runInTransaction: <T>(
+            fn: (tx: JournalTx) => T extends PromiseLike<unknown> ? never : T,
+          ): T => withConnectionTransaction(deps.db, fn) as T,
+        });
+        return { ok: true, outcome } as const;
+      } catch (error) {
+        return { ok: false, error } as const;
+      }
+    })();
+    clearInterval(timer);
+    workerStop?.removeEventListener("abort", cancelOnStop);
+
+    if (leaseLost) {
+      // The answer is discarded: the lease that authorised the work is gone,
+      // so nothing is written and nothing is acknowledged.
+      deps.jobs.fail(claim, LEASE_LOST, now, true);
+      failed += 1;
+      lastErrorCode = LEASE_LOST;
+      state = "idle";
+      return true;
+    }
+
+    if (!prepared.ok) {
+      if (prepared.error instanceof StaleClaimError) {
+        lastErrorCode = prepared.error.reason;
+      } else {
+        // A schema violation never succeeds on a retry; anything else may.
+        const validation = prepared.error instanceof ZodError;
+        const code = validation ? "validation_failed" : "handler_failed";
+        deps.jobs.fail(claim, code, now, !validation);
+        failed += 1;
+        lastErrorCode = code;
+      }
+      state = "idle";
+      return true;
+    }
+
+    const outcome = prepared.outcome;
+
+    try {
+      if (outcome.status === "failed") {
+        // The run ends in the state the handler decided, and the job is
+        // failed with the reason: a refusal that may be retried runs again.
+        const code = /^[a-z0-9_]{1,64}$/.test(outcome.reason) ? outcome.reason : "job_failed";
+        withConnectionTransaction(deps.db, (tx) => {
+          deps.effects.assertClaim(tx, claim, deps.clock());
+          handler.commit(tx, job, outcome);
+        });
+        deps.jobs.fail(claim, code, now, outcome.retryable);
+        failed += 1;
+        lastErrorCode = code;
+      } else {
+        const finishedAt = deps.clock();
+        withConnectionTransaction(deps.db, (tx) => {
+          // The claim is checked before the handler writes, so a worker that
+          // lost its claim writes nothing at all.
+          deps.effects.assertClaim(tx, claim, finishedAt);
+          handler.commit(tx, job, outcome);
+          // The acknowledgement commits with the writes: either both land or
+          // neither does.
+          deps.effects.complete(tx, claim, finishedAt);
+        });
+        processed += 1;
+      }
+    } catch (error) {
+      if (error instanceof StaleClaimError) {
+        // The claim no longer authorises the work: the guarded update refuses
+        // to touch a job this worker no longer owns, and the transaction
+        // rolled back the writes with it.
+        lastErrorCode = error.reason;
+      } else {
+        const validation = error instanceof ZodError;
+        const code = validation ? "validation_failed" : "handler_failed";
+        deps.jobs.fail(claim, code, now, !validation);
+        failed += 1;
+        lastErrorCode = code;
+      }
+    }
+    state = "idle";
+    return true;
   };
 
   /** Runs one unit of work: dispatch, claim, execute, acknowledge. */
@@ -271,10 +449,24 @@ export const createWorkerService = (deps: {
       return false;
     }
     const job = deps.jobs.load(claim.jobId);
-    const handler = job ? findHandler(job) : undefined;
-    if (!job || !handler) {
-      // An unknown job kind or handler version is terminal: retrying it would
-      // fail the same way forever.
+    if (!job) {
+      // An unknown job kind is terminal: retrying it would fail the same way
+      // forever.
+      deps.jobs.fail(claim, "unhandled_job", now, false);
+      failed += 1;
+      lastErrorCode = "unhandled_job";
+      state = "idle";
+      return true;
+    }
+    if (job.payload.type === "run_capability") {
+      // A capability job spans an await, so it never runs through the
+      // synchronous handler path.
+      return await runCapabilityJob(job, claim, now);
+    }
+    const handler = findHandler(job);
+    if (!handler) {
+      // An unknown handler version is terminal: retrying it would fail the
+      // same way forever.
       deps.jobs.fail(claim, "unhandled_job", now, false);
       failed += 1;
       lastErrorCode = "unhandled_job";
@@ -313,6 +505,9 @@ export const createWorkerService = (deps: {
   const start = async (signal: AbortSignal): Promise<WorkerHandle> => {
     stopped = false;
     const controller = new AbortController();
+    // The controller is the worker's stop signal: an in-flight provider call
+    // is cancelled when it fires.
+    stopController = controller;
     const abort = () => controller.abort();
     signal.addEventListener("abort", abort, { once: true });
     const loop = (async () => {
@@ -360,6 +555,7 @@ export const createWorkerService = (deps: {
     }),
     stop: async () => {
       stopped = true;
+      stopController?.abort();
     },
   };
 };

@@ -9,8 +9,12 @@ import {
   backgroundScopeSchema,
   type BackgroundPolicy,
   type BackgroundRunRecord,
+  type BackgroundRunStore,
   type BackgroundRunStatus,
   type BackgroundScope,
+  type EnqueueRunInput,
+  type RunReservation,
+  type StoredPolicy,
 } from "../contracts/policy";
 
 /**
@@ -27,72 +31,11 @@ import {
 /** The UTC day index a timestamp belongs to. */
 export const dayIndex = (now: number): number => Math.floor(now / 86_400_000);
 
-/** The stored policy row. */
-export interface StoredPolicy {
-  id: string;
-  revision: number;
-  /** The parsed document, or null when the stored document does not parse. */
-  settings: BackgroundPolicy | null;
-  /** True when a row exists but its document is not a valid policy. */
-  invalid: boolean;
-}
-
-/** A run that was queued. */
-export interface EnqueueRunInput {
-  /** The idempotency key of the run: the same effect is queued once. */
-  effectKey: string;
-  /** The provider the run was approved against. */
-  provider: BackgroundRunRecord["provider"];
-  /** The model the run was approved against. */
-  model: string;
-  /** The fingerprint of the approved provider, model and endpoint. */
-  endpointFingerprint: string;
-  /** The policy revision the run was approved under. */
-  policyRevision: number;
-  /** The scope the run may read. */
-  scope: BackgroundScope;
-  /** Sanitized diagnostics. Never a prompt, a response or a credential. */
-  meta?: Record<string, unknown>;
-}
-
-/** One reserved attempt. */
-export interface RunReservation {
-  runId: string;
-  attempt: number;
-  day: number;
-  reservedAt: number;
-}
-
-/** The background policy store. */
-export interface PolicyStore {
-  /** The current policy document, or null when there is none. */
-  readPolicy(id: string): StoredPolicy | null;
-  /** The current policy document, read inside the caller's transaction. */
-  readPolicyInTx(tx: JournalTx, id: string): StoredPolicy | null;
-  /** Record a new policy revision and return it. */
-  writePolicyInTx(
-    tx: JournalTx,
-    id: string,
-    settings: BackgroundPolicy,
-    now: number,
-  ): { id: string; revision: number };
-  /** Queue a background run; the effect key makes the enqueue idempotent. */
-  enqueueRunInTx(tx: JournalTx, input: EnqueueRunInput, now: number): BackgroundRunRecord;
-  /** One run, or null when it does not exist. */
-  readRun(runId: string): BackgroundRunRecord | null;
-  /** One run, read inside the caller's transaction. */
-  readRunInTx(tx: JournalTx, runId: string): BackgroundRunRecord | null;
-  /** Replace the sanitized metadata of a run. */
-  updateRunMetaInTx(tx: JournalTx, runId: string, meta: Record<string, unknown>, now: number): void;
-  /** Move a run to a new status. */
-  updateRunStatusInTx(tx: JournalTx, runId: string, status: BackgroundRunStatus, now: number): void;
-  /** The attempts already reserved on the day of `now`. */
-  attemptsReservedOnDay(now: number): number;
-  /** The reservations of one run. */
-  reservationsForRun(runId: string): RunReservation[];
-  /** The run queued under an effect key, or null. */
-  findRunByEffectKey(effectKey: string): BackgroundRunRecord | null;
-}
+/**
+ * The store types are the contract's: the adapter implements the port, and it
+ * never declares a second shape for the same thing.
+ */
+export type { EnqueueRunInput, RunReservation, StoredPolicy };
 
 const decodeScope = (raw: string): BackgroundScope | null => {
   try {
@@ -117,13 +60,23 @@ const decodeMeta = (raw: string): Record<string, unknown> => {
 /**
  * Reserve one attempt of the daily background allowance.
  *
+ * The free function is the port method under another name: the reservation
+ * is taken in the caller's transaction, it is never deleted, and it returns
+ * false when the day's allowance is already spent.
+ */
+export const reserveBackgroundAttempt = (tx: JournalTx, runId: string, now: number): boolean =>
+  reserveAttemptInTx(tx, runId, now);
+
+/**
+ * The reservation itself, shared by the free function and the port method.
+ *
  * The reservation is taken in the caller's transaction: it commits with the
  * work that follows it, and it is never deleted, so a crashed attempt keeps
  * its reservation and a fresh retry spends another allowance.
  *
  * Returns false when the day's allowance is already spent.
  */
-export const reserveBackgroundAttempt = (tx: JournalTx, runId: string, now: number): boolean => {
+const reserveAttemptInTx = (tx: JournalTx, runId: string, now: number): boolean => {
   const day = dayIndex(now);
   const used = tx
     .select({ value: count() })
@@ -150,7 +103,7 @@ export const reserveBackgroundAttempt = (tx: JournalTx, runId: string, now: numb
  * Every write runs in the caller's transaction, so a policy change and the
  * runs it invalidates commit together.
  */
-export const createPolicyStore = (deps: { db: JournalDb }): PolicyStore => {
+export const createPolicyStore = (deps: { db: JournalDb }): BackgroundRunStore => {
   const db = deps.db;
 
   const readPolicyInTx = (tx: JournalTx, id: string): StoredPolicy | null => {
@@ -278,6 +231,42 @@ export const createPolicyStore = (deps: { db: JournalDb }): PolicyStore => {
       return stored;
     },
 
+    /**
+     * Queue a run exactly once.
+     *
+     * The effect key is the business key of the effect, so a repeated delivery
+     * of the same observation finds the run that already exists and writes
+     * nothing: the run is never re-pinned, never re-queued and never spends a
+     * second provider attempt.
+     */
+    enqueueRunOnceInTx(tx: JournalTx, input: EnqueueRunInput, now: number): BackgroundRunRecord {
+      tx.insert(intelligenceRuns)
+        .values({
+          id: newUuid(),
+          effectKey: input.effectKey,
+          status: "queued",
+          provider: input.provider,
+          model: input.model,
+          endpointFingerprint: input.endpointFingerprint,
+          policyRevision: input.policyRevision,
+          scopeJson: JSON.stringify(input.scope),
+          metaJson: JSON.stringify(input.meta ?? {}),
+          createdAt: now,
+          updatedAt: now,
+        })
+        .onConflictDoNothing({ target: intelligenceRuns.effectKey })
+        .run();
+      const row = tx
+        .select({ id: intelligenceRuns.id })
+        .from(intelligenceRuns)
+        .where(eq(intelligenceRuns.effectKey, input.effectKey))
+        .get();
+      if (!row) throw new Error("The background run could not be read back.");
+      const stored = readRunInTx(tx, row.id);
+      if (!stored) throw new Error(`The background run ${row.id} could not be read back.`);
+      return stored;
+    },
+
     readRun(runId: string): BackgroundRunRecord | null {
       return withConnectionTransaction(db, (tx) => readRunInTx(tx, runId));
     },
@@ -323,6 +312,9 @@ export const createPolicyStore = (deps: { db: JournalDb }): PolicyStore => {
         .get();
       return row?.value ?? 0;
     },
+
+    /** Reserve one attempt of the daily allowance, in the caller's transaction. */
+    reserveAttemptInTx,
 
     /** The reservations of one run. */
     reservationsForRun(runId: string): RunReservation[] {

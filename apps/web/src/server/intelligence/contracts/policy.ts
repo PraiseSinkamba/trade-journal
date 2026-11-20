@@ -1,6 +1,7 @@
 import { createHash } from "node:crypto";
 import { z } from "zod";
 import type { AiProvider } from "@/lib/ai-settings";
+import type { JournalTx } from "@/db/transaction";
 import { DATA_SOURCES } from "./execution";
 
 /**
@@ -238,4 +239,140 @@ export interface BackgroundRunOutput {
   readonly output: string | null;
   /** Sanitized diagnostics. */
   readonly meta: Record<string, unknown>;
+}
+
+/* ---------------------------------------------------------------------------
+ * The ports the background runtime reads through.
+ *
+ * The runtime is pure: it never touches the database. Every fact it needs
+ * arrives through one of these ports, so the same decision can be driven by
+ * the worker, a test, or a future transport.
+ * --------------------------------------------------------------------------- */
+
+/** The provider configuration a run is compared against. */
+export interface ProviderConfiguration {
+  readonly provider: AiProvider;
+  readonly model: string;
+  readonly baseUrl: string | null;
+}
+
+/** The accounts the journal still holds, and the provider it is configured for. */
+export interface BackgroundEnvironment {
+  /** The account ids that still exist. */
+  readonly existingAccountIds: readonly string[];
+  /** The provider configuration as it is configured right now. */
+  readonly providerConfiguration: ProviderConfiguration;
+  /** Whether that provider can actually be reached. */
+  readonly providerConfigured: boolean;
+}
+
+/**
+ * The environment a background run is authorised against.
+ *
+ * It is read inside the caller's transaction, so a run that is authorised
+ * and the run that is written see the same accounts and the same provider.
+ */
+export interface BackgroundEnvironmentReader {
+  readEnvironmentInTx(tx: JournalTx): BackgroundEnvironment;
+}
+
+/** The stored policy document, as the run ledger holds it. */
+export interface StoredPolicy {
+  readonly id: string;
+  readonly revision: number;
+  /** The parsed document, or null when the stored document does not parse. */
+  readonly settings: BackgroundPolicy | null;
+  /** True when a row exists but its document is not a valid policy. */
+  readonly invalid: boolean;
+}
+
+/** A run that was queued. */
+export interface EnqueueRunInput {
+  /** The idempotency key of the run: the same effect is queued once. */
+  readonly effectKey: string;
+  /** The provider the run was approved against. */
+  readonly provider: AiProvider;
+  /** The model the run was approved against. */
+  readonly model: string;
+  /** The fingerprint of the approved provider, model and endpoint. */
+  readonly endpointFingerprint: string;
+  /** The policy revision the run was approved under. */
+  readonly policyRevision: number;
+  /** The scope the run may read. */
+  readonly scope: BackgroundScope;
+  /** Sanitized diagnostics. Never a prompt, a response or a credential. */
+  readonly meta?: Record<string, unknown>;
+}
+
+/** One reserved attempt of the daily allowance. */
+export interface RunReservation {
+  readonly runId: string;
+  readonly attempt: number;
+  readonly day: number;
+  readonly reservedAt: number;
+}
+
+/**
+ * The run ledger of the background runtime.
+ *
+ * Every write joins the caller's transaction, so a run, the reservation that
+ * pays for it, and the job that executes it commit together or not at all.
+ */
+export interface BackgroundRunStore {
+  /** The current policy document, or null when there is none. */
+  readPolicy(id: string): StoredPolicy | null;
+  /** The current policy document, read inside the caller's transaction. */
+  readPolicyInTx(tx: JournalTx, id: string): StoredPolicy | null;
+  /**
+   * Record a new policy revision and return it.
+   *
+   * Revisions are append-only, so a queued run stays recognisable as the one
+   * that was approved under an older policy.
+   */
+  writePolicyInTx(
+    tx: JournalTx,
+    id: string,
+    settings: BackgroundPolicy,
+    now: number,
+  ): { id: string; revision: number };
+  /**
+   * Queue a run; the effect key makes the enqueue idempotent.
+   *
+   * A run that already ended is pinned again and queued afresh: that is the
+   * explicit reschedule an operator asks for.
+   */
+  enqueueRunInTx(tx: JournalTx, input: EnqueueRunInput, now: number): BackgroundRunRecord;
+  /**
+   * Queue a run exactly once.
+   *
+   * The effect key is the business key of the effect, so a repeated delivery
+   * of the same observation finds the run that already exists and writes
+   * nothing: the run is never re-pinned and never re-queued, and no second
+   * provider request is ever spent on it.
+   */
+  enqueueRunOnceInTx(tx: JournalTx, input: EnqueueRunInput, now: number): BackgroundRunRecord;
+  /** One run, or null when it does not exist. */
+  readRun(runId: string): BackgroundRunRecord | null;
+  /** One run, read inside the caller's transaction. */
+  readRunInTx(tx: JournalTx, runId: string): BackgroundRunRecord | null;
+  /** Replace the sanitized metadata of a run. */
+  updateRunMetaInTx(tx: JournalTx, runId: string, meta: Record<string, unknown>, now: number): void;
+  /** Move a run to a new status. */
+  updateRunStatusInTx(tx: JournalTx, runId: string, status: BackgroundRunStatus, now: number): void;
+  /** The attempts already reserved on the day of `now`. */
+  attemptsReservedOnDay(now: number): number;
+  /**
+   * Reserve one attempt of the daily allowance.
+   *
+   * The reservation is taken in the caller's transaction and commits with
+   * the work that follows it, and it is never deleted, so a crashed attempt
+   * keeps its reservation and a fresh retry spends another allowance.
+   *
+   * Returns false when the day's allowance is already spent.
+   */
+  reserveAttemptInTx(tx: JournalTx, runId: string, now: number): boolean;
+  /** The reservations of one run. */
+  reservationsForRun(runId: string): RunReservation[];
+  /** The run queued under an effect key, or null. */
+  findRunByEffectKey(effectKey: string): BackgroundRunRecord | null;
 }

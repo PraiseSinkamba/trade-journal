@@ -19,6 +19,14 @@ export const JOURNAL_CAPABILITY_IDS = {
   missedObservations: "journal.missed-observations",
   notebookEntries: "journal.notebook-entries",
   progressHistory: "journal.progress-history",
+  /**
+   * The background capability that asks the provider for one review question.
+   *
+   * It is registered here so the journal has one registry of capability ids,
+   * but it is never granted to an interactive scope: the background runtime
+   * executes it under its own policy decision.
+   */
+  reviewInsight: "journal.review-insight",
 } as const;
 
 /** How a capability reaches its result. */
@@ -68,6 +76,30 @@ export interface CapabilityRegistry {
   get(id: string, version?: string): Capability | undefined;
   /** Every registered capability, ordered by id and then version. */
   list(): readonly Capability[];
+}
+
+/**
+ * One background capability: a versioned unit of work the background runtime
+ * may run.
+ *
+ * It is a smaller shape than the interactive {@link Capability}: the background
+ * runtime has no tools and no dispatcher, so a capability only declares what
+ * it reads, what it answers and how it asks. Its id comes from
+ * {@link JOURNAL_CAPABILITY_IDS}, so the journal keeps one registry of
+ * capability ids.
+ */
+export interface BackgroundCapability {
+  readonly id: string;
+  readonly version: string;
+  /** The strict schema of the evidence the capability reads. */
+  readonly inputSchema: z.ZodTypeAny;
+  /** The strict schema of the answer the capability returns. */
+  readonly outputSchema: z.ZodTypeAny;
+  /** Builds the provider request for one validated evidence set. */
+  readonly buildPrompt: (evidence: unknown) => {
+    readonly system: string;
+    readonly prompt: string;
+  };
 }
 
 /**
