@@ -10,6 +10,8 @@ import {
   intelligenceWorkflows,
   observationEvidence,
 } from "@/db";
+import type { InsightView } from "@/lib/intelligence-interactions";
+import { createInsightStore } from "@/server/intelligence/infrastructure/insight-store";
 
 /**
  * The read model of the interaction routes (Phase 18).
@@ -131,6 +133,41 @@ export const observationOfRevision = (revisionId: string) =>
     )
     .where(eq(observationEvidence.revisionId, revisionId))
     .get()?.observation ?? null;
+
+/** The insight store, reached from the app layer through its public factory. */
+const insightStore = createInsightStore();
+
+/**
+ * The current question of one observation, when the journal holds one.
+ *
+ * The store owns the current-revision rule: a corrected source hides the older
+ * question, and the reader never overrides that. What the reader adds is the
+ * scope of the answer: the question must belong to this observation, to this
+ * account and to a revision the review shows as evidence. Only the question
+ * and the revision it was made from are served; the rest of the stored row
+ * stays in the journal.
+ *
+ * The transaction is deferred because the GET is a read: it takes no write
+ * lock, so reading the inbox never blocks the writer.
+ */
+export const currentInsightOf = (
+  observation: { readonly id: string; readonly subjectId: string; readonly accountId: string },
+  evidenceRevisionIds: readonly string[],
+): InsightView | null => {
+  const row = db.transaction(
+    (tx) =>
+      insightStore.readCurrentInsightInTx(tx, {
+        subjectId: observation.subjectId,
+        accountId: observation.accountId,
+      }),
+    { behavior: "deferred" },
+  );
+  if (!row) return null;
+  if (row.observationId !== observation.id) return null;
+  if (row.accountId !== observation.accountId) return null;
+  if (!evidenceRevisionIds.includes(row.sourceRevision)) return null;
+  return { question: row.question, sourceRevision: row.sourceRevision };
+};
 
 /**
  * The workflows of the given observations, oldest first.

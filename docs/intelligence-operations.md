@@ -216,6 +216,21 @@ The question is bound to the source revision the change produced, not to the tra
 makes a new revision, so the older question stops being the current question for that trade while
 its row stays in the table.
 
+### Where the question appears
+
+The question is shown on the review card of its observation, in the inbox, under the label **AI
+question**. It appears only where a review of that observation waits for you, and only while the
+question is still current: the source revision is the trade's current one, the capability version is
+current, and the observation is still active. A corrected source takes the question off the card;
+the row is not deleted by the correction. Turning the policy off does not take it off the card —
+the policy decides whether a question is asked, not whether a stored one is shown.
+
+The card masks the question while privacy mode is on, the same way it masks the money. Turn privacy
+mode off to read it.
+
+Reading the inbox never asks a provider. The question was asked when the trade changed; opening the
+inbox only reads what the journal already stored.
+
 Only a `live` change queues a question. A `historical` reconstruction and a `maintenance` change
 never do: the first is not your own experience, the second is not a trade at all.
 
@@ -441,6 +456,24 @@ ORDER BY created_at DESC LIMIT 20;
    `eligible`, not `dismissed`, `expired` or `suppressed`.
 6. The run's `meta_json` holds the reason — that is the refusal code, and the table above says what
    to do about it.
+
+**A question is stored but the card does not show it.** The row is in `intelligence_insights` and
+the card is empty. Three things can hide a stored question:
+
+1. The source was corrected — the question rests on a revision that is no longer the current one, so
+   it is not the current question any more. The correction does not delete the row; the retention
+   prune may remove it later.
+2. The observation is no longer active — a superseded or invalidated observation takes its question
+   off the card with it. The status change does not delete the row either.
+3. The capability version moved on — the question was asked under an older capability version than
+   the one the journal serves today. Such a row is never served, and the retention prune does not
+   remove it either.
+
+Turning the policy off does NOT hide a stored question. The policy decides whether a question is
+asked and stored; once a question is stored, the policy is not consulted again.
+
+**The card shows a mask instead of the question.** Privacy mode is on. Turn it off to read the
+question.
 
 ```sql
 -- The review opportunity of one observation: 'pending' or 'eligible' is live.

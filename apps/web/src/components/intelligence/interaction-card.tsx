@@ -1,7 +1,8 @@
 "use client";
 
 import { useState } from "react";
-import { MonetaryValue } from "@/components/privacy";
+import { MonetaryValue, usePrivacy } from "@/components/privacy";
+import { HoverHint } from "@/components/ui/tooltip";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -96,6 +97,7 @@ export function InteractionCard({
    */
   readonly onChanged?: (applied: boolean) => void;
 }) {
+  const masked = usePrivacy();
   const [answering, setAnswering] = useState<string | null>(null);
   const [correction, setCorrection] = useState("");
   const [deferUntil, setDeferUntil] = useState("");
@@ -202,6 +204,20 @@ export function InteractionCard({
             Status <span className="font-medium text-foreground">{intent.status}</span>
           </p>
         )}
+        {intent.kind === "observation-review" && intent.insight ? (
+          <div className="space-y-1">
+            <p className="text-xs text-muted-foreground">AI question</p>
+            <p className="text-sm">
+              {masked ? (
+                <HoverHint content="Turn off privacy mode to reveal this question">
+                  <span aria-label="AI question hidden">••••</span>
+                </HoverHint>
+              ) : (
+                intent.insight.question
+              )}
+            </p>
+          </div>
+        ) : null}
         {evidence.length > 0 && (
           <div className="space-y-1">
             <p className="text-xs text-muted-foreground">Evidence</p>
