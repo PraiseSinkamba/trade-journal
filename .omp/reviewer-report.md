@@ -1,106 +1,198 @@
 ## Verdict: PASS
+## Reviewer Report — Phase 24 — the review question on the card
 
-## Reviewer Report — Phase 23 repair round: the fenced provider job for the review question
+### PASS
 
-The repair round of Phase B (T-023). The implementation-diff review of the phase returned **FAIL**
-with eight findings, and a mapping of the suite against the production code found nine behaviours
-that no test could fail. This report states what the repair changed and — more importantly — what
-the suite now proves, and what it still does not.
+Third and final reviewer run. The three defects of the previous run are
+confirmed fixed against the code, no new operator-visible claim is wrong, and
+every row of the teeth bar was re-measured on the current tree.
 
-### Commands run
+### Findings
 
-- `pnpm exec vitest run apps/web/tests/intelligence-review-insight.test.ts … intelligence-worker … intelligence-provider-policy … intelligence-observations … intelligence-recovery … intelligence-boundaries`
-  → **6 files, 100 tests, exit 0**, 17.2 s.
-- `pnpm exec vitest run apps/web/tests/intelligence-review-insight.test.ts` → **30 tests, exit 0**,
-  8.4 s.
-- `pnpm --filter web typecheck` → exit 0, 27.5 s.
+- [PASS] defect 1 fixed — `docs/intelligence-operations.md:219` ("Where the
+  question appears") and `docs/intelligence-operations.md:460` (the
+  troubleshooting list) now say only what the code does. The serve path
+  (`apps/web/src/server/intelligence/infrastructure/insight-store.ts:95`,
+  `readCurrentInsightInTx`: current projection revision, current capability
+  version, observation `active`, account filter) never reads the policy, so
+  "Turning the policy off does NOT hide a stored question"
+  (`docs/intelligence-operations.md:472`) is true. The prune
+  (`apps/web/src/server/intelligence/infrastructure/insight-store.ts:143`)
+  removes a row only when `isSuperseded`
+  (`apps/web/src/server/intelligence/infrastructure/insight-store.ts:187`) is
+  true — the observation is gone or no longer `active`, or the source
+  revision is no longer the subject's current projection revision — and the
+  capability version is not among its checks. The three reasons at
+  `docs/intelligence-operations.md:463`, `:466` and `:469` match that: the
+  correction does not delete the row, the status change does not delete the
+  row, and a capability-stale row is never served and never pruned. The
+  Retention section (`docs/intelligence-operations.md:490` and `:500`) states
+  the same three conditions and no capability condition — consistent.
 
-The second repair round re-ran the narrow gate:
+- [PASS] defect 2 fixed — the teeth table
+  (`docs/superpowers/reports/ai-native-journal-phase-24.md:112` and `:113`)
+  now records the two breaks separately: row 5 "the reader compares the
+  observation id with a wrong constant | 5 cases failed" and row 5b "the
+  reader drops the observation id comparison | 1 case failed". Re-measured on
+  a copy of the tree outside the repository (`E:/4004/review-p24copy`; the
+  repository itself was not modified): wrong constant → `Tests 5 failed | 18
+  passed (23)`; comparison dropped → `Tests 1 failed | 22 passed (23)`. Both
+  match the table and the prose at
+  `docs/superpowers/reports/ai-native-journal-phase-24.md:122`.
 
-- `pnpm exec vitest run apps/web/tests/intelligence-review-insight.test.ts apps/web/tests/intelligence-provider-policy.test.ts apps/web/tests/intelligence-boundaries.test.ts`
-  → **3 files, 72 tests, exit 0**, 9.5 s.
-- `pnpm --filter web typecheck` → exit 0, 29.5 s.
-- `pnpm exec prettier --check` on the changed files → exit 0 after formatting.
-- Mutation proof: the enqueue's `existingAccountIds` gate was deleted, the new case failed with
-  "expected [ { …(11) } ] to have a length of +0 but got 1", and the gate was restored; the suite
-  was green again.
+- [PASS] defect 3 fixed — the account-comparison break is its own row 6a
+  (`docs/superpowers/reports/ai-native-journal-phase-24.md:115`, "0 cases
+  failed"), and the prose
+  (`docs/superpowers/reports/ai-native-journal-phase-24.md:129`) and "What is
+  not claimed" (`docs/superpowers/reports/ai-native-journal-phase-24.md:186`)
+  cite 6a, not 5. Re-measured: dropping `row.accountId !== observation.accountId`
+  (`apps/web/src/app/api/intelligence/queries.ts:167`) → `Tests 23 passed
+  (23)`, i.e. 0 failures — the store's own account filter
+  (`apps/web/src/server/intelligence/infrastructure/insight-store.ts:109`)
+  already refuses a foreign question. The table has rows 1, 2, 3, 4, 5, 5b, 6
+  and 6a, and no row is cited for two experiments.
 
-### The eight findings, and what the repair did
+- [PASS] the teeth bar is honest — every row re-measured in the copy outside
+  the repository, all matching
+  `docs/superpowers/reports/ai-native-journal-phase-24.md:106`: row 1 (the
+  route stops attaching the insight) 4 failed; row 2 (the evidence-revision
+  check dropped) 1 failed; row 3 (the card renders the question unmasked) 1
+  failed of the card file's 3; row 4 (the reader returns the raw store row) 4
+  failed; row 5 5 failed; row 5b 1 failed; row 6 (the route reads the insight
+  for another account) 4 failed; row 6a 0 failed. Every restored run is 23
+  passed (slice B) or 3 passed (the card file), as the table records. The
+  break descriptions match what the code does: row 6a is a reader comparison
+  (`apps/web/src/app/api/intelligence/queries.ts:167`), row 6 is a route
+  scope change (`apps/web/src/app/api/intelligence/observations/route.ts:102`),
+  row 5b is a dropped reader comparison
+  (`apps/web/src/app/api/intelligence/queries.ts:166`).
 
-| # | Finding                                                                          | Resolution                                                                                                                                                                    |
-| - | -------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
-| 1 | the operations guide advertised three codes the code cannot emit                | the guide now names the codes the feature cannot emit and why (`capacity_unknown`, `context_too_large`, `invalid_evidence`, and the two capability-feature codes)         |
-| 2 | the guide omitted `lease_lost` and `run_not_found`, and misstated where a code lands | the guide now says where every code lands: the job's `last_error` only, the run's reason and status and the job's `last_error`, or the run's reason and status alone |
-| 3 | this report claimed the lease renewal and the opportunity recheck were confirmed; they were not | both are pinned by cases now, and the earlier claim is withdrawn                                                                                             |
-| 4 | the transport dropped the call metadata                                          | the transport returns the answer with its metadata; the run records the prompt version, the provider, the model, the duration and the token counts — never the prompt, the answer or a credential |
-| 5 | the business-key identity was only two-thirds pinned                            | the identity case asserts the run's effect key, the job's idempotency key and the insight's business key are one string                                                      |
-| 6 | the legacy path could complete a run from a bare provider response              | `executeBackgroundRun` has no production caller; it now refuses a capability job's run before it reserves an attempt or reaches a provider. A case pins the guard              |
-| 7 | `invalid_payload` was a second code for one condition                           | the code and its branches are gone; `unhandled_capability` is the one code, and the string no longer exists anywhere in the repository                                     |
-| 8 | a run that failed once kept its stale `refusalReason`                           | the success path writes `refusalReason: null`, so the meta merge clears the old reason                                                                                        |
+- [PASS] no new wrong operator-visible claim — every sentence this phase added
+  to `docs/intelligence-operations.md:219-234` and `:460-478` was read against
+  the code it describes: the question is served only where a review waits
+  (`apps/web/src/app/api/intelligence/observations/route.ts:96` picks the
+  workflow whose status is `waiting_for_user`); the card shows it under the
+  label **AI question**
+  (`apps/web/src/components/intelligence/interaction-card.tsx:209`); the
+  privacy mask and its accessible name
+  (`apps/web/src/components/intelligence/interaction-card.tsx:211-217`); the
+  inbox renders that card (`apps/web/src/components/intelligence/inbox.tsx:166`);
+  the GET stays a read (`apps/web/src/app/api/intelligence/queries.ts:157-169`
+  is one deferred read transaction — no write, no enqueue, no provider call).
+  The "three things can hide a stored question" list covers the real hiding
+  causes: the observation's evidence link is the revision the observation was
+  made from
+  (`apps/web/src/server/intelligence/infrastructure/knowledge-store.ts:187`),
+  so the evidence-revision check coincides with the current-revision check
+  rather than adding a fourth cause.
 
-### What the suite proves now — each case was seen to fail when its check was deleted
+- [PASS] union narrowing in the route —
+  `apps/web/src/app/api/intelligence/observations/route.ts:101` narrows
+  `built` to the `observation-review` variant before the spread at `:106`.
+  `observationReviewIntent` returns that kind or null
+  (`apps/web/src/server/intelligence/experience/intents.ts:73-90`), so no
+  intent served before is dropped by the narrowing.
 
-| Case                                                                     | The check it pins                                        | Broken on purpose — what happened                                        |
-| ------------------------------------------------------------------------ | --------------------------------------------------------- | -------------------------------------------------------------------------- |
-| renews the lease while the provider is thinking, and writes nothing when the lease is lost | the worker's renewal callback and its lease-lost branch | the case failed: the abort was the only cancel path for the provider call |
-| stores nothing when the review opportunity is withdrawn                  | the final transaction's `isLiveInTx` recheck              | the case failed: an insight was stored                                    |
-| stores nothing when the policy is switched off                           | the `policyDisabled` clause                              | the case failed: the reason was `policy_changed`                          |
-| stores nothing when the policy is deleted                                | the `policyMissing` clause                               | the case failed: the run stayed `running`                                 |
-| stores nothing when the policy is corrupted                              | the `policyInvalid` clause                               | the case failed: the run stayed `running`                                 |
-| stores nothing when the pinned model changes                             | the pinned-model comparison                              | the case failed: an insight was stored                                    |
-| fails a job that names a capability version nobody registered             | the registry lookup's version dimension                  | the case failed: the job reached the handler                              |
-| queues neither a run nor a job for a historical or a maintenance delivery | the enqueue's `mode !== "live"` gate                     | the case failed: two runs and two jobs were written                       |
-| asks the real transport against a local server                           | the whole transport adapter                              | the case failed: no prompt version in the answer                         |
-| the stored question carries the same business key as the run and the job | the business key construction                            | the case failed: the keys differed                                        |
-| the attempt reservation is recorded before the provider is called        | the attempt reservation                                  | the case failed: no reservation row existed                              |
-| refuses a capability job's run in the legacy background path             | the legacy path's capability guard                       | the case failed: the legacy path reached the provider                    |
-| queues neither a run nor a job when the enqueue's own account gate refuses the account | the enqueue's `existingAccountIds` gate | the case failed: a run was written for an account the journal no longer held |
+- [PASS] one deferred transaction —
+  `apps/web/src/app/api/intelligence/queries.ts:157-164`: a single
+  `db.transaction(..., { behavior: "deferred" })` on the app's own handle. No
+  write lock, so reading the inbox never blocks the writer.
 
-### The second repair round
+- [PASS] non-nullable account —
+  `apps/web/src/db/schema.ts:640-642` (`intelligence_observations.account_id`
+  is NOT NULL); the reader takes a non-nullable `accountId`
+  (`apps/web/src/app/api/intelligence/queries.ts:153-157`), passes it to the
+  store and compares the returned row
+  (`apps/web/src/app/api/intelligence/queries.ts:167`).
 
-The final scoped review of this phase returned FAIL with two documentation findings, and the
-coordinator's teeth proof found one unpinned gate. All three are fixed:
+- [PASS] two-field projection —
+  `apps/web/src/app/api/intelligence/queries.ts:169` returns only `question`
+  and `sourceRevision`; the store row's business key, account, subject,
+  observation, capability version and run never cross the wire. The mutation
+  that returns the raw row fails 4 cases (teeth row 4), so the projection is
+  held by a test.
 
-| Finding                                                                                                                       | Resolution                                                                                                                                              |
-| ----------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| the guide said nothing about the call is stored, while the run's `meta_json` holds the prompt version, the provider, the model, the duration and the token counts | the guide now states exactly what is kept — the refusal reason, the capability id and version, and the call metadata of a successful call — and keeps the true guarantee: never the prompt, never the answer, never a credential |
-| the guide called `provider_error` the only retryable code                                                                 | `lease_lost` and the worker's `handler_failed` are retried too, and `validation_failed` is not; the guide now says so                                            |
-| the enqueue's account gate was unpinned                                                                                       | the gate is kept and pinned directly: a new case drives the enqueue with a journal that reports no account and asserts no run and no job                             |
+- [PASS] the privacy mask's accessible name —
+  `apps/web/src/components/intelligence/interaction-card.tsx:211-217` renders
+  `aria-label="AI question hidden"` inside the same `HoverHint` overlay the
+  money uses (`apps/web/src/components/privacy.tsx:95-102`). The card test
+  asserts the name and the absence of the question text under privacy
+  (`apps/web/tests/intelligence-insight-card.test.ts:106`).
 
-The earlier report's claim that the lease renewal and the opportunity recheck were confirmed by
-the suite was false: deleting either check left every case green. They are pinned now, and the
-claim is withdrawn rather than repeated.
+- [PASS] the inbox and `components/privacy.tsx` are untouched — `git status`
+  shows no change to `apps/web/src/components/intelligence/inbox.tsx` or
+  `apps/web/src/components/privacy.tsx`; the mask lives in the card because
+  the privacy module offers only `MonetaryValue` and `MonetaryField`, whose
+  accessible name is "Monetary value hidden"
+  (`apps/web/src/components/privacy.tsx:95-99`).
 
-### What the suite does NOT prove
+- [PASS] the app-layer store access follows the retention-route precedent —
+  `apps/web/src/app/api/intelligence/queries.ts:14` imports the store's public
+  factory, exactly as `apps/web/src/app/api/intelligence/retention/route.ts:12`
+  reaches `server/intelligence/infrastructure/retention`. No server module
+  gained an import, `composition.ts` is unchanged, and the store still owns
+  the current-revision rule.
 
-- The account gate in `runtime/review-enqueue.ts` cannot be reached through the production
-  delivery path: the observation reader already returns null for a deleted account, and the
-  executions write refuses the delivery before the enqueue runs. The gate is defence in depth, and
-  it is now pinned DIRECTLY by a case that drives the enqueue with a journal that reports no
-  account — deleting the gate makes that case fail. The delivery-path case was renamed to state
-  what it really proves: that the whole delivery is refused.
-- The worker's optional renew interval is a test seam. The composition does not expose it, because
-  nothing in production needs to; the lease-lost case wires the worker directly.
+- [PASS] no new dependency, migration, prompt or stored provider response —
+  `git status` shows no change to `package.json`, `pnpm-lock.yaml`, any
+  migration or any prompt file; `pnpm --filter web migrations:check` prints
+  `migration-checksums.json is up to date`. The journal keeps the question and
+  no provider response: the insight row holds the question only
+  (`apps/web/src/server/intelligence/infrastructure/insight-store.ts:95-133`).
 
-### Scope
+- [PASS] format:check on the touched files — `npx prettier --check` over the
+  seven modified and three new files reports "All matched files use Prettier
+  code style!". The repository-wide run still shows exactly 79 warnings and
+  none of them is a file this phase touched, as
+  `docs/superpowers/reports/ai-native-journal-phase-24.md:142` records.
 
-No migration, no change under `apps/web/src/db/`, no new dependency, no change to the AI
-runtime's provider list, endpoint routing or policy caps, no component and no `apps/web/src/app/**`
-change. No existing test was weakened or deleted; the only change to an existing test file is one
-arbitrary failure-code literal in `apps/web/tests/intelligence-jobs.test.ts` (`invalid_payload` →
-`handler_failed`), because that string left the codebase. The boundary suite passes unchanged.
+- [PASS] typecheck — `pnpm --filter web typecheck` exits 0.
 
-The second repair round changed no production code at all: two documentation passages, one test
-rename and one new case. The enqueue's account gate was kept, as defence in depth, and is now
-pinned by a case that drives the enqueue directly.
+- [PASS] the intelligence tests —
+  `pnpm vitest run apps/web/tests/intelligence-slice-b.test.ts apps/web/tests/intelligence-insight-card.test.ts`
+  → 26 passed (23 + 3). All 26 intelligence suites → 472 passed.
+
+- [PASS] the report's case table matches the tests —
+  `docs/superpowers/reports/ai-native-journal-phase-24.md:85-96` lists eight
+  cases; the eight matching cases are
+  `apps/web/tests/intelligence-slice-b.test.ts:915`, `:964`, `:983`,
+  `:1016`, `:1045`, `:1097`, `:1135` and `:1163`, and the card's three claims
+  are `apps/web/tests/intelligence-insight-card.test.ts:90`, `:100` and
+  `:106`. Every claimed assertion exists in the named test.
+
+- [NOTE] the report's "five intelligence suites" row
+  (`docs/superpowers/reports/ai-native-journal-phase-24.md:138`) cites "77
+  passed" without naming the suites, so the number cannot be checked from the
+  document; the orchestrator's brief records 78 for the same phrase. The
+  counts I measured are slice B 23, the card file 3, boundaries 8 and
+  review-insight 31 — which reach 77 or 78 depending on the fifth suite (a
+  12-test suite gives 77, `intelligence-ui` with 13 gives 78). Naming the
+  five suites would settle it; no false claim is proven, so this is not a
+  FAIL.
+
+- [NOTE] the plan lists the privacy-mask case among the slice B cases
+  (`docs/superpowers/plans/ai-native-journal/phase-24.md:214`) while the
+  implementation keeps it in `apps/web/tests/intelligence-insight-card.test.ts`;
+  the plan also names that file as its own run
+  (`docs/superpowers/plans/ai-native-journal/phase-24.md:225`) and the report
+  states the split
+  (`docs/superpowers/reports/ai-native-journal-phase-24.md:98`). A plan and
+  implementation divergence, documented, not a defect.
+
+- [NOTE] the whole-suite row (`docs/superpowers/reports/ai-native-journal-phase-24.md:139`),
+  the production build row (`:143`) and the bundled-worker smoke (`:144`)
+  were not re-run here; the brief forbids the full `pnpm test` run. They are
+  the earlier run's reported evidence, not claims this review re-verified.
+
+- [NOTE] commit message — the slice is uncommitted in the working tree, so
+  there is no commit subject to audit; the orchestrator owns it.
 
 ### Summary
 
-PASS for the repair round: the eight findings are fixed, the nine coverage holes are closed with
-cases that have been seen to fail, and the one remaining gap is recorded rather than hidden. The
-phase report (`docs/superpowers/reports/ai-native-journal-phase-23.md`) carries the full teeth
-evidence.
-
-PASS for the second repair round: the two guide contradictions are corrected against the code, and
-the enqueue's account gate is pinned by a case that fails when the gate is deleted. No claim in
-this report or in the phase report outruns the suite.
+17 PASS, 0 FAIL, 0 BLOCK. The three defects of the previous run are fixed and
+verified against `readCurrentInsightInTx`, `isSuperseded` and
+`pruneInsightsInTx`; the teeth bar was re-measured row by row in a copy of
+the tree outside the repository and every count matches the report; no new
+operator-visible claim contradicts the code. Four notes are recorded above
+(one unverifiable test count, one plan/implementation divergence, the evidence
+this run did not re-run, and the absent commit subject).
