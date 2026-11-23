@@ -699,14 +699,18 @@ npipe:////./pipe/dockerDesktopLinuxEngine` — and it was never claimed as passe
    open items.
 2. **`pnpm format:check` is red.** The repository's format gate was already red at the base commit
    and is red now; the release acceptance record states it as red and does not claim it passed. The
-   measured numbers, over the files tracked in the base commit, are 73 failing at the base commit
-   and 70 in the tree Phase 21 leaves behind — three fewer, none added, and the three that left are
-   the desktop files this phase formatted; the raw repository-wide count is 74 because four
-   gitignored Tauri-generated schema files exist in a built tree and not in a fresh checkout. An
-   earlier wording of this item — "77 files", "the failing set is identical" — was found false
-   during the Phase 21 gate repair and corrected in the phase report, in the operations record and in
-   the coordinator index, whose open item now carries the corrected numbers. Recorded
-   in [the Phase 21 phase report](./ai-native-journal-phase-21.md) under
+   numbers were MEASURED again after the optional-AI feature, and they are: **71 files** fail in the
+   feature tree and **71 files** fail at the base commit \ in a fresh checkout. The two counts are equal
+   for different reasons: of the 71 in the feature tree, **67 are tracked and inherited** and **4 are
+   the gitignored Tauri-generated schema files** under \, which exist in a built tree
+   and not in a fresh checkout; the four base-era integration records that were among the base commit's
+   failing files — phases 15, 16, 19 and 21 — were formatted when the final release gate caught that no
+   integration record had ever been prettier-checked, which is why the tracked count fell by exactly
+   four. **The 24-phase effort introduced none of them**: a cross-reference of the failing list against
+   every path the effort changed returns zero, and the plans, phase reports, integration records, run
+   summary and coordinator index it wrote are all prettier-clean. The count depends on untracked files
+   present in the working tree, so it is stated with the tree it was measured in.
+   Recorded in [the Phase 21 phase report](./ai-native-journal-phase-21.md) under
    _Three files this phase left unformatted_ and in
    [the operations release record](../../intelligence-operations.md).
 3. **The persisted home for an AI-assisted insight — CLOSED by Phases 22, 23 and 24.** The chain's AI
