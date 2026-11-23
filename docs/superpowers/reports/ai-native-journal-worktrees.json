@@ -1,7 +1,7 @@
 {
   "schemaVersion": 1,
   "feature": "ai-native-journal",
-  "updatedAt": "2026-11-23T11:00:04Z",
+  "updatedAt": "2026-11-23T11:17:45Z",
   "owner": "parent OMP coordinator (exclusive owner of this record)",
   "repository": {
     "name": "trade-journal",
@@ -35,7 +35,7 @@
     },
     "featureBranch": "codex/ai-native-journal",
     "featureBootstrapSha": "0a278503fd67c0f9e82138dfecb744f4bfd307ad",
-    "featureHeadSha": "5dbaa3113cf282749b10623f36637145a82836cd",
+    "featureHeadSha": "93ba720ddeaced9d0ce7693d068d4e04f649adc9",
     "featureHeadShaNote": "feature branch HEAD; the twenty-one phases are integrated and the optional-AI insight work continues from this tip on its own phase branches",
     "featureCheckpointCommits": [
       "0a278503fd67c0f9e82138dfecb744f4bfd307ad",
@@ -97,7 +97,8 @@
       "036a69f27a09e04dc5b0a9039c52c46cd073a982",
       "5b7b952ab037bb5e6248b7dd04e48a3f3c4cd7c6",
       "1e20ea0a129a0859cd2a3070260b816b3f85e68b",
-      "5dbaa3113cf282749b10623f36637145a82836cd"
+      "5dbaa3113cf282749b10623f36637145a82836cd",
+      "93ba720ddeaced9d0ce7693d068d4e04f649adc9"
     ],
     "featureBranchNote": "Orca slugified the requested name to codex-ai-native-journal at creation; the coordinator renamed the newly created, exclusively owned branch to the contract-required codex/ai-native-journal. Orca reads the renamed ref live (refs/heads/codex/ai-native-journal). No pre-existing branch was overwritten."
   },
@@ -2020,6 +2021,8 @@
     ],
     "state": "complete",
     "completedAt": "2026-11-23T11:00:04Z",
-    "note": "undefined The whole feature is integrated and verified: the persisted home, the fenced provider job, and the display with the end-to-end proof. The third of the three open items the 21-phase run recorded is now closed."
+    "note": "undefined The whole feature is integrated and verified: the persisted home, the fenced provider job, and the display with the end-to-end proof. The third of the three open items the 21-phase run recorded is now closed.",
+    "releaseGate": "the full eight-command gate was re-run alone on the FINAL destination branch and passed: install, web typecheck, package typechecks, migrations:check, licenses, prettier, build and pnpm test with 1434 passed in 120 files",
+    "releaseGateNote": "that final gate caught a real defect the per-phase gates could not: the merge script writes the integration record AFTER the prettier step, so no integration record was ever prettier-checked, and seven of them (phases 15, 16, 19, 21, 22, 23 and 24) were not prettier-clean. They were formatted and committed, and the gate was re-run green."
   }
 }
