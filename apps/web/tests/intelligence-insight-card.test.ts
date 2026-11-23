@@ -111,3 +111,40 @@ it("masks the question while privacy is on", async () => {
   expect(mask).toBeTruthy();
   expect(mask?.getAttribute("aria-label")?.toLowerCase()).toContain("question");
 });
+
+it("leaves the keyboard on the native controls the card already had", async () => {
+  // The question adds text, not controls. Both privacy states are rendered:
+  // the masked branch and the plain one must offer the same controls. Each
+  // state gets its OWN mount, because the provider reads the saved
+  // preference when it mounts.
+  for (const privacy of ["true", "false"]) {
+    await act(async () => root.unmount());
+    container.remove();
+    container = document.createElement("div");
+    document.body.append(container);
+    root = createRoot(container);
+
+    await render(privacy);
+    // The focusable set is exactly the one the card had without the
+    // question — the Acknowledge button, and nothing else. A link or any
+    // other focusable would break the count.
+    const focusable = Array.from(
+      container.querySelectorAll<HTMLElement>(
+        "button, input, textarea, select, a[href], [tabindex]",
+      ),
+    ).filter(
+      (element) => element.getAttribute("aria-hidden") !== "true" && element.tabIndex !== -1,
+    );
+    expect(focusable).toHaveLength(1);
+    expect(focusable[0]!.tagName).toBe("BUTTON");
+    expect(focusable[0]!.textContent?.trim()).toBe("Acknowledge");
+    for (const control of focusable) {
+      const name = control.getAttribute("aria-label")?.trim() || control.textContent?.trim() || "";
+      expect(name).not.toBe("");
+      control.focus();
+      expect(document.activeElement).toBe(control);
+    }
+    // The evidence list is untouched by the question.
+    expect(container.textContent).toContain("rev-1");
+  }
+});

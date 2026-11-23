@@ -964,7 +964,7 @@ describe("the review question on the card", () => {
     const alphaBody = await servedScope(alpha);
     expect(alphaBody.intents).toHaveLength(1);
     expect(alphaBody.intents[0]!.subject.id).toBe(alphaObservation.id);
-    expect(alphaBody.intents[0]!.insight).toEqual({
+    expect(insightOf(alphaBody.intents[0]!)).toEqual({
       question: ALPHA_QUESTION,
       sourceRevision: alphaObservation.sourceRevision,
     });
@@ -972,7 +972,7 @@ describe("the review question on the card", () => {
     const betaBody = await servedScope(beta);
     expect(betaBody.intents).toHaveLength(1);
     expect(betaBody.intents[0]!.subject.id).toBe(betaObservation.id);
-    expect(betaBody.intents[0]!.insight).toEqual({
+    expect(insightOf(betaBody.intents[0]!)).toEqual({
       question: BETA_QUESTION,
       sourceRevision: betaObservation.sourceRevision,
     });
@@ -991,7 +991,7 @@ describe("the review question on the card", () => {
     expect(start.status).toBe(200);
 
     const body = await servedScope(account);
-    expect(body.intents[0]!.insight).toEqual({
+    expect(insightOf(body.intents[0]!)).toEqual({
       question: QUESTION,
       sourceRevision: observation.sourceRevision,
     });
@@ -1011,7 +1011,7 @@ describe("the review question on the card", () => {
     const start = await postObservations(observationsPost({ observationId: first.id }));
     expect(start.status).toBe(200);
     const before = await servedScope(account);
-    expect(before.intents[0]!.insight?.question).toBe(QUESTION);
+    expect(insightOf(before.intents[0]!)?.question).toBe(QUESTION);
 
     // The correction: the trade closes, so the projection moves on.
     insertFill(account, exit);
@@ -1020,7 +1020,7 @@ describe("the review question on the card", () => {
     // The review still waits for the operator, but the older question is no
     // longer served: its source is no longer the current one.
     expect(after.intents).toHaveLength(1);
-    expect(after.intents[0]!.insight).toBeUndefined();
+    expect(insightOf(after.intents[0]!)).toBeUndefined();
     // The question was asked once, and the stored row survives: it is
     // hidden, not deleted.
     expect(calls).toHaveLength(1);
@@ -1303,7 +1303,7 @@ describe("a restart before the question is served", () => {
     const start = await postObservations(observationsPost({ observationId: observation.id }));
     expect(start.status).toBe(200);
     const before = await servedScope(account);
-    expect(before.intents[0]!.insight?.question).toBe(QUESTION);
+    expect(insightOf(before.intents[0]!)?.question).toBe(QUESTION);
 
     // The journal is closed and opened again on the same directory.
     const restarted = await reopenJournal();
@@ -1316,7 +1316,7 @@ describe("a restart before the question is served", () => {
     expect(response.status).toBe(200);
     const after = (await response.json()) as ServedScope;
     expect(after.intents).toHaveLength(1);
-    expect(after.intents[0]!.insight).toEqual({
+    expect(insightOf(after.intents[0]!)).toEqual({
       question: QUESTION,
       sourceRevision: observation.sourceRevision,
     });

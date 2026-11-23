@@ -85,16 +85,18 @@ allowance is spent across cases.
 
 ### Cases
 
-| Case                                                                 | Asserts                                                                                                                                        |
-| -------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------- |
-| serves each account its own question                                 | two accounts, two trades, two answers; each scoped GET serves its own question and the intent's subject is the observation's id                |
-| links the question to the source revision it was made from           | the served `sourceRevision` equals the observation's `sourceRevision`                                                                          |
-| serves the question only for a revision the review shows as evidence | the reader answers for the shown revision and nothing for another one or another observation                                                   |
-| hides the question of a corrected source and keeps the stored row    | after the correction the card is empty, the provider was asked once, and the stored row survives                                               |
-| stores no question without a provider and leaves the review usable   | zero provider calls, no run, no question; the observation and its opportunity are there, the review starts and the operator can acknowledge it |
-| stores no question for an account the policy does not list           | zero provider calls, no question, the review still usable                                                                                      |
-| serves a question only inside the scope of its own account           | another account's scope serves nothing and never the question; an unknown account's scope is refused with 403 `scope_denied`                   |
-| serves the question again after the journal is reopened              | the journal is closed and reopened on the same directory, the route module is imported again, and the question is still served                 |
+| Case                                                                 | Asserts                                                                                                                                                                                             |
+| -------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| serves each account its own question                                 | two accounts, two trades, two answers; each scoped GET serves its own question and the intent's subject is the observation's id                                                                     |
+| links the question to the source revision it was made from           | the served `sourceRevision` equals the observation's `sourceRevision`                                                                                                                               |
+| serves the question only for a revision the review shows as evidence | the reader answers for the shown revision and nothing for another one or another observation                                                                                                        |
+| hides the question of a corrected source and keeps the stored row    | after the correction the card is empty, the provider was asked once, and the stored row survives                                                                                                    |
+| stores no question without a provider and leaves the review usable   | zero provider calls, no run, no question; the observation and its opportunity are there, the review starts and the operator can acknowledge it                                                      |
+| stores no question for an account the policy does not list           | zero provider calls, no question, the review still usable                                                                                                                                           |
+| serves a question only inside the scope of its own account           | another account's scope serves nothing and never the question; an unknown account's scope is refused with 403 `scope_denied`                                                                        |
+| serves the question again after the journal is reopened              | the journal is closed and reopened on the same directory, the route module is imported again, and the question is still served                                                                      |
+| takes the operator's command while the question is on the card       | the card's own command body carries only the action id, the revision and the action; the command route accepts it, the review completes, and the question never crosses the wire inside the command |
+| still refuses a stale command while the question is on the card      | the revision the card carries is the workflow's own; after a deferral the workflow waits again at a newer revision, and the card's command is refused with 409 `stale_revision`                     |
 
 The card test proves the label, the question while privacy is off, and the
 mask while privacy is on. A fourth card case proves the keyboard is left
@@ -117,16 +119,21 @@ workflow's revision check still bites when the card carries a question.
 Every claimed behaviour was broken on purpose, seen to fail, restored and
 seen to pass again. Both results are recorded.
 
-| #   | Behaviour                                                   | Break                                                        | Fail           | Restore  | Pass      |
-| --- | ----------------------------------------------------------- | ------------------------------------------------------------ | -------------- | -------- | --------- |
-| 1   | the scoped GET serves the question                          | the route stops attaching the insight                        | 4 cases failed | restored | 23 passed |
-| 2   | the question is served only for a revision the review shows | the reader drops the evidence-revision check                 | 1 case failed  | restored | 23 passed |
-| 3   | the card masks the question under privacy                   | the card renders the question unmasked                       | 1 case failed  | restored | 3 passed  |
-| 4   | only the question and its revision cross the wire           | the reader returns the raw store row                         | 4 cases failed | restored | 23 passed |
-| 5   | the question belongs to the observation it is served for    | the reader compares the observation id with a wrong constant | 5 cases failed | restored | 23 passed |
-| 5b  | the question belongs to the observation it is served for    | the reader drops the observation id comparison               | 1 case failed  | restored | 23 passed |
-| 6   | the question is served only inside the account's scope      | the route reads the insight for another account              | 4 cases failed | restored | 23 passed |
-| 6a  | the reader compares the account itself                      | the reader drops the account comparison                      | 0 cases failed | restored | 23 passed |
+| #   | Behaviour                                                   | Break                                                         | Fail             | Restore  | Pass             |
+| --- | ----------------------------------------------------------- | ------------------------------------------------------------- | ---------------- | -------- | ---------------- |
+| 1   | the scoped GET serves the question                          | the route stops attaching the insight                         | 6 cases failed   | restored | 25 passed        |
+| 2   | the question is served only for a revision the review shows | the reader drops the evidence-revision check                  | 1 case failed    | restored | 25 passed        |
+| 3   | the card masks the question under privacy                   | the card renders the question unmasked                        | 1 case failed    | restored | 4 passed         |
+| 4   | only the question and its revision cross the wire           | the reader returns the raw store row                          | 4 cases failed   | restored | 25 passed        |
+| 5   | the question belongs to the observation it is served for    | the reader compares the observation id with a wrong constant  | 7 cases failed   | restored | 25 passed        |
+| 5b  | the question belongs to the observation it is served for    | the reader drops the observation id comparison                | 1 case failed    | restored | 25 passed        |
+| 6   | the question is served only inside the account's scope      | the route reads the insight for another account               | 6 cases failed   | restored | 25 passed        |
+| 6a  | the reader compares the account itself                      | the reader drops the account comparison                       | 0 cases failed   | restored | 25 passed        |
+| 7   | the question never crosses the wire inside the command      | the command body builder carries the question as a correction | 1 case failed    | restored | 25 passed        |
+| 8   | the question is served only inside the account's scope      | the observation list ignores the scope                        | 2 cases failed   | restored | 25 passed        |
+| 9   | the shipped worker bundle stores the question               | the production registration drops the capability handler      | the smoke failed | restored | the smoke passed |
+| 10  | the workflow's revision check still bites                   | both revision checks are disabled                             | 1 case failed    | restored | 25 passed        |
+| 11  | the question adds no control to the card                    | the question is rendered as a button                          | 1 case failed    | restored | 4 passed         |
 
 Every count in this table was MEASURED on the tree this report describes,
 with the two new cases in place: the slice-b suite holds 25 cases, the card
@@ -191,15 +198,15 @@ scope biting end to end, through the route.
 
 ## The checks
 
-| Check                                                                                                     | Result                                                                    |
-| --------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------- |
-| `pnpm vitest run` on the five intelligence suites (boundaries, insight-card, ui, review-insight, slice-b) | 78 passed                                                                 |
-| `pnpm test` (the whole suite)                                                                             | 119 files, 1429 passed                                                    |
-| `pnpm --filter web typecheck`                                                                             | clean                                                                     |
-| `pnpm --filter web migrations:check`                                                                      | `migration-checksums.json is up to date`                                  |
-| `pnpm format:check`                                                                                       | 79 failures, all on untouched files; none on the files this phase touched |
-| web + worker production build                                                                             | succeeded                                                                 |
-| bundled worker smoke                                                                                      | the shipped worker stored the question and the app served it              |
+| Check                                                                                                                   | Result                                                                                             |
+| ----------------------------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------- |
+| `pnpm vitest run` on the six intelligence suites (boundaries, insight-card, insight-smoke, ui, review-insight, slice-b) | 82 passed                                                                                          |
+| `pnpm test` (the whole suite)                                                                                           | 120 files, 1433 passed                                                                             |
+| `pnpm --filter web typecheck`                                                                                           | clean                                                                                              |
+| `pnpm --filter web migrations:check`                                                                                    | `migration-checksums.json is up to date`                                                           |
+| `pnpm format:check`                                                                                                     | 73 tracked files fail, the same 73 as the pristine tree; none of them is a file this phase touched |
+| web + worker production build                                                                                           | succeeded                                                                                          |
+| bundled worker smoke                                                                                                    | the shipped worker stored the question and the app served it                                       |
 
 The format failures are pre-existing, and the count is measured, not
 remembered: a pristine worktree at the parent commit fails the same 73
