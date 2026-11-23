@@ -4,7 +4,10 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { eq, inArray, like } from "drizzle-orm";
 import type { ImportedExecution } from "@luxalgo/journal-importers";
-import { workflowActionId } from "../src/lib/intelligence-interactions";
+import type { ReviewQuestionTransport } from "../src/server/intelligence/contracts/insights";
+import type { IntelligenceWorker } from "../src/server/intelligence/composition";
+import { workflowActionId, commandRequestBody } from "../src/lib/intelligence-interactions";
+import type { InteractionIntent } from "../src/lib/intelligence-interactions";
 import { createExperienceStore } from "../src/server/intelligence/infrastructure/experience-store";
 import { createEngagementCoordinator } from "../src/server/intelligence/experience/interactions";
 import { buildOpportunityRequest } from "../src/server/intelligence/experience/producer";
@@ -35,16 +38,19 @@ process.env.JOURNAL_EVENT_CAPTURE = "1";
 // only be imported after JOURNAL_DATA_DIR points at the scratch directory.
 // A static import cannot work here: the import would run before the
 // environment is set.
+const journal = await import("../src/db");
 const {
-  db,
   accounts,
   domainOutbox,
   eventDeliveries,
   executionEvidence,
   executions,
+  intelligenceBudgetReservations,
+  intelligenceInsights,
   intelligenceJobs,
   intelligenceObservations,
   intelligenceOpportunities,
+  intelligencePolicy,
   intelligenceRuns,
   intelligenceSeedCheckpoints,
   intelligenceWorkerLease,
@@ -58,21 +64,30 @@ const {
   tradeRevisionExecutions,
   trades,
   workflowTransitions,
-} = await import("../src/db");
-const { withJournalTransaction } = await import("../src/db/transaction");
-const { insertExecutionsInTx } = await import("../src/server/executions");
-const { changeContext } = await import("../src/server/trading/reconcile");
+} = journal;
+// The handle is rebound when a case reopens the journal, so the cleanup
+// always runs against the journal that is open.
+let db = journal.db;
+// The modules below capture the handle when they are first evaluated, so a
+// case that reopens the journal imports them again.
+let { withJournalTransaction } = await import("../src/db/transaction");
+let { insertExecutionsInTx } = await import("../src/server/executions");
+let { changeContext } = await import("../src/server/trading/reconcile");
 const { createJobStore, createEffectStore } =
   await import("../src/server/intelligence/infrastructure/jobs");
 const { createWorkerService } = await import("../src/server/intelligence/infrastructure/worker");
 const { createOutboxDispatcher } = await import("../src/server/intelligence/infrastructure/outbox");
-const composition = await import("../src/server/intelligence/composition");
-const serverSettings = await import("../src/server/settings");
+let composition = await import("../src/server/intelligence/composition");
+let serverSettings = await import("../src/server/settings");
 const { sessionToken } = await import("../src/server/auth");
-const { GET: getControls, POST: postControls } =
+let { GET: getControls, POST: postControls } =
   await import("../src/app/api/intelligence/controls/route");
-const { GET: getObservations, POST: postObservations } =
+let { GET: getObservations, POST: postObservations } =
   await import("../src/app/api/intelligence/observations/route");
+let { POST: postCommands } = await import("../src/app/api/intelligence/commands/route");
+let { currentInsightOf } = await import("../src/app/api/intelligence/queries");
+const { REVIEW_QUESTION_PROMPT_VERSION } =
+  await import("../src/server/intelligence/infrastructure/review-transport");
 
 const NOW = 1_800_000_000_000;
 const OWNER = "slice-b-worker";
@@ -88,19 +103,19 @@ const journalGlobal = globalThis as unknown as {
   __journalDbDir?: unknown;
 };
 
-const jobs = createJobStore(db);
+let jobs = createJobStore(db);
 const effects = createEffectStore();
-const dispatcher = createOutboxDispatcher({
+let dispatcher = createOutboxDispatcher({
   db,
   jobs,
   handlers: composition.observationOutboxHandlers,
 });
 // The real handler, on a fixed clock: the whole chain runs on the instant
 // the case chooses.
-const observationHandler = composition.createTradeObservationHandler({ clock: () => NOW });
+let observationHandler = composition.createTradeObservationHandler({ clock: () => NOW });
 
 /** The worker that observes the committed trade changes of this scratch journal. */
-const worker = createWorkerService({
+let worker = createWorkerService({
   db,
   jobs,
   effects,
@@ -116,19 +131,153 @@ const worker = createWorkerService({
  * It is the real coordinator: the case only injects the clock, so the
  * decision it reports is the decision the running path made.
  */
-const coordinator = createEngagementCoordinator({
+let coordinator = createEngagementCoordinator({
   runInTransaction: withJournalTransaction,
   store: createExperienceStore(),
   clock: () => NOW,
 });
 
-/** Runs the worker until it has nothing left to claim. */
-const drain = async (): Promise<void> => {
+/** Runs a worker until it has nothing left to claim. */
+const drainWorker = async (target: { tick(now: number): Promise<boolean> }): Promise<void> => {
   for (let attempt = 0; attempt < 20; attempt++) {
-    if (!(await worker.tick(NOW))) return;
+    if (!(await target.tick(NOW))) return;
   }
   throw new Error("The worker did not settle.");
 };
+
+/** Runs the worker until it has nothing left to claim. */
+const drain = async (): Promise<void> => drainWorker(worker);
+
+/**
+ * Closes the journal, opens it again on the same directory and rebinds every
+ * module that captured the closed handle.
+ *
+ * The route module reads the journal through the module it imported, so a
+ * journal that was reopened needs a route module that was imported again.
+ */
+const reopenJournal = async (): Promise<{
+  readonly GET: (request: Request) => Promise<Response>;
+}> => {
+  db.$client.close();
+  delete journalGlobal.__journalDb;
+  delete journalGlobal.__journalDbDir;
+  vi.resetModules();
+  const reopened = await import("../src/db");
+  db = reopened.db;
+  ({ withJournalTransaction } = await import("../src/db/transaction"));
+  ({ insertExecutionsInTx } = await import("../src/server/executions"));
+  ({ changeContext } = await import("../src/server/trading/reconcile"));
+  composition = await import("../src/server/intelligence/composition");
+  serverSettings = await import("../src/server/settings");
+  ({ GET: getControls, POST: postControls } =
+    await import("../src/app/api/intelligence/controls/route"));
+  ({ GET: getObservations, POST: postObservations } =
+    await import("../src/app/api/intelligence/observations/route"));
+  ({ POST: postCommands } = await import("../src/app/api/intelligence/commands/route"));
+  jobs = createJobStore(db);
+  dispatcher = createOutboxDispatcher({
+    db,
+    jobs,
+    handlers: composition.observationOutboxHandlers,
+  });
+  observationHandler = composition.createTradeObservationHandler({ clock: () => NOW });
+  worker = createWorkerService({
+    db,
+    jobs,
+    effects,
+    dispatcher,
+    handlers: [observationHandler],
+    clock: () => NOW,
+    owner: OWNER,
+  });
+  coordinator = createEngagementCoordinator({
+    runInTransaction: withJournalTransaction,
+    store: createExperienceStore(),
+    clock: () => NOW,
+  });
+  return { GET: getObservations };
+};
+
+/** The question the provider answers when the case does not care which one. */
+const QUESTION = "What would you change about this trade next time?";
+/** The question the first account's trade is answered with. */
+const ALPHA_QUESTION = "What would you change about the entry of the ALPHA trade?";
+/** The question the second account's trade is answered with. */
+const BETA_QUESTION = "What would you change about the entry of the BETA trade?";
+
+/** The model the journal is configured to ask. */
+const MODEL = "llama-fixture";
+/** The endpoint the journal is configured to ask. It never runs: the transport is a stub. */
+const SERVER = "http://localhost:11434/v1";
+/** The owner of the production worker that runs the provider leg. */
+const PROVIDER_OWNER = "slice-b-provider";
+
+/** One provider request the stub recorded. */
+interface ProviderCall {
+  readonly provider: string;
+  readonly model: string;
+  readonly baseUrl: string | null;
+  readonly system: string;
+  readonly prompt: string;
+}
+
+/**
+ * The provider stub.
+ *
+ * It records every call and answers the question the case asks for, so a case
+ * can tell two accounts apart and can prove that no provider was reached.
+ */
+const createTransport = (answer: (call: ProviderCall) => string) => {
+  const calls: ProviderCall[] = [];
+  const transport: ReviewQuestionTransport = {
+    ask: async (input) => {
+      const call = {
+        provider: input.provider,
+        model: input.model,
+        baseUrl: input.baseUrl,
+        system: input.system,
+        prompt: input.prompt,
+      };
+      calls.push(call);
+      return {
+        text: answer(call),
+        meta: {
+          promptVersion: REVIEW_QUESTION_PROMPT_VERSION,
+          provider: input.provider,
+          model: input.model,
+          durationMs: 7,
+        },
+      };
+    },
+  };
+  return { calls, transport };
+};
+
+/** The journal-side provider configuration the review question needs. */
+const configureProvider = (): void => {
+  serverSettings.setSetting("aiProvider", "compatible");
+  serverSettings.setSetting("compatibleModel", MODEL);
+  serverSettings.setSetting("compatibleBaseUrl", SERVER);
+};
+
+/** The accounts the background policy allows. */
+const enablePolicy = (optedIn: readonly string[]): void => {
+  composition.saveBackgroundPolicy({
+    enabled: true,
+    accounts: [...optedIn],
+    capabilities: { tools: false, structuredOutput: false },
+    maxInputCharacters: 8000,
+  });
+};
+
+/** The production worker, with the stub provider behind it. */
+const providerWorker = (transport: ReviewQuestionTransport): IntelligenceWorker =>
+  composition.createIntelligenceWorker({
+    db,
+    clock: () => NOW,
+    owner: PROVIDER_OWNER,
+    transport,
+  });
 
 /** An account that owns nothing but the fills the case inserts. */
 const createAccount = (id: string): string => {
@@ -156,15 +305,75 @@ const exit: ImportedExecution = {
   executedAt: EXIT_AT,
 };
 
-/** Inserts the fills of one closed trade, exactly like an ingestion does. */
-const insertTrade = (accountId: string): void => {
+/** The fills of one closed trade, exactly like an ingestion does. */
+const insertTrade = (accountId: string, symbol = "TEST"): void => {
   withJournalTransaction((tx) => {
-    insertExecutionsInTx(tx, accountId, [entry, exit], "import", changeContext("user", "live"));
+    insertExecutionsInTx(
+      tx,
+      accountId,
+      [
+        { ...entry, symbol },
+        { ...exit, symbol },
+      ],
+      "import",
+      changeContext("user", "live"),
+    );
+  });
+};
+
+/** One fill on its own, the way an ingestion that arrives late does. */
+const insertFill = (accountId: string, fill: ImportedExecution): void => {
+  withJournalTransaction((tx) => {
+    insertExecutionsInTx(tx, accountId, [fill], "import", changeContext("user", "live"));
   });
 };
 
 /** The observations the journal holds. */
 const observations = () => db.select().from(intelligenceObservations).all();
+
+/** The shape the scoped surface answers with. */
+interface ServedScope {
+  readonly observations: { readonly id: string; readonly accountId: string }[];
+  readonly intents: InteractionIntent[];
+}
+
+/** The question a served review intent carries, when it carries one. */
+const insightOf = (intent: InteractionIntent) =>
+  intent.kind === "observation-review" ? intent.insight : undefined;
+
+/** The served review intent, narrowed to the review the operator acts on. */
+const reviewOf = (intent: InteractionIntent) => {
+  if (intent.kind !== "observation-review") throw new Error("The served intent is not a review.");
+  return intent;
+};
+
+/**
+ * Everything a paid request would touch.
+ *
+ * Reading the inbox is free: the runs, the jobs and the daily attempt
+ * reservations the provider leg writes, and the number of provider calls,
+ * must be exactly the same before and after a scoped read.
+ */
+const spendState = (providerCalls: number) => ({
+  runs: db.select().from(intelligenceRuns).all().length,
+  jobs: db.select().from(intelligenceJobs).all().length,
+  reservations: db.select().from(intelligenceBudgetReservations).all().length,
+  providerCalls,
+});
+
+/**
+ * The scoped surface, as the inbox reads it.
+ *
+ * The scope names one account, so the answer holds that account's reviews
+ * and nothing else.
+ */
+const servedScope = async (account: string): Promise<ServedScope> => {
+  const response = await getObservations(
+    observationsGet(`/api/intelligence/observations?scope=${account}`),
+  );
+  expect(response.status).toBe(200);
+  return (await response.json()) as ServedScope;
+};
 /** Every engagement row, whatever its kind. */
 const engagementRows = () => db.select().from(intelligenceOpportunities).all();
 /** The opportunity rows only. */
@@ -255,10 +464,21 @@ const observationsPost = (body: unknown) =>
     body: JSON.stringify(body),
   });
 
+/** The operator's command, as the card sends it. */
+const commandsPost = (body: unknown) =>
+  new Request("http://localhost/api/intelligence/commands", {
+    method: "POST",
+    headers: { "Content-Type": "application/json", Origin: "http://localhost" },
+    body: JSON.stringify(body),
+  });
+
 /** The workflows of the scratch journal. */
 const workflowRows = () => db.select().from(intelligenceWorkflows).all();
 
 beforeEach(() => {
+  db.delete(intelligenceInsights).run();
+  db.delete(intelligenceBudgetReservations).run();
+  db.delete(intelligencePolicy).run();
   db.delete(interactionCommands).run();
   db.delete(workflowTransitions).run();
   db.delete(intelligenceWorkflows).run();
@@ -280,7 +500,15 @@ beforeEach(() => {
   db.delete(accounts).run();
   db.delete(intelligenceRuns).run();
   db.delete(settings)
-    .where(inArray(settings.key, ["intelligenceProactiveOptIn", "intelligencePaused"]))
+    .where(
+      inArray(settings.key, [
+        "intelligenceProactiveOptIn",
+        "intelligencePaused",
+        "aiProvider",
+        "compatibleModel",
+        "compatibleBaseUrl",
+      ]),
+    )
     .run();
 });
 
@@ -711,6 +939,431 @@ describe("the provider-free chain", () => {
       if (openai === undefined) delete process.env.OPENAI_API_KEY;
       else process.env.OPENAI_API_KEY = openai;
     }
+  });
+});
+
+describe("the review question on the card", () => {
+  it("serves each account its own question", async () => {
+    const alpha = createAccount("acct-alpha");
+    const beta = createAccount("acct-beta");
+    configureProvider();
+    enablePolicy([alpha, beta]);
+    insertTrade(alpha, "ALPHA");
+    insertTrade(beta, "BETA");
+    const { calls, transport } = createTransport((call) =>
+      call.prompt.includes("symbol: ALPHA") ? ALPHA_QUESTION : BETA_QUESTION,
+    );
+    await drainWorker(providerWorker(transport));
+
+    // Both accounts were asked, and each account got its own answer.
+    expect(calls).toHaveLength(2);
+    expect(db.select().from(intelligenceInsights).all()).toHaveLength(2);
+
+    const alphaObservation = observations().find((row) => row.accountId === alpha)!;
+    const betaObservation = observations().find((row) => row.accountId === beta)!;
+    expect(alphaObservation).toBeDefined();
+    expect(betaObservation).toBeDefined();
+
+    const alphaStart = await postObservations(
+      observationsPost({ observationId: alphaObservation.id }),
+    );
+    expect(alphaStart.status).toBe(200);
+    const betaStart = await postObservations(
+      observationsPost({ observationId: betaObservation.id }),
+    );
+    expect(betaStart.status).toBe(200);
+
+    // Reading the inbox is free. The runs, the jobs and the attempt
+    // reservations a paid request would write are counted BEFORE the scoped
+    // reads, and the provider must not be called by a read.
+    const before = spendState(calls.length);
+    expect(before.runs).toBeGreaterThan(0);
+    expect(before.reservations).toBeGreaterThan(0);
+
+    // The scoped surface serves the question of the account it names, and
+    // nothing else crosses the scope.
+    const alphaBody = await servedScope(alpha);
+    expect(alphaBody.intents).toHaveLength(1);
+    expect(alphaBody.intents[0]!.subject.id).toBe(alphaObservation.id);
+    expect(insightOf(alphaBody.intents[0]!)).toEqual({
+      question: ALPHA_QUESTION,
+      sourceRevision: alphaObservation.sourceRevision,
+    });
+
+    const betaBody = await servedScope(beta);
+    expect(betaBody.intents).toHaveLength(1);
+    expect(betaBody.intents[0]!.subject.id).toBe(betaObservation.id);
+    expect(insightOf(betaBody.intents[0]!)).toEqual({
+      question: BETA_QUESTION,
+      sourceRevision: betaObservation.sourceRevision,
+    });
+
+    // The reads spent nothing: no run, no job, no reserved attempt and no
+    // provider call. Opening the inbox never buys a question.
+    expect(spendState(calls.length)).toEqual(before);
+  });
+
+  it("links the question to the source revision it was made from", async () => {
+    const account = createAccount("acct-source");
+    configureProvider();
+    enablePolicy([account]);
+    insertTrade(account);
+    const { transport } = createTransport(() => QUESTION);
+    await drainWorker(providerWorker(transport));
+
+    const observation = observations()[0]!;
+    const start = await postObservations(observationsPost({ observationId: observation.id }));
+    expect(start.status).toBe(200);
+
+    const body = await servedScope(account);
+    expect(insightOf(body.intents[0]!)).toEqual({
+      question: QUESTION,
+      sourceRevision: observation.sourceRevision,
+    });
+  });
+
+  it("hides the question of a corrected source and keeps the stored row", async () => {
+    const account = createAccount("acct-corrected");
+    configureProvider();
+    enablePolicy([account]);
+    // The first change opens the trade; the second one closes it and moves
+    // the source the question was made from.
+    insertFill(account, entry);
+    const { calls, transport } = createTransport(() => QUESTION);
+    await drainWorker(providerWorker(transport));
+
+    const first = observations()[0]!;
+    const start = await postObservations(observationsPost({ observationId: first.id }));
+    expect(start.status).toBe(200);
+    const before = await servedScope(account);
+    expect(insightOf(before.intents[0]!)?.question).toBe(QUESTION);
+
+    // The correction: the trade closes, so the projection moves on.
+    insertFill(account, exit);
+
+    const after = await servedScope(account);
+    // The review still waits for the operator, but the older question is no
+    // longer served: its source is no longer the current one.
+    expect(after.intents).toHaveLength(1);
+    expect(insightOf(after.intents[0]!)).toBeUndefined();
+    // The question was asked once, and the stored row survives: it is
+    // hidden, not deleted.
+    expect(calls).toHaveLength(1);
+    const stored = db.select().from(intelligenceInsights).all();
+    expect(stored).toHaveLength(1);
+    expect(stored[0]!.question).toBe(QUESTION);
+    expect(stored[0]!.sourceRevision).toBe(first.sourceRevision);
+  });
+
+  it("serves the question only for a revision the review shows as evidence", async () => {
+    const account = createAccount("acct-evidence");
+    configureProvider();
+    enablePolicy([account]);
+    insertTrade(account);
+    const { transport } = createTransport(() => QUESTION);
+    await drainWorker(providerWorker(transport));
+
+    const observation = observations()[0]!;
+    const subject = {
+      id: observation.id,
+      subjectId: observation.subjectId,
+      accountId: observation.accountId,
+    };
+
+    // The revision the question rests on is served when the review shows it.
+    expect(currentInsightOf(subject, [observation.sourceRevision])).toEqual({
+      question: QUESTION,
+      sourceRevision: observation.sourceRevision,
+    });
+
+    // A revision the review does not show serves nothing.
+    expect(currentInsightOf(subject, ["rev-the-review-never-shows"])).toBeNull();
+    // Another observation's id serves nothing either.
+    expect(
+      currentInsightOf({ ...subject, id: "obs-other" }, [observation.sourceRevision]),
+    ).toBeNull();
+  });
+
+  it("stores no question without a provider and leaves the review usable", async () => {
+    const account = createAccount("acct-unconfigured");
+    const anthropic = process.env.ANTHROPIC_API_KEY;
+    const openai = process.env.OPENAI_API_KEY;
+    delete process.env.ANTHROPIC_API_KEY;
+    delete process.env.OPENAI_API_KEY;
+    try {
+      // The account opted in, so the policy gate passes: the only thing that
+      // refuses the question is that no provider is configured.
+      enablePolicy([account]);
+      insertTrade(account);
+      const { calls, transport } = createTransport(() => QUESTION);
+      await drainWorker(providerWorker(transport));
+
+      // The provider was never reached, and no question was stored.
+      expect(calls).toHaveLength(0);
+      expect(db.select().from(intelligenceInsights).all()).toHaveLength(0);
+      expect(db.select().from(intelligenceRuns).all()).toHaveLength(0);
+      // The deterministic chain is untouched: the observation and its
+      // opportunity are still there.
+      expect(observations()).toHaveLength(1);
+      expect(opportunityRows()).toHaveLength(1);
+
+      // The review is still usable: it starts and the operator can give it.
+      const observation = observations()[0]!;
+      const start = await postObservations(observationsPost({ observationId: observation.id }));
+      expect(start.status).toBe(200);
+
+      // The inbox is read as well, and the read is free: it reaches no
+      // provider and spends no allowance. The review is served without a
+      // question.
+      const before = spendState(calls.length);
+      const read = await servedScope(account);
+      expect(read.intents).toHaveLength(1);
+      expect(insightOf(read.intents[0]!)).toBeUndefined();
+      expect(spendState(calls.length)).toEqual(before);
+
+      const answer = (await start.json()) as {
+        intent: {
+          kind: string;
+          expectedRevision: number;
+          actions: { action: string; actionId: string }[];
+        } | null;
+      };
+      expect(answer.intent?.kind).toBe("observation-review");
+      const acknowledge = answer.intent!.actions.find((action) => action.action === "acknowledge")!;
+      const outcome = composition.interactionCommands.apply({
+        actionId: acknowledge.actionId,
+        commandId: "cmd-acknowledge-unconfigured",
+        expectedRevision: answer.intent!.expectedRevision,
+        action: "acknowledge",
+      });
+      expect(outcome.status).toBe(200);
+      expect(workflowRows()[0]!.status).toBe("completed");
+    } finally {
+      if (anthropic === undefined) delete process.env.ANTHROPIC_API_KEY;
+      else process.env.ANTHROPIC_API_KEY = anthropic;
+      if (openai === undefined) delete process.env.OPENAI_API_KEY;
+      else process.env.OPENAI_API_KEY = openai;
+    }
+  });
+
+  it("stores no question for an account the policy does not list", async () => {
+    const account = createAccount("acct-not-opted-in");
+    configureProvider();
+    // The policy is enabled, but this account never opted in.
+    enablePolicy([]);
+    insertTrade(account);
+    const { calls, transport } = createTransport(() => QUESTION);
+    await drainWorker(providerWorker(transport));
+
+    // The provider was never reached, and no question was stored.
+    expect(calls).toHaveLength(0);
+    expect(db.select().from(intelligenceInsights).all()).toHaveLength(0);
+    expect(db.select().from(intelligenceRuns).all()).toHaveLength(0);
+    expect(observations()).toHaveLength(1);
+
+    // The review is still usable.
+    const observation = observations()[0]!;
+    const start = await postObservations(observationsPost({ observationId: observation.id }));
+    expect(start.status).toBe(200);
+
+    // The inbox is read as well, and the read is free: it reaches no
+    // provider and spends no allowance.
+    const before = spendState(calls.length);
+    const read = await servedScope(account);
+    expect(read.intents).toHaveLength(1);
+    expect(insightOf(read.intents[0]!)).toBeUndefined();
+    expect(spendState(calls.length)).toEqual(before);
+
+    const answer = (await start.json()) as {
+      intent: {
+        kind: string;
+        expectedRevision: number;
+        actions: { action: string; actionId: string }[];
+      } | null;
+    };
+    expect(answer.intent?.kind).toBe("observation-review");
+    const acknowledge = answer.intent!.actions.find((action) => action.action === "acknowledge")!;
+    const outcome = composition.interactionCommands.apply({
+      actionId: acknowledge.actionId,
+      commandId: "cmd-acknowledge-not-opted-in",
+      expectedRevision: answer.intent!.expectedRevision,
+      action: "acknowledge",
+    });
+    expect(outcome.status).toBe(200);
+    expect(workflowRows()[0]!.status).toBe("completed");
+  });
+
+  it("serves a question only inside the scope of its own account", async () => {
+    const owner = createAccount("acct-owner");
+    const other = createAccount("acct-other");
+    configureProvider();
+    enablePolicy([owner]);
+    insertTrade(owner);
+    const { transport } = createTransport(() => QUESTION);
+    await drainWorker(providerWorker(transport));
+
+    const observation = observations()[0]!;
+    const start = await postObservations(observationsPost({ observationId: observation.id }));
+    expect(start.status).toBe(200);
+
+    // Another account's scope never serves this account's question.
+    const otherScope = await servedScope(other);
+    expect(otherScope.intents).toHaveLength(0);
+    expect(JSON.stringify(otherScope)).not.toContain(QUESTION);
+
+    // A scope that names an account that does not exist is refused.
+    const refused = await getObservations(
+      observationsGet("/api/intelligence/observations?scope=acct-missing"),
+    );
+    expect(refused.status).toBe(403);
+    expect(await refused.json()).toEqual({ error: "scope_denied" });
+  });
+
+  it("takes the operator's command while the question is on the card", async () => {
+    const account = createAccount("acct-command-with-question");
+    configureProvider();
+    enablePolicy([account]);
+    insertTrade(account);
+    const { transport } = createTransport(() => QUESTION);
+    await drainWorker(providerWorker(transport));
+
+    const observation = observations()[0]!;
+    const start = await postObservations(observationsPost({ observationId: observation.id }));
+    expect(start.status).toBe(200);
+
+    // The card the operator acts on carries the question.
+    const body = await servedScope(account);
+    expect(body.intents).toHaveLength(1);
+    expect(insightOf(body.intents[0]!)?.question).toBe(QUESTION);
+
+    // The command the card would send: the action id and the revision the
+    // server issued, with the question neither changing nor demanding
+    // anything.
+    const intent = reviewOf(body.intents[0]!);
+    const acknowledge = intent.actions.find((action) => action.action === "acknowledge")!;
+    const request = commandRequestBody(intent, acknowledge, {
+      commandId: "cmd-acknowledge-with-question",
+    });
+    expect(request).not.toBeNull();
+    expect(request).toEqual({
+      actionId: acknowledge.actionId,
+      commandId: "cmd-acknowledge-with-question",
+      expectedRevision: intent.expectedRevision,
+      action: "acknowledge",
+    });
+
+    // The command route accepts it and the review completes.
+    const outcome = await postCommands(
+      commandsPost({
+        actionId: request!.actionId,
+        commandId: request!.commandId,
+        expectedRevision: request!.expectedRevision,
+        action: request!.action,
+      }),
+    );
+    expect(outcome.status).toBe(200);
+    expect(workflowRows()[0]!.status).toBe("completed");
+
+    // The question is still the journal's, and it never crossed the wire
+    // inside the command.
+    const stored = db.select().from(intelligenceInsights).all();
+    expect(stored).toHaveLength(1);
+    expect(stored[0]!.question).toBe(QUESTION);
+    expect(JSON.stringify(request)).not.toContain(QUESTION);
+  });
+
+  it("still refuses a stale command while the question is on the card", async () => {
+    const account = createAccount("acct-stale-with-question");
+    configureProvider();
+    enablePolicy([account]);
+    insertTrade(account);
+    const { transport } = createTransport(() => QUESTION);
+    await drainWorker(providerWorker(transport));
+
+    const observation = observations()[0]!;
+    const start = await postObservations(observationsPost({ observationId: observation.id }));
+    expect(start.status).toBe(200);
+
+    const body = await servedScope(account);
+    expect(insightOf(body.intents[0]!)?.question).toBe(QUESTION);
+    const intent = reviewOf(body.intents[0]!);
+    const acknowledge = intent.actions.find((action) => action.action === "acknowledge")!;
+    const defer = intent.actions.find((action) => action.action === "defer")!;
+
+    // The revision the card carries is the one the workflow is on.
+    expect(intent.expectedRevision).toBe(workflowRows()[0]!.revision);
+
+    // The operator defers the review: the workflow leaves for `scheduled` and
+    // its revision moves on. The effect then brings it back to wait, so the
+    // workflow is again in a status where ACKNOWLEDGE is legal — only the
+    // revision is now wrong. That is what makes the next command a test of
+    // the revision check and of nothing else.
+    const deferred = await postCommands(
+      commandsPost({
+        actionId: defer.actionId,
+        commandId: "cmd-defer-with-question",
+        expectedRevision: intent.expectedRevision,
+        action: "defer",
+        deferUntil: NOW,
+      }),
+    );
+    expect(deferred.status).toBe(200);
+    expect(workflowRows()[0]!.status).toBe("scheduled");
+    composition.workflowEngine.applyWorkflowEffect(intent.workflowId, intent.expectedRevision + 1);
+    expect(workflowRows()[0]!.status).toBe("waiting_for_user");
+    expect(workflowRows()[0]!.revision).toBeGreaterThan(intent.expectedRevision);
+
+    // The card the operator holds is now stale. Its command is refused by the
+    // REVISION check: the question does not make that check go soft.
+    const stale = await postCommands(
+      commandsPost({
+        actionId: acknowledge.actionId,
+        commandId: "cmd-stale-with-question",
+        expectedRevision: intent.expectedRevision,
+        action: "acknowledge",
+      }),
+    );
+    expect(stale.status).toBe(409);
+    const refusal = (await stale.json()) as { error: string; currentRevision: number };
+    expect(refusal.error).toBe("stale_revision");
+    expect(refusal.currentRevision).toBe(workflowRows()[0]!.revision);
+
+    // The refusal changed nothing: the workflow still waits for the operator.
+    expect(workflowRows()[0]!.status).toBe("waiting_for_user");
+    expect(workflowRows()[0]!.revision).toBeGreaterThan(intent.expectedRevision);
+  });
+});
+
+describe("a restart before the question is served", () => {
+  it("serves the question again after the journal is reopened", async () => {
+    const account = createAccount("acct-restarted");
+    configureProvider();
+    enablePolicy([account]);
+    insertTrade(account);
+    const { transport } = createTransport(() => QUESTION);
+    await drainWorker(providerWorker(transport));
+
+    const observation = observations()[0]!;
+    const start = await postObservations(observationsPost({ observationId: observation.id }));
+    expect(start.status).toBe(200);
+    const before = await servedScope(account);
+    expect(insightOf(before.intents[0]!)?.question).toBe(QUESTION);
+
+    // The journal is closed and opened again on the same directory.
+    const restarted = await reopenJournal();
+
+    // The route that was imported again reads the reopened journal, and the
+    // question is still there: it was stored, not held in memory.
+    const response = await restarted.GET(
+      observationsGet(`/api/intelligence/observations?scope=${account}`),
+    );
+    expect(response.status).toBe(200);
+    const after = (await response.json()) as ServedScope;
+    expect(after.intents).toHaveLength(1);
+    expect(insightOf(after.intents[0]!)).toEqual({
+      question: QUESTION,
+      sourceRevision: observation.sourceRevision,
+    });
   });
 });
 

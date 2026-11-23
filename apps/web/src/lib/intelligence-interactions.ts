@@ -75,6 +75,20 @@ export interface IntentActionDescriptor {
 }
 
 /**
+ * The AI-generated review question of one observation.
+ *
+ * The question is the only text the provider produced that the journal
+ * keeps: the prompt, the raw response and every credential stay out of the
+ * journal. It is served only where a review of the observation is offered.
+ */
+export interface InsightView {
+  /** The question, as the provider answered it. */
+  readonly question: string;
+  /** The projection revision the question was made from. */
+  readonly sourceRevision: string;
+}
+
+/**
  * A structured interaction intent (design §15).
  *
  * A strict union of the three shapes an interaction may take. The server
@@ -91,6 +105,14 @@ export type InteractionIntent =
       readonly text: string;
       readonly evidence: readonly EvidenceReference[];
       readonly actions: readonly IntentActionDescriptor[];
+      /**
+       * The current question of this observation, when the journal has one.
+       *
+       * It is absent when no question was produced, and absent again once the
+       * source it was made from is corrected: the older question is not served
+       * any more.
+       */
+      readonly insight?: InsightView;
     }
   | {
       readonly kind: "status";

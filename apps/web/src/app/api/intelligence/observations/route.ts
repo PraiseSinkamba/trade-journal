@@ -15,6 +15,7 @@ import {
   type WorkflowRow,
 } from "@/server/intelligence/contracts/experience";
 import {
+  currentInsightOf,
   evidenceOf,
   findActiveObservation,
   findWorkflow,
@@ -92,12 +93,18 @@ export const GET = handler(
       // waits wins.
       const workflow = ofRow.filter((review) => review.status === "waiting_for_user").at(-1);
       if (workflow) {
-        const intent = observationReviewIntent(
-          workflow,
-          referencesOf(links.filter((link) => link.observationId === row.id)),
-          observationText(row),
-        );
-        if (intent) intents.push(intent);
+        const references = referencesOf(links.filter((link) => link.observationId === row.id));
+        const built = observationReviewIntent(workflow, references, observationText(row));
+        // The question is served only where a review of the observation is
+        // offered, and only while the journal still holds it for this
+        // observation, this account and a revision the review shows.
+        if (built?.kind === "observation-review") {
+          const insight = currentInsightOf(
+            row,
+            references.map((reference) => reference.revisionId),
+          );
+          intents.push(insight ? { ...built, insight } : built);
+        }
       }
       return {
         id: row.id,

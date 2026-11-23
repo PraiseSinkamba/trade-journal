@@ -1,106 +1,234 @@
 ## Verdict: PASS
 
-## Reviewer Report — Phase 23 repair round: the fenced provider job for the review question
+## Repair round (Run 6) — the read guarantee and the card pairing
 
-The repair round of Phase B (T-023). The implementation-diff review of the phase returned **FAIL**
-with eight findings, and a mapping of the suite against the production code found nine behaviours
-that no test could fail. This report states what the repair changed and — more importantly — what
-the suite now proves, and what it still does not.
+Scope: `apps/web/tests/intelligence-slice-b.test.ts` (modified),
+`apps/web/tests/intelligence-insight-card.test.ts` (modified),
+`docs/superpowers/reports/ai-native-journal-phase-24.md` (modified).
+**No production code changed**: `git diff --stat -- apps/web/src` is empty on
+this tree, and the two breaks below were temporary edits that were restored
+and re-measured.
 
-### Commands run
+### What I measured myself
 
-- `pnpm exec vitest run apps/web/tests/intelligence-review-insight.test.ts … intelligence-worker … intelligence-provider-policy … intelligence-observations … intelligence-recovery … intelligence-boundaries`
-  → **6 files, 100 tests, exit 0**, 17.2 s.
-- `pnpm exec vitest run apps/web/tests/intelligence-review-insight.test.ts` → **30 tests, exit 0**,
-  8.4 s.
-- `pnpm --filter web typecheck` → exit 0, 27.5 s.
+| Command | Measured |
+| --- | --- |
+| `pnpm exec vitest run apps/web/tests/intelligence-slice-b.test.ts apps/web/tests/intelligence-insight-card.test.ts apps/web/tests/intelligence-ui.test.ts apps/web/tests/intelligence-boundaries.test.ts` | 4 files, **51 passed** (boundaries 8, insight-card 5, ui 13, slice-b 25), exit 0, 16 s |
+| `pnpm --filter web typecheck` | clean, exit 0, 19 s (95 s on the cold run) |
 
-The second repair round re-ran the narrow gate:
+The whole-project `pnpm test` and `pnpm build` were NOT run in this round: the
+destination gate runs them once, on the integrated feature.
 
-- `pnpm exec vitest run apps/web/tests/intelligence-review-insight.test.ts apps/web/tests/intelligence-provider-policy.test.ts apps/web/tests/intelligence-boundaries.test.ts`
-  → **3 files, 72 tests, exit 0**, 9.5 s.
-- `pnpm --filter web typecheck` → exit 0, 29.5 s.
-- `pnpm exec prettier --check` on the changed files → exit 0 after formatting.
-- Mutation proof: the enqueue's `existingAccountIds` gate was deleted, the new case failed with
-  "expected [ { …(11) } ] to have a length of +0 but got 1", and the gate was restored; the suite
-  was green again.
+### Finding 1 — the read guarantee is now pinned
 
-### The eight findings, and what the repair did
+The claim was "the GET stays a read: it never enqueues, never calls a provider
+and never writes". Before this round nothing held it.
 
-| # | Finding                                                                          | Resolution                                                                                                                                                                    |
-| - | -------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
-| 1 | the operations guide advertised three codes the code cannot emit                | the guide now names the codes the feature cannot emit and why (`capacity_unknown`, `context_too_large`, `invalid_evidence`, and the two capability-feature codes)         |
-| 2 | the guide omitted `lease_lost` and `run_not_found`, and misstated where a code lands | the guide now says where every code lands: the job's `last_error` only, the run's reason and status and the job's `last_error`, or the run's reason and status alone |
-| 3 | this report claimed the lease renewal and the opportunity recheck were confirmed; they were not | both are pinned by cases now, and the earlier claim is withdrawn                                                                                             |
-| 4 | the transport dropped the call metadata                                          | the transport returns the answer with its metadata; the run records the prompt version, the provider, the model, the duration and the token counts — never the prompt, the answer or a credential |
-| 5 | the business-key identity was only two-thirds pinned                            | the identity case asserts the run's effect key, the job's idempotency key and the insight's business key are one string                                                      |
-| 6 | the legacy path could complete a run from a bare provider response              | `executeBackgroundRun` has no production caller; it now refuses a capability job's run before it reserves an attempt or reaches a provider. A case pins the guard              |
-| 7 | `invalid_payload` was a second code for one condition                           | the code and its branches are gone; `unhandled_capability` is the one code, and the string no longer exists anywhere in the repository                                     |
-| 8 | a run that failed once kept its stale `refusalReason`                           | the success path writes `refusalReason: null`, so the meta merge clears the old reason                                                                                        |
+The three cases that read the inbox now count the runs, the jobs, the daily
+attempt reservations and the provider calls BEFORE the read and compare all
+four AFTER it:
 
-### What the suite proves now — each case was seen to fail when its check was deleted
+- "serves each account its own question" reads twice, once per account, and
+  compares after BOTH reads. The counts it compares are not empty: 2 runs,
+  2 reservations, 2 provider calls before the reads.
+- "stores no question without a provider and leaves the review usable" now
+  READS the inbox, and asserts zero provider calls after the read.
+- "stores no question for an account the policy does not list" now reads the
+  inbox as well, with the same assertion.
 
-| Case                                                                     | The check it pins                                        | Broken on purpose — what happened                                        |
-| ------------------------------------------------------------------------ | --------------------------------------------------------- | -------------------------------------------------------------------------- |
-| renews the lease while the provider is thinking, and writes nothing when the lease is lost | the worker's renewal callback and its lease-lost branch | the case failed: the abort was the only cancel path for the provider call |
-| stores nothing when the review opportunity is withdrawn                  | the final transaction's `isLiveInTx` recheck              | the case failed: an insight was stored                                    |
-| stores nothing when the policy is switched off                           | the `policyDisabled` clause                              | the case failed: the reason was `policy_changed`                          |
-| stores nothing when the policy is deleted                                | the `policyMissing` clause                               | the case failed: the run stayed `running`                                 |
-| stores nothing when the policy is corrupted                              | the `policyInvalid` clause                               | the case failed: the run stayed `running`                                 |
-| stores nothing when the pinned model changes                             | the pinned-model comparison                              | the case failed: an insight was stored                                    |
-| fails a job that names a capability version nobody registered             | the registry lookup's version dimension                  | the case failed: the job reached the handler                              |
-| queues neither a run nor a job for a historical or a maintenance delivery | the enqueue's `mode !== "live"` gate                     | the case failed: two runs and two jobs were written                       |
-| asks the real transport against a local server                           | the whole transport adapter                              | the case failed: no prompt version in the answer                         |
-| the stored question carries the same business key as the run and the job | the business key construction                            | the case failed: the keys differed                                        |
-| the attempt reservation is recorded before the provider is called        | the attempt reservation                                  | the case failed: no reservation row existed                              |
-| refuses a capability job's run in the legacy background path             | the legacy path's capability guard                       | the case failed: the legacy path reached the provider                    |
-| queues neither a run nor a job when the enqueue's own account gate refuses the account | the enqueue's `existingAccountIds` gate | the case failed: a run was written for an account the journal no longer held |
+Measured break (teeth break 12): the scoped GET was made to enqueue a run.
 
-### The second repair round
+| Mutation | Result |
+| --- | --- |
+| the GET inserts a run (`apps/web/src/app/api/intelligence/observations/route.ts`, temporary) | slice-b **3 failed / 22 passed**: the two-account case goes from 2 runs to 4, each provider-free case from 0 to 1 |
+| restored | slice-b **25 passed** |
 
-The final scoped review of this phase returned FAIL with two documentation findings, and the
-coordinator's teeth proof found one unpinned gate. All three are fixed:
+The three failures are exactly the three cases that read the inbox. No other
+case fails, because no other case reads it — the break is measured, not
+assumed.
 
-| Finding                                                                                                                       | Resolution                                                                                                                                              |
-| ----------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| the guide said nothing about the call is stored, while the run's `meta_json` holds the prompt version, the provider, the model, the duration and the token counts | the guide now states exactly what is kept — the refusal reason, the capability id and version, and the call metadata of a successful call — and keeps the true guarantee: never the prompt, never the answer, never a credential |
-| the guide called `provider_error` the only retryable code                                                                 | `lease_lost` and the worker's `handler_failed` are retried too, and `validation_failed` is not; the guide now says so                                            |
-| the enqueue's account gate was unpinned                                                                                       | the gate is kept and pinned directly: a new case drives the enqueue with a journal that reports no account and asserts no run and no job                             |
+### Finding 3 — the pairing is now pinned
 
-The earlier report's claim that the lease renewal and the opportunity recheck were confirmed by
-the suite was false: deleting either check left every case green. They are pinned now, and the
-claim is withdrawn rather than repeated.
+The claim was "the question appears on the correct card". Before this round
+no test rendered two cards, so a swap of the pairing was invisible.
 
-### What the suite does NOT prove
+The fifth card case mounts the INBOX (`IntelligenceInbox`) with two
+observations: one under review and carrying the question, one merely offered
+for review. It asserts that exactly one card carries the question, that this
+card shows the trade the question was made from ("trade-b") and not the other
+one ("trade-42"), and that the other card carries no question.
 
-- The account gate in `runtime/review-enqueue.ts` cannot be reached through the production
-  delivery path: the observation reader already returns null for a deleted account, and the
-  executions write refuses the delivery before the enqueue runs. The gate is defence in depth, and
-  it is now pinned DIRECTLY by a case that drives the enqueue with a journal that reports no
-  account — deleting the gate makes that case fail. The delivery-path case was renamed to state
-  what it really proves: that the whole delivery is refused.
-- The worker's optional renew interval is a test seam. The composition does not expose it, because
-  nothing in production needs to; the lease-lost case wires the worker directly.
+Measured break (teeth break 13): the inbox was made to pick the observation
+by position instead of by id (`apps/web/src/components/intelligence/inbox.tsx`,
+temporary).
 
-### Scope
+| Mutation | Result |
+| --- | --- |
+| `observationOf` returns `observationList[0]` | card suite **1 failed / 4 passed**: the card that carries the question shows "trade-42" instead of "trade-b" |
+| restored | card suite **5 passed** |
 
-No migration, no change under `apps/web/src/db/`, no new dependency, no change to the AI
-runtime's provider list, endpoint routing or policy caps, no component and no `apps/web/src/app/**`
-change. No existing test was weakened or deleted; the only change to an existing test file is one
-arbitrary failure-code literal in `apps/web/tests/intelligence-jobs.test.ts` (`invalid_payload` →
-`handler_failed`), because that string left the codebase. The boundary suite passes unchanged.
+The four other card cases do not notice the swap, because they render one
+card at a time. That is why the pairing needed its own case.
 
-The second repair round changed no production code at all: two documentation passages, one test
-rename and one new case. The enqueue's account gate was kept, as defence in depth, and is now
-pinned by a case that drives the enqueue directly.
+### The counts of the earlier breaks that this round touched
 
-### Summary
+The card suite grew from 4 cases to 5, so the two card-suite restore counts
+were re-measured on this tree rather than remembered:
 
-PASS for the repair round: the eight findings are fixed, the nine coverage holes are closed with
-cases that have been seen to fail, and the one remaining gap is recorded rather than hidden. The
-phase report (`docs/superpowers/reports/ai-native-journal-phase-23.md`) carries the full teeth
-evidence.
+| Break | Report before | Measured now |
+| --- | --- | --- |
+| 3 the card renders the question unmasked | 1 case failed, 4 passed | 1 case failed, **5 passed** |
+| 11 the question is rendered as a button | 1 case failed, 4 passed | 1 case failed, **5 passed** |
 
-PASS for the second repair round: the two guide contradictions are corrected against the code, and
-the enqueue's account gate is pinned by a case that fails when the gate is deleted. No claim in
-this report or in the phase report outruns the suite.
+Every other count in the report's teeth table is unchanged: this round added
+assertions to three existing slice-b cases and one new card case, and the
+slice-b suite still holds 25 cases.
+
+### What is still not claimed
+
+The report's "What is not claimed" section keeps its claim about a
+navigation ORDER between two cards: the pairing is not an order, and no order
+is claimed. The read guarantee moved from an assertion to a measured one; no
+claim was withdrawn.
+
+### Cleanliness
+
+Only the four files of this round were changed. Every mutation experiment was
+a temporary edit in this worktree, restored immediately and re-measured;
+`git diff --stat -- apps/web/src` is empty.
+
+## Reviewer Report — Phase 24 final re-review (after the three findings were fixed)
+
+Scope reviewed: `apps/web/tests/intelligence-slice-b.test.ts` (modified),
+`apps/web/tests/intelligence-insight-card.test.ts` (modified),
+`apps/web/tests/intelligence-insight-smoke.test.ts` (new, untracked),
+`docs/superpowers/reports/ai-native-journal-phase-24.md` (modified).
+Production code under `apps/web/src` is UNCHANGED in this diff — I read it for
+context only and did not modify it. `git diff --stat -- apps/web/src` is empty
+after this review.
+
+The three findings of the previous run are re-checked against the tree as it
+stands. **All three fixes are confirmed real, by measurement.** No new defect
+was found in the fixes, so the verdict is PASS.
+
+### What I measured myself (repo root, branch `codex/ai-native-journal-p24`, HEAD `728af87`)
+
+| Command | Measured |
+| --- | --- |
+| `npx vitest run` on the six intelligence suites (boundaries, insight-card, insight-smoke, ui, review-insight, slice-b) | 6 files, **82 passed** (boundaries 8, insight-card 4, insight-smoke 1, ui 13, review-insight 31, slice-b 25) |
+| `pnpm test` (the whole suite) | **120 files, 1433 tests passed**, 113 s |
+| `pnpm --filter web typecheck` | clean, exit 0 (`next typegen` then `tsc --noEmit`) |
+| `pnpm --filter web migrations:check` | `migration-checksums.json is up to date.` |
+| `npx prettier --check` on the four diff files | "All matched files use Prettier code style!" |
+| `pnpm format:check` (working tree) | **78 files** fail: **73 tracked** + **5 untracked** (`desktop/src-tauri/gen/schemas/{acl-manifests,capabilities,desktop-schema,windows-schema}.json`, `local-phase-c-brief.md`) |
+| `prettier --check .` on a pristine worktree at HEAD (`728af87`) | **73** files fail; the failing SET is **identical** to the working tree's tracked set (sorted diff: no differences) |
+| web + worker production build | not run — outside the permitted command list; the worker half is corroborated because the smoke builds the same artifact with `scripts/build-worker.mjs` and it ran green |
+
+### The three fixes, one by one
+
+**1. The stale-command case now isolates the revision check — CONFIRMED.**
+`apps/web/tests/intelligence-slice-b.test.ts:1231-1290`. The case DEFERS the
+review (the workflow leaves for `scheduled`, its revision moves on), applies
+the workflow effect so the workflow is back in `waiting_for_user` — a status
+where `acknowledge` is legal again — and only then sends the card's stale
+command. Measured in an out-of-repo copy of the repo (`E:/4004/Temp/p24-final`,
+this worktree untouched):
+
+| Mutation | Result | Verdict |
+| --- | --- | --- |
+| both revision checks disabled (`experience/commands.ts:111` **and** `experience/workflows.ts:261`) | slice-b **1 failed / 24 passed**; the stale case fails with "expected 200 to be 409" | the case bites |
+| only the service's check disabled (`commands.ts:111`) | slice-b **25/25 passed** | defence in depth, as the report says |
+| only the engine's check disabled (`workflows.ts:261`) | slice-b **25/25 passed** | defence in depth, as the report says |
+
+This is the decisive measurement, and it differs from the previous run's: with
+BOTH checks gone the stale command is **accepted (200)**, not merely refused
+for a different reason. The refusal the case asserts therefore comes from a
+revision check and from nothing else — the status guard no longer
+short-circuits it, because the workflow is back in `waiting_for_user`. The
+report's prose at `docs/superpowers/reports/ai-native-journal-phase-24.md:161-176`
+and its teeth row 10 ("both revision checks are disabled | 1 case failed |
+restored | 25 passed") reproduce exactly.
+
+**2. The focusable selector now covers links — CONFIRMED.**
+`apps/web/tests/intelligence-insight-card.test.ts:133` selects
+`"button, input, textarea, select, a[href], [tabindex]"`. Measured in the
+out-of-repo copy: injecting `<a href="/question">Open the question</a>` into the
+insight block of `apps/web/src/components/intelligence/interaction-card.tsx`
+makes the keyboard case fail ("expected [ <a href="/question"></a>, …(1) ] to
+have a length of 1 but got 2"). With the OLD selector (no `a[href]`) the same
+injection leaves the card suite 4/4 green — so the selector change, not the
+injection, is what closes the gap.
+
+**3. The keyboard case now renders both privacy states on their own mounts —
+CONFIRMED.**
+`apps/web/tests/intelligence-insight-card.test.ts:120-127` loops over
+`["true", "false"]` and gives each state its OWN mount, because
+`PrivacyProvider` reads the saved preference in a mount effect
+(`apps/web/src/components/privacy.tsx:17-37`). Measured in the out-of-repo
+copy:
+
+| Injection | Result |
+| --- | --- |
+| a `<button>` into the UNMASKED branch (`interaction-card.tsx:215-217`) | card case fails (focusable count 2) — the unmasked branch is exercised |
+| a `<button>` into the MASKED branch | card case fails (focusable count 2) — the masked branch is exercised |
+| a probe assertion that the masked iteration really contains `••••` and the unmasked one really contains the question text | passes — each iteration renders ITS OWN state, not the same state twice |
+| a single mount (remount removed) + a link in the unmasked branch | 4/4 green — the remount is load-bearing; without it the second iteration renders the first state again |
+
+The last row is the load-bearing one: the remount is not cosmetic. The report's
+teeth row 11 ("the question is rendered as a button | 1 case failed | restored |
+4 passed") reproduces exactly.
+
+### New findings
+
+None. The restructured stale case, the card case's remount loop and the two
+selectors were re-read line by line against the production code they exercise:
+
+- The stale case's defer path is sound: `defer` carries a `deferUntil`
+  (`NOW`), the schema requires it for a defer (`contracts/experience.ts:118`),
+  the transition `waiting_for_user → scheduled` is legal
+  (`contracts/experience.ts:170-176`), the effect then takes
+  `scheduled → waiting_for_user` (`contracts/experience.ts:207-211`), and
+  `applyWorkflowEffect` is the same call the observation route makes
+  (`api/intelligence/observations/route.ts:168`). The status/revision
+  assertions are exact (`toBe`, not only `toBeGreaterThan`), and the refusal's
+  `currentRevision` is compared to the workflow's own revision.
+- The card case's remount loop leaks nothing: a probe showed
+  `document.body.children.length === 1` after the loop (the loop's own
+  `container.remove()` plus `afterEach`'s removal), no React `act` warnings or
+  console output, and the four card cases pass unchanged.
+- The `ServedScope` type change to `InteractionIntent[]` and the `insightOf` /
+  `reviewOf` helpers narrow the previous structural type, and `typecheck` is
+  clean.
+
+### The report's own claims, re-measured
+
+Every teeth row of `docs/superpowers/reports/ai-native-journal-phase-24.md`
+reproduces on this tree (mutations run in the out-of-repo copy, then restored):
+
+| Break | Report | Measured |
+| --- | --- | --- |
+| 1 route stops attaching the insight | 6 cases failed | 6 |
+| 2 reader drops the evidence-revision check | 1 | 1 |
+| 3 card renders the question unmasked | 1 | 1 |
+| 4 reader returns the raw store row | 4 | 4 |
+| 5 wrong observation-id constant | 7 | 7 |
+| 5b observation-id comparison dropped | 1 | 1 |
+| 6 route reads another account's insight | 6 | 6 |
+| 6a account comparison dropped | 0 | 0 |
+| 7 command body builder carries the question as a correction | 1 | 1 |
+| 8 observation list ignores the scope | 2 | 2 |
+| 9 production registration drops the capability handler | the smoke failed | the smoke failed ("no question was stored", worker `processed:1 leaseHeld:true`) |
+| 10 both revision checks disabled | 1 | 1 |
+| 11 the question is rendered as a button | 1 | 1 |
+
+Restores: slice-b **25 passed**, card **4 passed**, smoke **1 passed** — the
+sizes the report states.
+
+### Cleanliness
+
+Only `.omp/reviewer-report.md` was written. Every mutation experiment ran in
+the out-of-repo copy `E:/4004/Temp/p24-final` (deleted afterwards); this
+worktree's `apps/web/src` and the three test files were never edited, and
+`git status --porcelain` shows the same four entries as before this review.
+The pristine worktree used for the format comparison was removed with
+`git worktree remove --force`.
