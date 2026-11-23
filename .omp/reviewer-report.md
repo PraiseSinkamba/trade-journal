@@ -1,5 +1,102 @@
 ## Verdict: PASS
 
+## Repair round (Run 6) — the read guarantee and the card pairing
+
+Scope: `apps/web/tests/intelligence-slice-b.test.ts` (modified),
+`apps/web/tests/intelligence-insight-card.test.ts` (modified),
+`docs/superpowers/reports/ai-native-journal-phase-24.md` (modified).
+**No production code changed**: `git diff --stat -- apps/web/src` is empty on
+this tree, and the two breaks below were temporary edits that were restored
+and re-measured.
+
+### What I measured myself
+
+| Command | Measured |
+| --- | --- |
+| `pnpm exec vitest run apps/web/tests/intelligence-slice-b.test.ts apps/web/tests/intelligence-insight-card.test.ts apps/web/tests/intelligence-ui.test.ts apps/web/tests/intelligence-boundaries.test.ts` | 4 files, **51 passed** (boundaries 8, insight-card 5, ui 13, slice-b 25), exit 0, 16 s |
+| `pnpm --filter web typecheck` | clean, exit 0, 19 s (95 s on the cold run) |
+
+The whole-project `pnpm test` and `pnpm build` were NOT run in this round: the
+destination gate runs them once, on the integrated feature.
+
+### Finding 1 — the read guarantee is now pinned
+
+The claim was "the GET stays a read: it never enqueues, never calls a provider
+and never writes". Before this round nothing held it.
+
+The three cases that read the inbox now count the runs, the jobs, the daily
+attempt reservations and the provider calls BEFORE the read and compare all
+four AFTER it:
+
+- "serves each account its own question" reads twice, once per account, and
+  compares after BOTH reads. The counts it compares are not empty: 2 runs,
+  2 reservations, 2 provider calls before the reads.
+- "stores no question without a provider and leaves the review usable" now
+  READS the inbox, and asserts zero provider calls after the read.
+- "stores no question for an account the policy does not list" now reads the
+  inbox as well, with the same assertion.
+
+Measured break (teeth break 12): the scoped GET was made to enqueue a run.
+
+| Mutation | Result |
+| --- | --- |
+| the GET inserts a run (`apps/web/src/app/api/intelligence/observations/route.ts`, temporary) | slice-b **3 failed / 22 passed**: the two-account case goes from 2 runs to 4, each provider-free case from 0 to 1 |
+| restored | slice-b **25 passed** |
+
+The three failures are exactly the three cases that read the inbox. No other
+case fails, because no other case reads it — the break is measured, not
+assumed.
+
+### Finding 3 — the pairing is now pinned
+
+The claim was "the question appears on the correct card". Before this round
+no test rendered two cards, so a swap of the pairing was invisible.
+
+The fifth card case mounts the INBOX (`IntelligenceInbox`) with two
+observations: one under review and carrying the question, one merely offered
+for review. It asserts that exactly one card carries the question, that this
+card shows the trade the question was made from ("trade-b") and not the other
+one ("trade-42"), and that the other card carries no question.
+
+Measured break (teeth break 13): the inbox was made to pick the observation
+by position instead of by id (`apps/web/src/components/intelligence/inbox.tsx`,
+temporary).
+
+| Mutation | Result |
+| --- | --- |
+| `observationOf` returns `observationList[0]` | card suite **1 failed / 4 passed**: the card that carries the question shows "trade-42" instead of "trade-b" |
+| restored | card suite **5 passed** |
+
+The four other card cases do not notice the swap, because they render one
+card at a time. That is why the pairing needed its own case.
+
+### The counts of the earlier breaks that this round touched
+
+The card suite grew from 4 cases to 5, so the two card-suite restore counts
+were re-measured on this tree rather than remembered:
+
+| Break | Report before | Measured now |
+| --- | --- | --- |
+| 3 the card renders the question unmasked | 1 case failed, 4 passed | 1 case failed, **5 passed** |
+| 11 the question is rendered as a button | 1 case failed, 4 passed | 1 case failed, **5 passed** |
+
+Every other count in the report's teeth table is unchanged: this round added
+assertions to three existing slice-b cases and one new card case, and the
+slice-b suite still holds 25 cases.
+
+### What is still not claimed
+
+The report's "What is not claimed" section keeps its claim about a
+navigation ORDER between two cards: the pairing is not an order, and no order
+is claimed. The read guarantee moved from an assertion to a measured one; no
+claim was withdrawn.
+
+### Cleanliness
+
+Only the four files of this round were changed. Every mutation experiment was
+a temporary edit in this worktree, restored immediately and re-measured;
+`git diff --stat -- apps/web/src` is empty.
+
 ## Reviewer Report — Phase 24 final re-review (after the three findings were fixed)
 
 Scope reviewed: `apps/web/tests/intelligence-slice-b.test.ts` (modified),

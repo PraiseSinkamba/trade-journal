@@ -70,6 +70,28 @@ The preconditions the Phase B chain needs, which the proof sets up itself:
 - the review STARTED before the GET: the scoped surface serves an
   observation-review intent only for a workflow that waits for the operator.
 
+### The read is free
+
+The plan's rule is that reading the inbox must never itself trigger a paid
+request. Three cases now HOLD that rule instead of asserting it in prose.
+The runs, the jobs and the daily attempt reservations — the three things the
+provider leg writes — are counted BEFORE the scoped read and must be exactly
+the same AFTER it, and the provider call count must not move either.
+
+The case with two accounts reads twice, once per account, and the counts are
+compared after BOTH reads. The two cases without a provider read the inbox as
+well: the review is served, no question is on it, and the read reaches no
+provider. Without those two reads the "the read is free" half would be
+unproven exactly where there is nothing to spend.
+
+### The question is on the right card
+
+The inbox pairs every intent with its OWN observation, by id. The card case
+renders the INBOX — not a card in isolation — with two observations: one
+under review and carrying the question, one merely offered for review. The
+question must sit on the card that shows the trade it was made from, and on
+no other card.
+
 The provider cases drive the PRODUCTION worker registration, because it
 registers `asyncHandlers` — the Slice B file's own worker never runs a
 `run_capability` job. The production registration also carries the
@@ -85,18 +107,18 @@ allowance is spent across cases.
 
 ### Cases
 
-| Case                                                                 | Asserts                                                                                                                                                                                             |
-| -------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| serves each account its own question                                 | two accounts, two trades, two answers; each scoped GET serves its own question and the intent's subject is the observation's id                                                                     |
-| links the question to the source revision it was made from           | the served `sourceRevision` equals the observation's `sourceRevision`                                                                                                                               |
-| serves the question only for a revision the review shows as evidence | the reader answers for the shown revision and nothing for another one or another observation                                                                                                        |
-| hides the question of a corrected source and keeps the stored row    | after the correction the card is empty, the provider was asked once, and the stored row survives                                                                                                    |
-| stores no question without a provider and leaves the review usable   | zero provider calls, no run, no question; the observation and its opportunity are there, the review starts and the operator can acknowledge it                                                      |
-| stores no question for an account the policy does not list           | zero provider calls, no question, the review still usable                                                                                                                                           |
-| serves a question only inside the scope of its own account           | another account's scope serves nothing and never the question; an unknown account's scope is refused with 403 `scope_denied`                                                                        |
-| serves the question again after the journal is reopened              | the journal is closed and reopened on the same directory, the route module is imported again, and the question is still served                                                                      |
-| takes the operator's command while the question is on the card       | the card's own command body carries only the action id, the revision and the action; the command route accepts it, the review completes, and the question never crosses the wire inside the command |
-| still refuses a stale command while the question is on the card      | the revision the card carries is the workflow's own; after a deferral the workflow waits again at a newer revision, and the card's command is refused with 409 `stale_revision`                     |
+| Case                                                                 | Asserts                                                                                                                                                                                                                                          |
+| -------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| serves each account its own question                                 | two accounts, two trades, two answers; each scoped GET serves its own question and the intent's subject is the observation's id; after BOTH reads the runs, the jobs, the attempt reservations and the provider calls are exactly what they were |
+| links the question to the source revision it was made from           | the served `sourceRevision` equals the observation's `sourceRevision`                                                                                                                                                                            |
+| serves the question only for a revision the review shows as evidence | the reader answers for the shown revision and nothing for another one or another observation                                                                                                                                                     |
+| hides the question of a corrected source and keeps the stored row    | after the correction the card is empty, the provider was asked once, and the stored row survives                                                                                                                                                 |
+| stores no question without a provider and leaves the review usable   | zero provider calls, no run, no question; the observation and its opportunity are there, the review starts, the inbox is READ as well and the read spends nothing, and the operator can acknowledge the review                                   |
+| stores no question for an account the policy does not list           | zero provider calls, no question, the review still usable, and the read of the inbox reaches no provider                                                                                                                                         |
+| serves a question only inside the scope of its own account           | another account's scope serves nothing and never the question; an unknown account's scope is refused with 403 `scope_denied`                                                                                                                     |
+| serves the question again after the journal is reopened              | the journal is closed and reopened on the same directory, the route module is imported again, and the question is still served                                                                                                                   |
+| takes the operator's command while the question is on the card       | the card's own command body carries only the action id, the revision and the action; the command route accepts it, the review completes, and the question never crosses the wire inside the command                                              |
+| still refuses a stale command while the question is on the card      | the revision the card carries is the workflow's own; after a deferral the workflow waits again at a newer revision, and the card's command is refused with 409 `stale_revision`                                                                  |
 
 The card test proves the label, the question while privacy is off, and the
 mask while privacy is on. A fourth card case proves the keyboard is left
@@ -105,6 +127,12 @@ the card is EXACTLY the one it had without the question — the Acknowledge
 button and nothing else — and the evidence list is untouched. It renders
 BOTH privacy states, each on its own mount, because the provider reads the
 saved preference when it mounts.
+
+A FIFTH card case proves the PAIRING. It mounts the inbox with two
+observations — one under review and carrying the question, one merely
+offered for review — and asserts that the question sits on the card that
+shows the trade it was made from ("trade-b") and on no other card. The card
+that shows the other trade carries no question at all.
 
 The two command cases close the last leg of the plan's chain. The provider
 path previously stopped at the scoped GET; the operator's command was only
@@ -123,7 +151,7 @@ seen to pass again. Both results are recorded.
 | --- | ----------------------------------------------------------- | ------------------------------------------------------------- | ---------------- | -------- | ---------------- |
 | 1   | the scoped GET serves the question                          | the route stops attaching the insight                         | 6 cases failed   | restored | 25 passed        |
 | 2   | the question is served only for a revision the review shows | the reader drops the evidence-revision check                  | 1 case failed    | restored | 25 passed        |
-| 3   | the card masks the question under privacy                   | the card renders the question unmasked                        | 1 case failed    | restored | 4 passed         |
+| 3   | the card masks the question under privacy                   | the card renders the question unmasked                        | 1 case failed    | restored | 5 passed         |
 | 4   | only the question and its revision cross the wire           | the reader returns the raw store row                          | 4 cases failed   | restored | 25 passed        |
 | 5   | the question belongs to the observation it is served for    | the reader compares the observation id with a wrong constant  | 7 cases failed   | restored | 25 passed        |
 | 5b  | the question belongs to the observation it is served for    | the reader drops the observation id comparison                | 1 case failed    | restored | 25 passed        |
@@ -133,13 +161,26 @@ seen to pass again. Both results are recorded.
 | 8   | the question is served only inside the account's scope      | the observation list ignores the scope                        | 2 cases failed   | restored | 25 passed        |
 | 9   | the shipped worker bundle stores the question               | the production registration drops the capability handler      | the smoke failed | restored | the smoke passed |
 | 10  | the workflow's revision check still bites                   | both revision checks are disabled                             | 1 case failed    | restored | 25 passed        |
-| 11  | the question adds no control to the card                    | the question is rendered as a button                          | 1 case failed    | restored | 4 passed         |
+| 11  | the question adds no control to the card                    | the question is rendered as a button                          | 1 case failed    | restored | 5 passed         |
+| 12  | reading the inbox spends nothing                            | the scoped GET enqueues a run                                 | 3 cases failed   | restored | 25 passed        |
+| 13  | the question is on the card of its own observation          | the inbox picks the observation by position, not by id        | 1 case failed    | restored | 5 passed         |
 
 Every count in this table was MEASURED on the tree this report describes,
 with the two new cases in place: the slice-b suite holds 25 cases, the card
-suite 4. The counts of breaks 1, 5 and 6 therefore rose with the new cases —
+suite 5. The counts of breaks 1, 5 and 6 therefore rose with the new cases —
 the two command cases assert a served question, so they fail with the rest
 when the surface stops serving one.
+
+Breaks 12 and 13 are the repair round's own teeth. Break 12 makes the
+scoped GET enqueue a run — the exact defect the read guarantee exists for —
+and the three cases that read the inbox fail on the run count: two reads in
+the two-account case take the count from 2 to 4, one read in each of the two
+provider-free cases takes it from 0 to 1. Nothing else fails, because the
+other cases do not read the inbox. Break 13 makes the inbox pick the
+observation by POSITION instead of by id — the mistake the pairing case
+exists for — and the fifth card case fails: the card that carries the
+question then shows the other trade's facts. The four other card cases do
+not notice, because they render one card at a time.
 
 Break 8 widens break 6: it removes the scope filter from the observation
 list itself, so another account's observation enters the scope at all. Two
@@ -208,6 +249,17 @@ scope biting end to end, through the route.
 | web + worker production build                                                                                           | succeeded                                                                                          |
 | bundled worker smoke                                                                                                    | the shipped worker stored the question and the app served it                                       |
 
+### The checks of the repair round
+
+The repair round added assertions and one case; it changed no production
+code. The whole suite and the production build were NOT re-run in this round
+— the destination gate runs them once, on the integrated feature.
+
+| Command                                                                                                                                                                                                   | Result                                     |
+| --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------ |
+| `pnpm exec vitest run apps/web/tests/intelligence-slice-b.test.ts apps/web/tests/intelligence-insight-card.test.ts apps/web/tests/intelligence-ui.test.ts apps/web/tests/intelligence-boundaries.test.ts` | 4 files, 51 passed, exit 0, 16 s           |
+| `pnpm --filter web typecheck`                                                                                                                                                                             | clean, exit 0, 19 s (95 s on the cold run) |
+
 The format failures are pre-existing, and the count is measured, not
 remembered: a pristine worktree at the parent commit fails the same 73
 TRACKED files. The working tree shows 78 in total, and the extra five are
@@ -258,7 +310,10 @@ process.
 - No migration, no new dependency, no new prompt, and no stored provider
   response: the question is the only text the journal keeps.
 - The GET stays a read. It never enqueues, never calls a provider and never
-  writes, so opening the inbox never spends an allowance.
+  writes, so opening the inbox never spends an allowance. Three cases hold
+  that: the counts of the runs, the jobs and the attempt reservations, and
+  the number of provider calls, are the same before and after the read
+  (teeth break 12).
 
 ## What is not claimed
 
@@ -272,7 +327,8 @@ process.
 - The keyboard case proves the card's controls are still native and named
   while the question is on it. It does not prove an ORDER of navigation
   between two cards: the inbox never had one, and the question adds no
-  control to order.
+  control to order. What the fifth card case proves is the PAIRING — the
+  question sits on the card of the observation it was made from (teeth break 13) — and the pairing is not an order of navigation.
 - The bundled-worker smoke proves the shipped bundle asks the provider once
   and stores the question, and that the app serves it. It does not prove the
   bundle against a REAL provider: the endpoint is a loopback stub, so the
@@ -366,3 +422,39 @@ one process per file); and the import-graph rules still hold.
    states, each on its own mount, because the provider reads the saved
    preference when it mounts. Teeth break 11 measures it: with the question
    rendered as a button the case fails.
+
+**Run 6** found two claims the suite could not fail. Neither was a defect in
+the production code: both were claims the TESTS did not hold.
+
+10. The read guarantee was asserted in prose and in this report, and nothing
+    held it. Ten scoped reads, no assertion on the runs, the jobs, the attempt
+    reservations or the provider count, and the two provider-free cases never
+    read the inbox at all. A GET that enqueued a run and a job would have
+    left every case green. The three cases that read the inbox now count all
+    four before the read and after it, and the provider-free cases read the
+    inbox as well. Teeth break 12 measures it: with the scoped GET enqueuing a
+    run, those three cases fail on the run count.
+11. The question had to appear on the CORRECT card, and nothing rendered two
+    cards at once, so a swap of the pairing would have been invisible. The
+    fifth card case mounts the inbox with two observations — one under review
+    and carrying the question, one merely offered for review — and pins the
+    question to the card of the observation it was made from. Teeth break 13
+    measures it: with the inbox picking the observation by position instead
+    of by id, the case fails on the wrong trade's facts.
+
+The keyboard case stayed where it was: it was an addition, not a substitute
+for the pairing, and break 11 still measures what it measured. Both claims
+survive with teeth behind them, and nothing had to be withdrawn — the
+Boundaries sentence about the read now has a break under it, and the "not
+claimed" section still says the same thing: a navigation ORDER between two
+cards is not claimed, and the pairing is not an order.
+
+This round changed NO production code. The breaks were temporary edits, each
+restored and each re-measured: the tree this report describes carries the
+same `apps/web/src` as the commit before it.
+
+The operations guide carries the same sentence in prose — "Reading the inbox
+never asks a provider. The question was asked when the trade changed; opening
+the inbox only reads what the journal already stored." (`docs/intelligence-operations.md`).
+The guide was NOT changed in this round; the sentence is now held by the
+three cases above, and by teeth break 12.

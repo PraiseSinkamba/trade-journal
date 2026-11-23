@@ -348,6 +348,20 @@ const reviewOf = (intent: InteractionIntent) => {
 };
 
 /**
+ * Everything a paid request would touch.
+ *
+ * Reading the inbox is free: the runs, the jobs and the daily attempt
+ * reservations the provider leg writes, and the number of provider calls,
+ * must be exactly the same before and after a scoped read.
+ */
+const spendState = (providerCalls: number) => ({
+  runs: db.select().from(intelligenceRuns).all().length,
+  jobs: db.select().from(intelligenceJobs).all().length,
+  reservations: db.select().from(intelligenceBudgetReservations).all().length,
+  providerCalls,
+});
+
+/**
  * The scoped surface, as the inbox reads it.
  *
  * The scope names one account, so the answer holds that account's reviews
@@ -959,6 +973,13 @@ describe("the review question on the card", () => {
     );
     expect(betaStart.status).toBe(200);
 
+    // Reading the inbox is free. The runs, the jobs and the attempt
+    // reservations a paid request would write are counted BEFORE the scoped
+    // reads, and the provider must not be called by a read.
+    const before = spendState(calls.length);
+    expect(before.runs).toBeGreaterThan(0);
+    expect(before.reservations).toBeGreaterThan(0);
+
     // The scoped surface serves the question of the account it names, and
     // nothing else crosses the scope.
     const alphaBody = await servedScope(alpha);
@@ -976,6 +997,10 @@ describe("the review question on the card", () => {
       question: BETA_QUESTION,
       sourceRevision: betaObservation.sourceRevision,
     });
+
+    // The reads spent nothing: no run, no job, no reserved attempt and no
+    // provider call. Opening the inbox never buys a question.
+    expect(spendState(calls.length)).toEqual(before);
   });
 
   it("links the question to the source revision it was made from", async () => {
@@ -1086,6 +1111,16 @@ describe("the review question on the card", () => {
       const observation = observations()[0]!;
       const start = await postObservations(observationsPost({ observationId: observation.id }));
       expect(start.status).toBe(200);
+
+      // The inbox is read as well, and the read is free: it reaches no
+      // provider and spends no allowance. The review is served without a
+      // question.
+      const before = spendState(calls.length);
+      const read = await servedScope(account);
+      expect(read.intents).toHaveLength(1);
+      expect(insightOf(read.intents[0]!)).toBeUndefined();
+      expect(spendState(calls.length)).toEqual(before);
+
       const answer = (await start.json()) as {
         intent: {
           kind: string;
@@ -1130,6 +1165,15 @@ describe("the review question on the card", () => {
     const observation = observations()[0]!;
     const start = await postObservations(observationsPost({ observationId: observation.id }));
     expect(start.status).toBe(200);
+
+    // The inbox is read as well, and the read is free: it reaches no
+    // provider and spends no allowance.
+    const before = spendState(calls.length);
+    const read = await servedScope(account);
+    expect(read.intents).toHaveLength(1);
+    expect(insightOf(read.intents[0]!)).toBeUndefined();
+    expect(spendState(calls.length)).toEqual(before);
+
     const answer = (await start.json()) as {
       intent: {
         kind: string;
