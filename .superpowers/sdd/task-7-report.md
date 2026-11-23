@@ -6,10 +6,10 @@
 
 ## Commit
 
-| Field | Value |
-|---|---|
-| SHA | `cf6736dc6bb57872a1b4aa5911c4201198cae5ff` |
-| Branch | `shadcn-adoption` |
+| Field   | Value                                                  |
+| ------- | ------------------------------------------------------ |
+| SHA     | `cf6736dc6bb57872a1b4aa5911c4201198cae5ff`             |
+| Branch  | `shadcn-adoption`                                      |
 | Message | `Initialise shadcn in apps/web and merge theme tokens` |
 
 Files committed: `apps/web/components.json` (created), `apps/web/package.json` (modified).
@@ -18,18 +18,18 @@ Files committed: `apps/web/components.json` (created), `apps/web/package.json` (
 
 ## shadcn CLI output (actual values)
 
-| Field | Value |
-|---|---|
-| `style` | `base-nova` (not `new-york`) |
-| `base` | `neutral` |
-| `tsx` | `true` |
-| `tailwind.cssVariables` | `true` |
-| `tailwind.version` | `4` |
-| `aliases.ui` | `@/components/ui` → `src/components/ui` ✓ |
-| `aliases.utils` | `@/lib/utils` → `src/lib/utils` ✓ |
-| `aliases.lib` | `@/lib` → `src/lib` ✓ |
-| `aliases.hooks` | `@/hooks` (bonus; not in brief) |
-| `aliases.css` | **absent** — brief expected `aliases.css == "src/app/globals.css"` but the CLI did not emit it |
+| Field                   | Value                                                                                          |
+| ----------------------- | ---------------------------------------------------------------------------------------------- |
+| `style`                 | `base-nova` (not `new-york`)                                                                   |
+| `base`                  | `neutral`                                                                                      |
+| `tsx`                   | `true`                                                                                         |
+| `tailwind.cssVariables` | `true`                                                                                         |
+| `tailwind.version`      | `4`                                                                                            |
+| `aliases.ui`            | `@/components/ui` → `src/components/ui` ✓                                                      |
+| `aliases.utils`         | `@/lib/utils` → `src/lib/utils` ✓                                                              |
+| `aliases.lib`           | `@/lib` → `src/lib` ✓                                                                          |
+| `aliases.hooks`         | `@/hooks` (bonus; not in brief)                                                                |
+| `aliases.css`           | **absent** — brief expected `aliases.css == "src/app/globals.css"` but the CLI did not emit it |
 
 Note: `aliases.css` is not emitted by `base-nova` style. The CSS file path is tracked in `tailwind.css` instead (`"src/app/globals.css"`). No adjustment was made since the brief says "adjust per actual CLI output if the style is nova instead of new-york, that's fine" — same tolerance applies to absent `aliases.css`.
 
@@ -58,10 +58,12 @@ Note: `aliases.css` is not emitted by `base-nova` style. The CSS file path is tr
 Both token sets confirmed present — no merge needed.
 
 **`:root` block contains:**
+
 - shadcn semantic tokens: `--background`, `--foreground`, `--primary`, `--card`, `--card-foreground`, `--popover`, `--popover-foreground`, `--secondary`, `--secondary-foreground`, `--muted`, `--muted-foreground`, `--accent`, `--accent-foreground`, `--destructive`, `--destructive-foreground`, `--border`, `--input`, `--ring`, `--radius`
 - project tokens: `--brand`, `--profit`, `--profit-fill`, `--loss`, `--neutral-mid`, `--series-1` through `--series-8`, `--viz-surface`, `--ink-muted`, `--gridline`, `--baseline`
 
 **`.dark` block contains:**
+
 - same shadcn semantic tokens with dark values
 - same project tokens with dark values
 

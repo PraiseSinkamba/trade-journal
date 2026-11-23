@@ -70,7 +70,10 @@ export const ibkr: ImportFormat = {
         !Number.isFinite(price)
       ) {
         skippedRows++;
-        skippedReasons.push({ row: null, reason: "missing symbol, side, quantity, price or timestamp" });
+        skippedReasons.push({
+          row: null,
+          reason: "missing symbol, side, quantity, price or timestamp",
+        });
         continue;
       }
       executions.push({

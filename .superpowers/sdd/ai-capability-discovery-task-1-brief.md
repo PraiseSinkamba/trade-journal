@@ -1,14 +1,17 @@
 ### Task 1: Establish the Phase 2 capability contract from current behavior
 
 **Files:**
+
 - Create: `docs/superpowers/research/2026-10-10-ai-capability-extraction.md`
 - Test: no new tests; discovery validates against existing source and focused test evidence only.
 
 **Interfaces:**
+
 - Consumes: `readAiRequest`, `accountContext`, `queryTrades`, `getTradeByKey`, `listExecutions`, the current Ask/recap/critique routes, and AI scope/UI tests.
 - Produces: an evidence-cited discovery record that a follow-up implementation plan can use to define exact capability inputs, outputs, ownership, bounds, and route cutovers.
 
 **Global constraints:**
+
 - The completed AI execution foundation is already present in `apps/web/src/server/ai-runtime.ts`, `ai-contracts.ts`, and `ai-prompts.ts`; do not modify it.
 - Preserve validated account/filter/date/timezone scope from `readAiRequest`; missing or invalid input must never widen scope.
 - Recap and critique remain direct calls. AI import remains a schema-bound preview/review/commit workflow.

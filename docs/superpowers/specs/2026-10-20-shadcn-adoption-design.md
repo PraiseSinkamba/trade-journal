@@ -131,9 +131,11 @@ Each ADR is committed on `feat/shadcn-adoption` ahead of any dep installation.
 ## Verification + gates
 
 **Per primitive** (after each `shadcn add` + restore commit):
+
 - `pnpm --filter web typecheck` for fast feedback.
 
 **After all swaps** (full gate):
+
 ```
 pnpm format:check
 pnpm typecheck
@@ -151,11 +153,13 @@ pnpm --filter web build
 - Test 5 — OptionSelect: open `OptionSelect` on `reports` page, choose “All”, assert query string contains `option:` encoding; pick specific value, assert normal value.
 
 **Smoke run** (manual sanity, after E2E passes):
+
 - `pnpm --filter web dev`, navigate `127.0.0.1:3000`, eyeball HoverHint, profit/loss Badge labels, sidebar brand/logo, prefers-reduced-motion behaviour.
 
 **Reviewer gate:** reviewer writes `.omp/reviewer-report.md` with `## Verdict: PASS`; `.omp/hooks/pre/reviewer-gate.ts` allows `git commit` only on PASS. CI runs gates + E2E on push.
 
 **Hard blocks re-checked:**
+
 - No raw `fetch`/`axios`/`http.` in `packages/importers/src/` (unchanged).
 - No P&L colour as the sole signal.
 - No new telemetry endpoint.

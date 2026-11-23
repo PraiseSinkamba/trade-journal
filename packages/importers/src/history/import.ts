@@ -453,7 +453,13 @@ export function importTradeHistory(rawText: string, options: ImportOptions = {})
           issues,
         ),
         header,
-        stats: { rows: records.length, parsedTrades: 0, skippedRows: 0, skippedReasons: [], duplicatesRemoved: 0 },
+        stats: {
+          rows: records.length,
+          parsedTrades: 0,
+          skippedRows: 0,
+          skippedReasons: [],
+          duplicatesRemoved: 0,
+        },
       };
     }
     adapter = match.adapter;

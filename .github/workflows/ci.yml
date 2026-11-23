@@ -49,8 +49,8 @@ jobs:
     steps:
       - uses: actions/checkout@v6
         with:
-          # The sidecar and the icons are gitignored, so this job needs the
-          # full history only for the benchmark baseline it does not build.
+          # Generated sidecar, icons, and web resources are prepared below;
+          # this job needs only the checked-out commit.
           fetch-depth: 1
       # pnpm version comes from the packageManager field in package.json
       - uses: pnpm/action-setup@v6
@@ -68,6 +68,14 @@ jobs:
         run: pnpm --filter desktop setup:sidecar
       - name: Generate the bundle icons (gitignored, reproducible)
         run: pnpm --filter desktop setup:icons
+      # Tauri's Rust build script validates bundle resources even for cargo
+      # check/test, so generate the real packaged web tree before those gates.
+      - name: Build the packaged web resources
+        run: pnpm --filter desktop build:web
+        env:
+          NEXT_TELEMETRY_DISABLED: "1"
+          # Web builds import routes that initialize storage.
+          JOURNAL_DATA_DIR: ${{ runner.temp }}/journal-desktop-build
       - name: cargo check (desktop)
         run: cargo check --manifest-path desktop/src-tauri/Cargo.toml
       - name: cargo test (desktop)
@@ -76,14 +84,10 @@ jobs:
         run: cargo check --manifest-path desktop/src-tauri/scripts/gen_icons/Cargo.toml
       - name: cargo test (icon generator)
         run: cargo test --manifest-path desktop/src-tauri/scripts/gen_icons/Cargo.toml
+      # Reuse the web tree and icons prepared above instead of rebuilding them
+      # through build:app.
       - name: Build the packaged application
-        run: pnpm --filter desktop build:app
-        env:
-          NEXT_TELEMETRY_DISABLED: "1"
-          # The desktop's build script builds the web tree first, and a build
-          # that imports the routes initializes storage; the runner's
-          # filesystem root is not writable.
-          JOURNAL_DATA_DIR: ${{ runner.temp }}/journal-desktop-build
+        run: pnpm --filter desktop tauri build
       - name: Audit the packaged runtime tree (the tree this job just built)
         run: pnpm exec vitest run apps/web/tests/intelligence-packaging.test.ts
         env:
@@ -164,6 +168,7 @@ jobs:
       - name: Verify the benchmark gates (SQLITE_BUSY, lost effects, failed requests, drained queue, p95 regression)
         run: python3 scripts/verify-features.py --benchmark-result "$RUNNER_TEMP/ai-native-journal-benchmark.json"
       - uses: actions/upload-artifact@v4
+        if: always()
         with:
           name: benchmark-result
           path: ${{ runner.temp }}/ai-native-journal-benchmark.json

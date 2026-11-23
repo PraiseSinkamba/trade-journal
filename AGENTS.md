@@ -43,19 +43,19 @@ App boundaries:
 
 ## Key Directories
 
-| Path | Purpose |
-| --- | --- |
-| `packages/core/src/` | Domain engine: `types.ts`, `round-trips.ts`, `metrics.ts`, `equity.ts`, `aggregate.ts`, `analysis.ts`, `edge-score.ts`, `time.ts`, `adherence.ts`. Public exports via `src/index.ts`. |
-| `packages/importers/src/` | Parsers: `csv.ts`, `dates.ts`, `numbers.ts`, `types.ts`, `formats/{fills,simple,metatrader,ibkr,thinkorswim,tradezella,ninjatrader,generic,history}.ts`, `history/adapters/{adapter,generic,metatrader,mt5deals,tradingview}.ts`. |
-| `apps/web/src/db/` | Drizzle schema (`schema.ts`), idempotent `BOOTSTRAP_SQL` (`bootstrap.ts`), singleton SQLite client (`index.ts`). |
-| `apps/web/src/server/` | Server-only logic: `api.ts`, `auth.ts`, `crypto.ts`, `executions.ts`, `rebuild.ts`, `sync.ts`, `settings.ts`, `ai*.ts`, `ninjatrader-{import,order}.ts`, `prop-firms.ts`, `market-data/`, `ibkr-sync-timezone.ts`. |
-| `apps/web/src/app/api/<resource>/route.ts` | One route handler per resource. ~24 resources: `trades`, `executions`, `import`, `stats`, `analysis`, `journal`, `ai/{recap,critique,ask}`, `market-data`, `prop-firms`, `brokers`, etc. |
-| `apps/web/src/components/charts/` | ECharts/canvas wrappers (`tokens.ts` reads CSS variables). |
-| `apps/web/src/components/ui/` | Radix-based primitives (button, dialog, dropdown, table, tabs, tooltip, calendar, date-picker, …). |
-| `apps/web/tests/` | 54 Vitest files for web logic (auth, importer integration, AI feedback, dashboard, market data, prop firms, …). |
-| `packages/core/tests/`, `packages/importers/tests/` | Engine + importer unit tests. |
-| `docs/` | Public guides: `edge-score.md`, `importers.md`, `market-data.md`, `prop-firms.md`, `design.md`, `calendar-insights.md`, `performance-trends.md`, `trade-explorer.md`, `ai-scope.md`, `intelligence.md`, `intelligence-operations.md`, `samples/`, plus the live-learning docs `MISTAKES.md` (raw ledger) and `LEARNINGS.md` (distilled principles) — see the **Live learning workflow** below. |
-| `scripts/` | `check-licenses.mjs` (CI gate), `verify-features.py`, `benchmark-journal.py`. |
+| Path                                                | Purpose                                                                                                                                                                                                                                                                                                                                                                                        |
+| --------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `packages/core/src/`                                | Domain engine: `types.ts`, `round-trips.ts`, `metrics.ts`, `equity.ts`, `aggregate.ts`, `analysis.ts`, `edge-score.ts`, `time.ts`, `adherence.ts`. Public exports via `src/index.ts`.                                                                                                                                                                                                          |
+| `packages/importers/src/`                           | Parsers: `csv.ts`, `dates.ts`, `numbers.ts`, `types.ts`, `formats/{fills,simple,metatrader,ibkr,thinkorswim,tradezella,ninjatrader,generic,history}.ts`, `history/adapters/{adapter,generic,metatrader,mt5deals,tradingview}.ts`.                                                                                                                                                              |
+| `apps/web/src/db/`                                  | Drizzle schema (`schema.ts`), idempotent `BOOTSTRAP_SQL` (`bootstrap.ts`), singleton SQLite client (`index.ts`).                                                                                                                                                                                                                                                                               |
+| `apps/web/src/server/`                              | Server-only logic: `api.ts`, `auth.ts`, `crypto.ts`, `executions.ts`, `rebuild.ts`, `sync.ts`, `settings.ts`, `ai*.ts`, `ninjatrader-{import,order}.ts`, `prop-firms.ts`, `market-data/`, `ibkr-sync-timezone.ts`.                                                                                                                                                                             |
+| `apps/web/src/app/api/<resource>/route.ts`          | One route handler per resource. ~24 resources: `trades`, `executions`, `import`, `stats`, `analysis`, `journal`, `ai/{recap,critique,ask}`, `market-data`, `prop-firms`, `brokers`, etc.                                                                                                                                                                                                       |
+| `apps/web/src/components/charts/`                   | ECharts/canvas wrappers (`tokens.ts` reads CSS variables).                                                                                                                                                                                                                                                                                                                                     |
+| `apps/web/src/components/ui/`                       | Radix-based primitives (button, dialog, dropdown, table, tabs, tooltip, calendar, date-picker, …).                                                                                                                                                                                                                                                                                             |
+| `apps/web/tests/`                                   | 54 Vitest files for web logic (auth, importer integration, AI feedback, dashboard, market data, prop firms, …).                                                                                                                                                                                                                                                                                |
+| `packages/core/tests/`, `packages/importers/tests/` | Engine + importer unit tests.                                                                                                                                                                                                                                                                                                                                                                  |
+| `docs/`                                             | Public guides: `edge-score.md`, `importers.md`, `market-data.md`, `prop-firms.md`, `design.md`, `calendar-insights.md`, `performance-trends.md`, `trade-explorer.md`, `ai-scope.md`, `intelligence.md`, `intelligence-operations.md`, `samples/`, plus the live-learning docs `MISTAKES.md` (raw ledger) and `LEARNINGS.md` (distilled principles) — see the **Live learning workflow** below. |
+| `scripts/`                                          | `check-licenses.mjs` (CI gate), `verify-features.py`, `benchmark-journal.py`.                                                                                                                                                                                                                                                                                                                  |
 
 ## Development Commands
 
@@ -239,8 +239,8 @@ append-only edits keep the diffs clean.
 
 **How this connects to other rules**:
 
-- The `MISTAKES.md` ↔ `LEARNINGS.md` flow is the *mechanism*; the
-  *content* lives in domain-specific docs (`importers.md`,
+- The `MISTAKES.md` ↔ `LEARNINGS.md` flow is the _mechanism_; the
+  _content_ lives in domain-specific docs (`importers.md`,
   `market-data.md`, `design.md`, …). If a learning is large enough
   to need its own narrative section, link it from the relevant domain
   doc rather than duplicating.

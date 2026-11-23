@@ -1,11 +1,12 @@
 #!/usr/bin/env node
 import { fork, spawn } from "node:child_process";
 import { once } from "node:events";
-import { mkdir, readFile, rm, writeFile } from "node:fs/promises";
+import { existsSync } from "node:fs";
+import { mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { createServer } from "node:net";
 import { performance } from "node:perf_hooks";
 import { DatabaseSync } from "node:sqlite";
-import { dirname, isAbsolute, join, resolve } from "node:path";
+import { basename, dirname, isAbsolute, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 
 const repositoryRoot = resolve(dirname(fileURLToPath(import.meta.url)), "..");
@@ -145,6 +146,23 @@ export function parseArguments(args = process.argv.slice(2)) {
   return options;
 }
 
+/**
+ * Resolve the baseline's real entrypoint. Builds before intelligence shipped
+ * server.js, not the supervisor or worker; never borrow the candidate's runtime.
+ */
+function resolveComparisonLaunch(supervisor, pathExists = existsSync) {
+  if (pathExists(supervisor)) {
+    return { supervisor, standalone: basename(supervisor) === "server.js" };
+  }
+  const server = resolve(dirname(supervisor), "..", "server.js");
+  if (basename(supervisor) === "run-journal.mjs" && pathExists(server)) {
+    return { supervisor: server, standalone: true };
+  }
+  throw new Error(
+    `Baseline launcher not found: ${supervisor}; standalone server not found: ${server}`,
+  );
+}
+
 /** Return an interpolated percentile for measured millisecond values. */
 export function percentile(values, percent) {
   if (values.length === 0) return null;
@@ -218,18 +236,21 @@ function createBusyWatch() {
 }
 
 /** Wait for the supervisor's HTTP-backed readiness and, when active, worker readiness. */
-function waitForReady(child, requireWorker, busyWatch) {
+function waitForReady(child, requireWorker, busyWatch, standaloneUrl) {
   return new Promise((resolveReady, rejectReady) => {
     let stdout = "";
     let stderr = "";
     let httpReady = false;
     let workerReady = !requireWorker;
+    let probeTimer;
+    let probing = false;
     const timer = setTimeout(() => {
       cleanup();
       rejectReady(new Error(`Journal startup timed out: ${stderr || stdout}`));
     }, 60_000);
     const cleanup = () => {
       clearTimeout(timer);
+      clearInterval(probeTimer);
       child.stderr?.off("data", onStderr);
       child.off("exit", onExit);
       child.off("error", onError);
@@ -271,6 +292,28 @@ function waitForReady(child, requireWorker, busyWatch) {
       cleanup();
       rejectReady(error);
     };
+    // Old standalone builds have no readiness IPC. Probe the same real HTTP
+    // endpoint used to create the benchmark account before starting the load.
+    if (standaloneUrl) {
+      probeTimer = setInterval(async () => {
+        if (probing) return;
+        probing = true;
+        try {
+          const response = await fetch(`${standaloneUrl}/api/accounts`, {
+            signal: AbortSignal.timeout(1000),
+          });
+          await response.body?.cancel();
+          if (response.status === 200) {
+            cleanup();
+            resolveReady({ type: "ready", worker: "unavailable" });
+          }
+        } catch {
+          // Connection refusal while Next starts is expected until the deadline.
+        } finally {
+          probing = false;
+        }
+      }, 100);
+    }
     // The stdout listener stays attached after readiness: the busy
     // classification is published only while the worker runs.
     child.stdout?.on("data", onStdout);
@@ -280,11 +323,12 @@ function waitForReady(child, requireWorker, busyWatch) {
   });
 }
 
-/** Stop the supervisor and its complete process tree, using its IPC contract first. */
-async function stopSupervisor(child) {
+/** Stop a supervised tree via IPC, or an older standalone server via SIGTERM. */
+async function stopSupervisor(child, standalone = false) {
   if (!child || child.exitCode !== null || child.signalCode !== null) return;
   const exited = once(child, "exit");
-  if (child.connected) child.send({ type: "shutdown" }, () => {});
+  if (standalone) child.kill("SIGTERM");
+  else if (child.connected) child.send({ type: "shutdown" }, () => {});
   const timer = setTimeout(() => {
     if (process.platform === "win32") {
       spawn("taskkill", ["/F", "/T", "/PID", String(child.pid)], {
@@ -460,9 +504,26 @@ function readDatabaseMetrics(
   ingest,
   requestDurations,
   busyWatch,
+  intelligence = true,
 ) {
   const database = new DatabaseSync(databasePath, { timeout: 5000 });
   try {
+    const databaseExecutions = scalar(
+      database,
+      "SELECT COUNT(*) AS value FROM executions WHERE account_id = ?",
+      accountId,
+    );
+    const lostEffects = {
+      requestedFills,
+      reportedInserted: ingest.reportedInserted,
+      databaseExecutions,
+      missing: databaseExecutions === null ? null : requestedFills - databaseExecutions,
+      acceptedButNotStored:
+        databaseExecutions === null ? null : ingest.reportedInserted - databaseExecutions,
+    };
+    // A pre-intelligence baseline has no outbox, jobs, or worker. Read only
+    // counters it really stores; its comparison still requires every fill.
+    if (!intelligence) return { lostEffects };
     const jobBusyRows = scalar(
       database,
       "SELECT COUNT(*) AS value FROM intelligence_jobs WHERE last_error GLOB 'SQLITE_BUSY*'",
@@ -470,11 +531,6 @@ function readDatabaseMetrics(
     const deliveryBusyRows = scalar(
       database,
       "SELECT COUNT(*) AS value FROM event_deliveries WHERE last_error GLOB 'SQLITE_BUSY*'",
-    );
-    const databaseExecutions = scalar(
-      database,
-      "SELECT COUNT(*) AS value FROM executions WHERE account_id = ?",
-      accountId,
     );
     const outboxLatencies = series(
       database,
@@ -512,16 +568,7 @@ function readDatabaseMetrics(
         firstFailures: ingest.failures.slice(0, 5),
         total: busyTotal,
       },
-      lostEffects: {
-        requestedFills,
-        reportedInserted: ingest.reportedInserted,
-        databaseExecutions,
-        // Fills the journal was asked to store but does not hold.
-        missing: databaseExecutions === null ? null : requestedFills - databaseExecutions,
-        // Fills the journal accepted but did not keep: the committed effect.
-        acceptedButNotStored:
-          databaseExecutions === null ? null : ingest.reportedInserted - databaseExecutions,
-      },
+      lostEffects,
       queueLatencyMs: {
         domainOutbox: {
           count: outboxLatencies.length,
@@ -548,9 +595,9 @@ function readDatabaseMetrics(
 /** Run one volume in one worker mode against a fresh journal. */
 async function runMode(volume, mode, options, scratchRoot) {
   const modeSpec = WORKER_MODES[mode];
+  const standalone = options.standalone === true;
   const worker = modeSpec.worker;
-  const dataDirectory = join(scratchRoot, `volume-${volume}-${mode}`);
-  await mkdir(dataDirectory, { recursive: true });
+  const dataDirectory = await mkdtemp(join(scratchRoot, `volume-${volume}-${mode}-`));
   const port = await findFreePort(options.port);
   const environment = { ...process.env };
   delete environment.JOURNAL_PASSWORD;
@@ -559,20 +606,28 @@ async function runMode(volume, mode, options, scratchRoot) {
   // consumer, "active" runs one. Without this, the comparison would measure
   // the cost of capturing events rather than the cost of the worker.
   environment.JOURNAL_EVENT_CAPTURE = "1";
+  if (standalone) {
+    environment.NODE_ENV = "production";
+    environment.HOSTNAME = "127.0.0.1";
+    environment.PORT = String(port);
+    environment.JOURNAL_DATA_DIR = dataDirectory;
+  }
   const child = fork(
     options.supervisor,
-    [
-      "--mode",
-      "production",
-      "--host",
-      "127.0.0.1",
-      "--port",
-      String(port),
-      "--data-dir",
-      dataDirectory,
-      "--worker",
-      worker,
-    ],
+    standalone
+      ? []
+      : [
+          "--mode",
+          "production",
+          "--host",
+          "127.0.0.1",
+          "--port",
+          String(port),
+          "--data-dir",
+          dataDirectory,
+          "--worker",
+          worker,
+        ],
     {
       cwd: repositoryRoot,
       env: environment,
@@ -583,8 +638,13 @@ async function runMode(volume, mode, options, scratchRoot) {
   );
   try {
     const busyWatch = createBusyWatch();
-    await waitForReady(child, modeSpec.hasQueue, busyWatch);
     const baseUrl = `http://127.0.0.1:${port}`;
+    await waitForReady(
+      child,
+      modeSpec.hasQueue && !standalone,
+      busyWatch,
+      standalone ? baseUrl : undefined,
+    );
     const accountId = await createAccount(baseUrl, volume, mode);
     // The read path is measured at every ingest batch boundary, so both worker
     // modes read the same sequence of journal sizes. A wall-clock sampler
@@ -608,12 +668,12 @@ async function runMode(volume, mode, options, scratchRoot) {
       restSampleCount: restDurations.length,
     };
     let queueDrained = null;
-    if (modeSpec.hasQueue) {
+    if (modeSpec.hasQueue && !standalone) {
       // Queue latency is captured from committed rows after the worker consumes
       // them; the read series above measures the active HTTP path under load.
       queueDrained = await waitForQueueDrain(join(dataDirectory, "journal.db"));
     }
-    await stopSupervisor(child);
+    await stopSupervisor(child, standalone);
     const databaseMetrics = readDatabaseMetrics(
       join(dataDirectory, "journal.db"),
       accountId,
@@ -621,12 +681,12 @@ async function runMode(volume, mode, options, scratchRoot) {
       ingest,
       ingest.requestDurations,
       busyWatch,
+      !standalone,
     );
     return {
-      worker,
-      // The flag reports what the run's own environment asked for, not what
-      // the mode's name suggests: both modes capture events.
-      eventCapture: eventCaptureEnabled(environment.JOURNAL_EVENT_CAPTURE),
+      worker: standalone ? "unavailable" : worker,
+      // Old baseline builds predate event capture; the candidate always enables it.
+      eventCapture: !standalone && eventCaptureEnabled(environment.JOURNAL_EVENT_CAPTURE),
       ingest: {
         requestedFills: volume,
         reportedInserted: ingest.reportedInserted,
@@ -639,7 +699,7 @@ async function runMode(volume, mode, options, scratchRoot) {
       ...databaseMetrics,
     };
   } catch (error) {
-    await stopSupervisor(child);
+    await stopSupervisor(child, standalone);
     throw error;
   } finally {
     if (!options.keep) await rm(dataDirectory, { recursive: true, force: true });
@@ -732,6 +792,15 @@ function summarizeMode(runs, mode) {
   const captureFlags = runs.map((run) => run.eventCapture);
   return {
     repetitions: runs.length,
+    errors: runs.flatMap((run) => (run.error ? [run.error] : [])),
+    completedRepetitions: runs.filter(
+      (run) =>
+        !run.error &&
+        Number.isFinite(run.readLatencyMs?.p95) &&
+        run.ingest?.failedRequests === 0 &&
+        run.lostEffects?.missing === 0 &&
+        run.lostEffects?.acceptedButNotStored === 0,
+    ).length,
     // The capture flag the runs actually ran with, not one inferred from the
     // mode's name. Every run of a mode shares the mode's environment, so one
     // observed flag settles the mode; a mode whose runs all failed before
@@ -795,6 +864,65 @@ async function runSelfCheck(resultPath) {
   check("an uncaptured run is not reported as captured", uncaptured.eventCapture === false);
   check("capture enabled by 1", eventCaptureEnabled("1") === true);
   check("capture disabled by 0", eventCaptureEnabled("0") === false);
+  const comparisonSupervisor = join(repositoryRoot, "baseline", "scripts", "run-journal.mjs");
+  const comparisonServer = resolve(dirname(comparisonSupervisor), "..", "server.js");
+  const legacyLaunch = resolveComparisonLaunch(
+    comparisonSupervisor,
+    (path) => path === comparisonServer,
+  );
+  check(
+    "a pre-supervisor baseline launches its own standalone server",
+    legacyLaunch.supervisor === comparisonServer && legacyLaunch.standalone === true,
+  );
+  const supervisedLaunch = resolveComparisonLaunch(comparisonSupervisor, () => true);
+  check(
+    "a supervised baseline retains its own launcher",
+    supervisedLaunch.supervisor === comparisonSupervisor && supervisedLaunch.standalone === false,
+  );
+  let missingLaunchRejected = false;
+  try {
+    resolveComparisonLaunch(comparisonSupervisor, () => false);
+  } catch {
+    missingLaunchRejected = true;
+  }
+  check("a missing baseline build is rejected", missingLaunchRejected);
+  const explicitServer = resolveComparisonLaunch(comparisonServer, () => true);
+  check("an explicit standalone baseline is recognized", explicitServer.standalone === true);
+  const completeRun = {
+    readLatencyMs: { p95: 100 },
+    ingest: { failedRequests: 0 },
+    lostEffects: { missing: 0, acceptedButNotStored: 0 },
+  };
+  const complete = summarizeMode([completeRun], "idle");
+  const atLimit = summarizeMode([{ ...completeRun, readLatencyMs: { p95: 120 } }], "idle");
+  const aboveLimit = summarizeMode([{ ...completeRun, readLatencyMs: { p95: 121 } }], "idle");
+  check(
+    "the unchanged p95 regression limit accepts 20 percent",
+    compareVolumes(1000, complete, complete, atLimit, atLimit).passed === true,
+  );
+  check(
+    "a real p95 regression still fails",
+    compareVolumes(1000, complete, complete, aboveLimit, aboveLimit).passed === false,
+  );
+  const incomplete = summarizeMode([completeRun, failedMode(new Error("baseline exited"))], "idle");
+  const completePair = summarizeMode([completeRun, completeRun], "idle");
+  const failedComparison = compareVolumes(
+    1000,
+    incomplete,
+    completePair,
+    completePair,
+    completePair,
+  );
+  check("a failed baseline repetition cannot disappear from its median", !failedComparison.passed);
+  check(
+    "baseline startup errors remain visible in comparison output",
+    failedComparison.rows[0].baselineErrors.includes("baseline exited"),
+  );
+  const missing = summarizeMode([failedMode(new Error("baseline launcher missing"))], "idle");
+  check(
+    "missing baseline measurements fail rather than become zero latency",
+    compareVolumes(1000, missing, missing, complete, complete).passed === false,
+  );
   if (resultPath) {
     const result = JSON.parse(await readFile(resultPath, "utf8"));
     for (const volume of result.volumes ?? []) {
@@ -840,14 +968,26 @@ function compareVolumes(volume, baselineIdle, baselineActive, candidateIdle, can
       typeof baselineP95 === "number" && baselineP95 > 0 && typeof candidateP95 === "number"
         ? ((candidateP95 - baselineP95) / baselineP95) * 100
         : null;
+    // A median over surviving runs must not hide a failed launch or dropped
+    // ingest. Both builds must complete every requested repetition.
+    const complete =
+      baseline.repetitions > 0 &&
+      baseline.repetitions === candidate.repetitions &&
+      baseline.completedRepetitions === baseline.repetitions &&
+      candidate.completedRepetitions === candidate.repetitions;
     return {
       volume,
       mode,
       baselineP95Ms: baselineP95,
       candidateP95Ms: candidateP95,
+      baselineErrors: baseline.errors,
+      candidateErrors: candidate.errors,
+      baselineCompletedRepetitions: baseline.completedRepetitions,
+      candidateCompletedRepetitions: candidate.completedRepetitions,
       regressionPercent:
         regressionPercent === null ? null : Math.round(regressionPercent * 1000) / 1000,
-      passed: regressionPercent !== null && regressionPercent <= P95_REGRESSION_LIMIT_PERCENT,
+      passed:
+        complete && regressionPercent !== null && regressionPercent <= P95_REGRESSION_LIMIT_PERCENT,
     };
   });
   return { volume, rows, passed: rows.every((row) => row.passed) };
@@ -921,6 +1061,9 @@ function evaluateVolume(volume, idleRuns, activeRuns) {
 /** Run every requested volume and write the machine-readable result. */
 async function main() {
   const options = parseArguments();
+  const comparisonLaunch = options.compareSupervisor
+    ? resolveComparisonLaunch(options.compareSupervisor)
+    : undefined;
   await mkdir(options.dataDir, { recursive: true });
   const scratchRoot = join(options.dataDir, `benchmark-intelligence-${Date.now()}-${process.pid}`);
   await mkdir(scratchRoot, { recursive: true });
@@ -931,6 +1074,13 @@ async function main() {
     finishedAt: null,
     configuration: {
       label: options.label,
+      comparison: comparisonLaunch
+        ? {
+            label: options.compareLabel,
+            entrypoint: comparisonLaunch.supervisor,
+            runtime: comparisonLaunch.standalone ? "standalone-without-worker" : "supervised",
+          }
+        : null,
       volumes: options.volumes,
       samples: options.samples,
       repetitions: options.repetitions,
@@ -966,7 +1116,7 @@ async function main() {
         // both face the same host conditions. Two builds measured hours apart
         // on a shared machine differ by the machine, not by the code.
         if (options.compareSupervisor) {
-          const compareOptions = { ...options, supervisor: options.compareSupervisor };
+          const compareOptions = { ...options, ...comparisonLaunch };
           try {
             baselineIdleRuns.push(await runMode(volume, "idle", compareOptions, scratchRoot));
           } catch (error) {
@@ -979,7 +1129,7 @@ async function main() {
           idleRuns.push(failedMode(error));
         }
         if (options.compareSupervisor) {
-          const compareOptions = { ...options, supervisor: options.compareSupervisor };
+          const compareOptions = { ...options, ...comparisonLaunch };
           try {
             baselineActiveRuns.push(await runMode(volume, "active", compareOptions, scratchRoot));
           } catch (error) {
@@ -1032,12 +1182,14 @@ async function main() {
       passed: result.passed,
       label: options.label,
       output: options.out,
+      gates: result.gates,
       volumes: result.volumes.map((volume) => ({
         volume: volume.volume,
         idleP95Ms: volume.workerOverhead.idleP95Ms,
         activeP95Ms: volume.workerOverhead.activeP95Ms,
         workerOverheadPercent: volume.workerOverhead.percent,
         passed: volume.passed,
+        comparison: volume.comparison ?? null,
       })),
     }),
   );

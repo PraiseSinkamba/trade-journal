@@ -12,7 +12,7 @@
 
 - Repository: `https://github.com/LuxAlgo/trade-journal.git` — **VERIFIED** `package.json:6-9`
 - License: MIT — **VERIFIED** `package.json:5`; `LICENSE:1` ("MIT License, Copyright (c) 2026 LuxAlgo Global, LLC")
-- npm packages: `@luxalgo/journal-core` (engine), `@luxalgo/journal-importers` (parsers) — **VERIFIED** as *publish-ready*, not as published: both declare `version: "0.1.0"` and `publishConfig.access: "public"` (`packages/core/package.json:3,39-40`; `packages/importers/package.json:3,42-43`). Actual registry publication is **UNVERIFIED** from the repo.
+- npm packages: `@luxalgo/journal-core` (engine), `@luxalgo/journal-importers` (parsers) — **VERIFIED** as _publish-ready_, not as published: both declare `version: "0.1.0"` and `publishConfig.access: "public"` (`packages/core/package.json:3,39-40`; `packages/importers/package.json:3,42-43`). Actual registry publication is **UNVERIFIED** from the repo.
 - Architecture: self-hosted only — no hosted-service assumptions — **VERIFIED** `README.md:82` ("Deploy anywhere a Node process and a persistent disk exist … Serverless platforms without a disk need an external database, which this release does not support").
 - Telemetry: the project ships **no** telemetry SDK, but Next.js anonymous framework telemetry is **not** disabled in the image — see **ARCH-829** in §8.
 
@@ -22,10 +22,10 @@
 
 ### 2.1 Runtime & Package Manager
 
-| Layer | Technology | Evidence |
-|---|---|---|
-| Runtime | Node ≥ 22 | `package.json:10-12` (`"node": ">=22"` at `:11`) |
-| Package manager | pnpm 11.0.8 | `package.json:13` (`"packageManager": "pnpm@11.0.8"`) |
+| Layer            | Technology                                   | Evidence                                                                                         |
+| ---------------- | -------------------------------------------- | ------------------------------------------------------------------------------------------------ |
+| Runtime          | Node ≥ 22                                    | `package.json:10-12` (`"node": ">=22"` at `:11`)                                                 |
+| Package manager  | pnpm 11.0.8                                  | `package.json:13` (`"packageManager": "pnpm@11.0.8"`)                                            |
 | Production image | `node:22-slim` (two-stage: builder + runner) | `Dockerfile:2` (`FROM node:22-slim AS builder`), `Dockerfile:13` (`FROM node:22-slim AS runner`) |
 
 ### 2.2 Workspace Structure
@@ -45,53 +45,53 @@ trade-journal-monorepo (pnpm workspace)
 
 ### 2.3 Core Engine — `packages/core`
 
-| Concern | Library | Version | Evidence |
-|---|---|---|---|
-| Language | TypeScript (strict) | `^5.9.0` | `package.json:32` (root devDependency — **not** declared in `packages/core/package.json`) |
-| Module system | ESM | `"type": "module"` | `packages/core/package.json:6` |
-| Type checking | `tsc --noEmit` | — | `packages/core/package.json:35` |
-| Build | tsup (`--format esm,cjs --dts --clean`) | `^8.5.1` | `package.json:31` (root devDep); script at `packages/core/package.json:36` |
-| **Runtime deps** | **none** | — | `packages/core/package.json` — no `dependencies`, `devDependencies`, or `peerDependencies` key |
+| Concern          | Library                                 | Version            | Evidence                                                                                       |
+| ---------------- | --------------------------------------- | ------------------ | ---------------------------------------------------------------------------------------------- |
+| Language         | TypeScript (strict)                     | `^5.9.0`           | `package.json:32` (root devDependency — **not** declared in `packages/core/package.json`)      |
+| Module system    | ESM                                     | `"type": "module"` | `packages/core/package.json:6`                                                                 |
+| Type checking    | `tsc --noEmit`                          | —                  | `packages/core/package.json:35`                                                                |
+| Build            | tsup (`--format esm,cjs --dts --clean`) | `^8.5.1`           | `package.json:31` (root devDep); script at `packages/core/package.json:36`                     |
+| **Runtime deps** | **none**                                | —                  | `packages/core/package.json` — no `dependencies`, `devDependencies`, or `peerDependencies` key |
 
 `packages/core` is a pure domain library: no Node APIs, no database, no network. **VERIFIED** — grep for `from "node:` / `require(` across `packages/core/src/` returns zero matches; `sideEffects: false` is declared at `packages/core/package.json:15`. Unit-tested by 4 test files plus 1 shared helper (`packages/core/tests/`: `analysis.test.ts`, `metrics.test.ts`, `overview-regression.test.ts`, `round-trips.test.ts`, `helpers.ts`).
 
 ### 2.4 Importers — `packages/importers`
 
-| Concern | Library | Version | Evidence |
-|---|---|---|---|
-| Language | TypeScript | `^5.9.0` | `package.json:32` (root devDependency) |
-| Module system | ESM | `"type": "module"` | `packages/importers/package.json:6` |
-| **Runtime deps** | **`@luxalgo/journal-core`** | `workspace:*` | `packages/importers/package.json:39-41` (entry at `:40`) — the only runtime dependency |
+| Concern          | Library                     | Version            | Evidence                                                                               |
+| ---------------- | --------------------------- | ------------------ | -------------------------------------------------------------------------------------- |
+| Language         | TypeScript                  | `^5.9.0`           | `package.json:32` (root devDependency)                                                 |
+| Module system    | ESM                         | `"type": "module"` | `packages/importers/package.json:6`                                                    |
+| **Runtime deps** | **`@luxalgo/journal-core`** | `workspace:*`      | `packages/importers/package.json:39-41` (entry at `:40`) — the only runtime dependency |
 
 Zero third-party dependencies; the sole runtime dep is the sibling workspace package. **Evidence:** `packages/importers/package.json` (single `dependencies` entry).
 
 ### 2.5 Web App — `apps/web`
 
-| Concern | Library | Version | Evidence |
-|---|---|---|---|
-| Framework | Next.js | `15.5.23` | `apps/web/package.json:43` |
-| Language | TypeScript | `^5.9.0` | **Not declared in `apps/web/package.json`** — root devDependency only (`package.json:32`). `apps/web` typecheck is `next typegen && tsc --noEmit` (`apps/web/package.json:10`) |
-| React | React + React DOM | `^19.1.0` | `apps/web/package.json:45` (react), `:47` (react-dom) |
-| Database | SQLite (better-sqlite3) | `^12.2.0` | `apps/web/package.json:35` |
-| ORM | Drizzle ORM | `^0.45.2` | `apps/web/package.json:40` |
-| AI SDK | Vercel AI (`ai`) | `^7.0.77` | `apps/web/package.json:34` |
-| Anthropic adapter | `@ai-sdk/anthropic` | `^4.0.41` | `apps/web/package.json:13` |
-| OpenAI adapter | `@ai-sdk/openai` | `^4.0.64` | `apps/web/package.json:15` |
-| MCP | `@ai-sdk/mcp` | `^2.0.73` | `apps/web/package.json:14` |
-| Broker SDK | `@luxalgo/broker-sdk` | `0.5.1` | `apps/web/package.json:19` |
-| Charting | Vela + ECharts + Recharts | `^0.6.8`, `^6.1.0`, `^3.10.1` | `apps/web/package.json:22`, `:41`, `:49` |
-| Tables | TanStack Table | `^9.1.2` | `apps/web/package.json:33` |
-| UI primitives | Radix UI | **9 packages**, `^1.1.21`–`^2.3.7` | `apps/web/package.json:24-32` (checkbox `^1.3.11`, dialog `^1.1.23`, dropdown-menu `^2.1.24`, label `^2.1.15`, popover `^1.1.23`, select `^2.3.7`, slot `^1.3.3`, tabs `^1.1.21`, tooltip `^1.2.16`) |
-| Base UI | `@base-ui/react` | `^1.9.0` | `apps/web/package.json:16` |
-| Styling | Tailwind CSS v4 | `^4.3.3` | `apps/web/package.json:61` (devDep); paired with `@tailwindcss/postcss ^4.3.3` at `:55` |
-| PDF | pdf-lib + `@pdf-lib/fontkit` | `^1.17.1`, `^1.1.1` | `apps/web/package.json:44`, `:23` |
-| Markdown rendering | react-markdown + remark-gfm | `^10.1.0`, `^4.0.1` | `apps/web/package.json:48`, `:50` |
-| Date utilities | date-fns | `^4.4.0` | `apps/web/package.json:39` |
-| Date picker | react-day-picker | `^10.0.2` | `apps/web/package.json:46` |
-| Icons | lucide-react | `^1.34.0` | `apps/web/package.json:42` |
-| Schema validation | Zod | `^3.25.76` (Zod v3) | `apps/web/package.json:52` |
-| Drag-and-drop | @dnd-kit | core `6.3.1`, sortable `10.0.0` | `apps/web/package.json:17-18` |
-| Class-name utilities | class-variance-authority, clsx, `cn`, tailwind-merge | `^0.7.1`, `^2.1.1`, `^0.5.0`, `^3.6.0` | `apps/web/package.json:36-38`, `:51` |
+| Concern              | Library                                              | Version                                | Evidence                                                                                                                                                                                             |
+| -------------------- | ---------------------------------------------------- | -------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Framework            | Next.js                                              | `15.5.23`                              | `apps/web/package.json:43`                                                                                                                                                                           |
+| Language             | TypeScript                                           | `^5.9.0`                               | **Not declared in `apps/web/package.json`** — root devDependency only (`package.json:32`). `apps/web` typecheck is `next typegen && tsc --noEmit` (`apps/web/package.json:10`)                       |
+| React                | React + React DOM                                    | `^19.1.0`                              | `apps/web/package.json:45` (react), `:47` (react-dom)                                                                                                                                                |
+| Database             | SQLite (better-sqlite3)                              | `^12.2.0`                              | `apps/web/package.json:35`                                                                                                                                                                           |
+| ORM                  | Drizzle ORM                                          | `^0.45.2`                              | `apps/web/package.json:40`                                                                                                                                                                           |
+| AI SDK               | Vercel AI (`ai`)                                     | `^7.0.77`                              | `apps/web/package.json:34`                                                                                                                                                                           |
+| Anthropic adapter    | `@ai-sdk/anthropic`                                  | `^4.0.41`                              | `apps/web/package.json:13`                                                                                                                                                                           |
+| OpenAI adapter       | `@ai-sdk/openai`                                     | `^4.0.64`                              | `apps/web/package.json:15`                                                                                                                                                                           |
+| MCP                  | `@ai-sdk/mcp`                                        | `^2.0.73`                              | `apps/web/package.json:14`                                                                                                                                                                           |
+| Broker SDK           | `@luxalgo/broker-sdk`                                | `0.5.1`                                | `apps/web/package.json:19`                                                                                                                                                                           |
+| Charting             | Vela + ECharts + Recharts                            | `^0.6.8`, `^6.1.0`, `^3.10.1`          | `apps/web/package.json:22`, `:41`, `:49`                                                                                                                                                             |
+| Tables               | TanStack Table                                       | `^9.1.2`                               | `apps/web/package.json:33`                                                                                                                                                                           |
+| UI primitives        | Radix UI                                             | **9 packages**, `^1.1.21`–`^2.3.7`     | `apps/web/package.json:24-32` (checkbox `^1.3.11`, dialog `^1.1.23`, dropdown-menu `^2.1.24`, label `^2.1.15`, popover `^1.1.23`, select `^2.3.7`, slot `^1.3.3`, tabs `^1.1.21`, tooltip `^1.2.16`) |
+| Base UI              | `@base-ui/react`                                     | `^1.9.0`                               | `apps/web/package.json:16`                                                                                                                                                                           |
+| Styling              | Tailwind CSS v4                                      | `^4.3.3`                               | `apps/web/package.json:61` (devDep); paired with `@tailwindcss/postcss ^4.3.3` at `:55`                                                                                                              |
+| PDF                  | pdf-lib + `@pdf-lib/fontkit`                         | `^1.17.1`, `^1.1.1`                    | `apps/web/package.json:44`, `:23`                                                                                                                                                                    |
+| Markdown rendering   | react-markdown + remark-gfm                          | `^10.1.0`, `^4.0.1`                    | `apps/web/package.json:48`, `:50`                                                                                                                                                                    |
+| Date utilities       | date-fns                                             | `^4.4.0`                               | `apps/web/package.json:39`                                                                                                                                                                           |
+| Date picker          | react-day-picker                                     | `^10.0.2`                              | `apps/web/package.json:46`                                                                                                                                                                           |
+| Icons                | lucide-react                                         | `^1.34.0`                              | `apps/web/package.json:42`                                                                                                                                                                           |
+| Schema validation    | Zod                                                  | `^3.25.76` (Zod v3)                    | `apps/web/package.json:52`                                                                                                                                                                           |
+| Drag-and-drop        | @dnd-kit                                             | core `6.3.1`, sortable `10.0.0`        | `apps/web/package.json:17-18`                                                                                                                                                                        |
+| Class-name utilities | class-variance-authority, clsx, `cn`, tailwind-merge | `^0.7.1`, `^2.1.1`, `^0.5.0`, `^3.6.0` | `apps/web/package.json:36-38`, `:51`                                                                                                                                                                 |
 
 ### 2.6 TypeScript Configuration
 
@@ -354,13 +354,13 @@ The bridge is `formats/history.ts` (`parseHistory`), which delegates to `history
 
 ### 5.1 Web App Entry Points
 
-| Entry | File | Role | Evidence |
-|---|---|---|---|
-| Next.js config | `apps/web/next.config.ts` | `output:"standalone"`, transpiles workspace packages, excludes `./data/**/*` from tracing | `next.config.ts:4-10` (values at `:4`, `:5`, `:6`, `:8-10`) |
-| Auth guard (navigation) | `apps/web/src/middleware.ts` | Optional password gate. **Presence-only** cookie check: it reads `journal_session` and, if absent, returns 401 for `/api/*` or redirects to `/login`. It does **not** verify the HMAC — the middleware runtime has no Node crypto. Bypassed entirely when `JOURNAL_PASSWORD` is unset. | `middleware.ts:9-21` (bypass `:10`, cookie read `:13`, 401 `:15-17`, redirect `:18`); config matcher `:23-25` |
-| Session cryptography | `apps/web/src/server/auth.ts` | HMAC-SHA256 session token (`sessionToken()`, `:12-15`) and constant-time `verifySession()` (`:23-29`) | `auth.ts:1`, `:8`, `:12-15`, `:23-29` |
-| API handler wrapper | `apps/web/src/server/api.ts` | `handler(fn)` — verifies the session cookie when a password is configured, catches `RequestError` → JSON 400 and other errors → JSON 500; `{ public: true }` opts a route out | `api.ts:20-39` (auth `:27-30`, error mapping `:32-38`); `AGENTS.md:147` |
-| Server entry | `apps/web/src/server/` | `executions.ts`, `rebuild.ts`, `sync.ts`, `settings.ts`, `ai*.ts`, `prop-firms.ts`, `market-data/` | `AGENTS.md` §Server-only logic |
+| Entry                   | File                          | Role                                                                                                                                                                                                                                                                                   | Evidence                                                                                                      |
+| ----------------------- | ----------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------- |
+| Next.js config          | `apps/web/next.config.ts`     | `output:"standalone"`, transpiles workspace packages, excludes `./data/**/*` from tracing                                                                                                                                                                                              | `next.config.ts:4-10` (values at `:4`, `:5`, `:6`, `:8-10`)                                                   |
+| Auth guard (navigation) | `apps/web/src/middleware.ts`  | Optional password gate. **Presence-only** cookie check: it reads `journal_session` and, if absent, returns 401 for `/api/*` or redirects to `/login`. It does **not** verify the HMAC — the middleware runtime has no Node crypto. Bypassed entirely when `JOURNAL_PASSWORD` is unset. | `middleware.ts:9-21` (bypass `:10`, cookie read `:13`, 401 `:15-17`, redirect `:18`); config matcher `:23-25` |
+| Session cryptography    | `apps/web/src/server/auth.ts` | HMAC-SHA256 session token (`sessionToken()`, `:12-15`) and constant-time `verifySession()` (`:23-29`)                                                                                                                                                                                  | `auth.ts:1`, `:8`, `:12-15`, `:23-29`                                                                         |
+| API handler wrapper     | `apps/web/src/server/api.ts`  | `handler(fn)` — verifies the session cookie when a password is configured, catches `RequestError` → JSON 400 and other errors → JSON 500; `{ public: true }` opts a route out                                                                                                          | `api.ts:20-39` (auth `:27-30`, error mapping `:32-38`); `AGENTS.md:147`                                       |
+| Server entry            | `apps/web/src/server/`        | `executions.ts`, `rebuild.ts`, `sync.ts`, `settings.ts`, `ai*.ts`, `prop-firms.ts`, `market-data/`                                                                                                                                                                                     | `AGENTS.md` §Server-only logic                                                                                |
 
 **Note (security):** HMAC session validation is **not** in the middleware. It lives in `server/auth.ts` and is applied by `handler()` in `server/api.ts`; all 43 route handlers go through `handler()`.
 
@@ -369,14 +369,14 @@ The bridge is `formats/history.ts` (`parseHistory`), which delegates to `history
 ```typescript
 // packages/core/src/index.ts
 export * from "./types";
-export * from "./round-trips";  // buildRoundTrips()
-export * from "./metrics";       // computeMetrics()
-export * from "./equity";        // equityCurve()
+export * from "./round-trips"; // buildRoundTrips()
+export * from "./metrics"; // computeMetrics()
+export * from "./equity"; // equityCurve()
 export * from "./aggregate";
-export * from "./edge-score";    // computeEdgeScore()
-export * from "./time";          // dayKeyOf, monthKeyOf
-export * from "./analysis";      // matchesFilters, FILTER_KEYS
-export * from "./adherence";     // analyzeAdherence()
+export * from "./edge-score"; // computeEdgeScore()
+export * from "./time"; // dayKeyOf, monthKeyOf
+export * from "./analysis"; // matchesFilters, FILTER_KEYS
+export * from "./adherence"; // analyzeAdherence()
 ```
 
 **Evidence:** `packages/core/src/index.ts:1-9` (verbatim).
@@ -386,7 +386,7 @@ export * from "./adherence";     // analyzeAdherence()
 ```typescript
 // packages/importers/src/index.ts
 export * from "./types";
-export * from "./detect";                                 // parseAuto, detectFormat, FORMATS
+export * from "./detect"; // parseAuto, detectFormat, FORMATS
 export { parseCsv, headerKey } from "./csv";
 export { parseTimestamp, parseDateAndTime } from "./dates";
 export { parseMoney, parseQuantity } from "./numbers";
@@ -400,25 +400,25 @@ export { positionFillProblem } from "./position-fills";
 
 ### 5.4 Tauri Desktop Entry
 
-| Entry | Role | Evidence |
-|---|---|---|
-| `desktop/src-tauri/tauri.conf.json` | `devUrl: "http://localhost:3000"` (`:8`). **No Node version field.** | `tauri.conf.json:8` |
-| Sidecar Node runtime | Tauri spawns `desktop/src-tauri/binaries/node-x86_64-pc-windows-msvc.exe` (Node **24.11.0**) to run the standalone Next.js server | `desktop/README.md:25` (downloads `node-v24.11.0-win-x64.zip`); `AGENTS.md:113` |
-| Sidecar version — repo inconsistency | `AGENTS.md:88` describes the dev sidecar as **Node 22.11.0**, while `AGENTS.md:113` and `desktop/README.md:25` state **24.11.0**. The setup script is `pnpm --filter desktop setup:sidecar` (`desktop/package.json:14`). | `AGENTS.md:88`, `AGENTS.md:113`, `desktop/README.md:25` |
-| `pnpm tauri dev` | Runs the Next.js dev server + Tauri window — **must be run from `desktop/`** (the script lives in `desktop/package.json:7-8`; the root `package.json` has no `tauri` script) | `AGENTS.md:85-89`; `desktop/package.json:7-8` |
+| Entry                                | Role                                                                                                                                                                                                                     | Evidence                                                                        |
+| ------------------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ | ------------------------------------------------------------------------------- |
+| `desktop/src-tauri/tauri.conf.json`  | `devUrl: "http://localhost:3000"` (`:8`). **No Node version field.**                                                                                                                                                     | `tauri.conf.json:8`                                                             |
+| Sidecar Node runtime                 | Tauri spawns `desktop/src-tauri/binaries/node-x86_64-pc-windows-msvc.exe` (Node **24.11.0**) to run the standalone Next.js server                                                                                        | `desktop/README.md:25` (downloads `node-v24.11.0-win-x64.zip`); `AGENTS.md:113` |
+| Sidecar version — repo inconsistency | `AGENTS.md:88` describes the dev sidecar as **Node 22.11.0**, while `AGENTS.md:113` and `desktop/README.md:25` state **24.11.0**. The setup script is `pnpm --filter desktop setup:sidecar` (`desktop/package.json:14`). | `AGENTS.md:88`, `AGENTS.md:113`, `desktop/README.md:25`                         |
+| `pnpm tauri dev`                     | Runs the Next.js dev server + Tauri window — **must be run from `desktop/`** (the script lives in `desktop/package.json:7-8`; the root `package.json` has no `tauri` script)                                             | `AGENTS.md:85-89`; `desktop/package.json:7-8`                                   |
 
 ---
 
 ## 6. Major Execution Environments
 
-| Environment | How | Evidence |
-|---|---|---|
-| **Local dev** | `pnpm dev` → Turbopack dev server on `:3000` | `package.json:15`; `apps/web/package.json:7`; `README.md:40` |
-| **Local production** | `pnpm build` → `pnpm start` (standalone Next.js server) | `package.json:16-17`; `README.md` |
-| **Local preview** | `pnpm preview` = `pnpm build && pnpm start` (same port as dev) | `package.json:18`; `README.md:46-50` |
-| **Docker** | `docker compose up -d` → two-stage `node:22-slim` image, port `3000:3000`, `./data:/data` bind mount, `JOURNAL_DATA_DIR=/data`, `restart: unless-stopped` | `Dockerfile:2`, `Dockerfile:13-26`; `docker-compose.yml:2-14` (port `:4-5`, volume `:6-7`, `JOURNAL_DATA_DIR` `:13`, restart `:14`) |
-| **Tauri desktop** | `pnpm tauri dev` from `desktop/`; standalone `.exe` via `pnpm build:app` from `desktop/` | `AGENTS.md:85-101`; `desktop/package.json:7-12`; root equivalents `pnpm desktop:build` / `pnpm desktop:build:debug` at `package.json:24-25` |
-| **CI** | GitHub Actions: `format:check` → `typecheck` → `test` → `node scripts/check-licenses.mjs` → package builds → app build | `.github/workflows/ci.yml:20-25` |
+| Environment          | How                                                                                                                                                       | Evidence                                                                                                                                    |
+| -------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------- |
+| **Local dev**        | `pnpm dev` → Turbopack dev server on `:3000`                                                                                                              | `package.json:15`; `apps/web/package.json:7`; `README.md:40`                                                                                |
+| **Local production** | `pnpm build` → `pnpm start` (standalone Next.js server)                                                                                                   | `package.json:16-17`; `README.md`                                                                                                           |
+| **Local preview**    | `pnpm preview` = `pnpm build && pnpm start` (same port as dev)                                                                                            | `package.json:18`; `README.md:46-50`                                                                                                        |
+| **Docker**           | `docker compose up -d` → two-stage `node:22-slim` image, port `3000:3000`, `./data:/data` bind mount, `JOURNAL_DATA_DIR=/data`, `restart: unless-stopped` | `Dockerfile:2`, `Dockerfile:13-26`; `docker-compose.yml:2-14` (port `:4-5`, volume `:6-7`, `JOURNAL_DATA_DIR` `:13`, restart `:14`)         |
+| **Tauri desktop**    | `pnpm tauri dev` from `desktop/`; standalone `.exe` via `pnpm build:app` from `desktop/`                                                                  | `AGENTS.md:85-101`; `desktop/package.json:7-12`; root equivalents `pnpm desktop:build` / `pnpm desktop:build:debug` at `package.json:24-25` |
+| **CI**               | GitHub Actions: `format:check` → `typecheck` → `test` → `node scripts/check-licenses.mjs` → package builds → app build                                    | `.github/workflows/ci.yml:20-25`                                                                                                            |
 
 ---
 
@@ -426,12 +426,12 @@ export { positionFillProblem } from "./position-fills";
 
 ### 7.1 Naming Conventions
 
-| Convention | Example | Evidence |
-|---|---|---|
-| Domain identifiers | camelCase: `tradeKey`, `executedAt`, `profitFactor` | `AGENTS.md:141` |
-| Component files | lowercase kebab: `add-trade-dialog.tsx` | `AGENTS.md:142` |
+| Convention         | Example                                                   | Evidence        |
+| ------------------ | --------------------------------------------------------- | --------------- |
+| Domain identifiers | camelCase: `tradeKey`, `executedAt`, `profitFactor`       | `AGENTS.md:141` |
+| Component files    | lowercase kebab: `add-trade-dialog.tsx`                   | `AGENTS.md:142` |
 | Server/lib modules | lowercase kebab: `executions.ts`, `ibkr-sync-timezone.ts` | `AGENTS.md:142` |
-| DB columns | snake_case; Drizzle maps them to camelCase TS fields | `AGENTS.md:143` |
+| DB columns         | snake_case; Drizzle maps them to camelCase TS fields      | `AGENTS.md:143` |
 
 ### 7.2 Error Handling
 
@@ -459,28 +459,28 @@ export { positionFillProblem } from "./position-fills";
 
 ### 7.5 Build Configuration
 
-| Setting | Value | Evidence |
-|---|---|---|
-| `output` | `"standalone"` (Docker-friendly) | `next.config.ts:4` |
-| `transpilePackages` | `["@luxalgo/journal-core", "@luxalgo/journal-importers"]` | `next.config.ts:5` |
-| `serverExternalPackages` | `["better-sqlite3"]` | `next.config.ts:6` |
+| Setting                     | Value                                                                       | Evidence              |
+| --------------------------- | --------------------------------------------------------------------------- | --------------------- |
+| `output`                    | `"standalone"` (Docker-friendly)                                            | `next.config.ts:4`    |
+| `transpilePackages`         | `["@luxalgo/journal-core", "@luxalgo/journal-importers"]`                   | `next.config.ts:5`    |
+| `serverExternalPackages`    | `["better-sqlite3"]`                                                        | `next.config.ts:6`    |
 | `outputFileTracingExcludes` | `"/*"` → `./data/**/*`, `../../outputs/**/*`, `../../.runtime-backup*/**/*` | `next.config.ts:8-10` |
 
 ---
 
 ## 8. Deployment & Runtime Assumptions
 
-| ID | Assumption | Detail | Evidence |
-|---|---|---|---|
-| ARCH-821 | Persistent disk required | SQLite is single-file on disk; no serverless disk-less deployment | `README.md:82` |
-| ARCH-822 | Data directory | README documents the default as `./data` relative to the app process; configurable via `JOURNAL_DATA_DIR`. **Discrepancy:** the code default is `/data/trade-journal` (`apps/web/src/db/index.ts:8`), so a plain `pnpm` run and the documented `./data` differ. Compose sets `JOURNAL_DATA_DIR: /data`. | `README.md:74`, `README.md:237`; `apps/web/src/db/index.ts:8`; `docker-compose.yml:13` |
-| ARCH-823 | Optional password | `JOURNAL_PASSWORD` gates navigation (middleware) and all API routes (`handler()` → `verifySession`). Unset ⇒ everything is open. | `README.md` env table; `middleware.ts:10`; `api.ts:27-30`; `auth.ts:10`, `:24` |
-| ARCH-824 | Credential encryption | `JOURNAL_SECRET` derives an AES-256-GCM key via `scryptSync(JOURNAL_SECRET, …, 32)`; a random 256-bit key file is used if unset | `README.md:73`; `AGENTS.md:163`; `apps/web/src/server/crypto.ts` |
-| ARCH-825 | AI BYO-key | `ANTHROPIC_API_KEY` / `OPENAI_API_KEY` via env or Settings page | `README.md:75-76`; `02-ai-architecture.md` §2 |
-| ARCH-826 | WAL mode | SQLite WAL enabled; concurrent reads during writes. Set in **both** the legacy `createDb()` helper and the singleton. | `apps/web/src/db/index.ts:36`; `apps/web/src/db/index.ts:98` |
-| ARCH-827 | `foreign_keys = ON` | Enforced at connection level, in both init paths | `apps/web/src/db/index.ts:38`; `apps/web/src/db/index.ts:100` |
-| ARCH-828 | `busy_timeout = 5000` | 5-second write-wait, in both init paths | `apps/web/src/db/index.ts:37`; `apps/web/src/db/index.ts:99` |
-| ARCH-829 | Next.js telemetry | **Not disabled by the project.** The Dockerfile sets `NODE_ENV=production` (`Dockerfile:14`) but no `NEXT_TELEMETRY_DISABLED`. `README.md:288` tells users to `set NEXT_TELEMETRY_DISABLED=1` themselves. `AGENTS.md:260` claims the flag is in the Dockerfile — **that claim is false** and is the only place in the repo that states it as shipped behavior. | `Dockerfile:13-14`; `README.md:288`; `AGENTS.md:260` |
+| ID       | Assumption               | Detail                                                                                                                                                                                                                                                                                                                                                         | Evidence                                                                               |
+| -------- | ------------------------ | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------- |
+| ARCH-821 | Persistent disk required | SQLite is single-file on disk; no serverless disk-less deployment                                                                                                                                                                                                                                                                                              | `README.md:82`                                                                         |
+| ARCH-822 | Data directory           | README documents the default as `./data` relative to the app process; configurable via `JOURNAL_DATA_DIR`. **Discrepancy:** the code default is `/data/trade-journal` (`apps/web/src/db/index.ts:8`), so a plain `pnpm` run and the documented `./data` differ. Compose sets `JOURNAL_DATA_DIR: /data`.                                                        | `README.md:74`, `README.md:237`; `apps/web/src/db/index.ts:8`; `docker-compose.yml:13` |
+| ARCH-823 | Optional password        | `JOURNAL_PASSWORD` gates navigation (middleware) and all API routes (`handler()` → `verifySession`). Unset ⇒ everything is open.                                                                                                                                                                                                                               | `README.md` env table; `middleware.ts:10`; `api.ts:27-30`; `auth.ts:10`, `:24`         |
+| ARCH-824 | Credential encryption    | `JOURNAL_SECRET` derives an AES-256-GCM key via `scryptSync(JOURNAL_SECRET, …, 32)`; a random 256-bit key file is used if unset                                                                                                                                                                                                                                | `README.md:73`; `AGENTS.md:163`; `apps/web/src/server/crypto.ts`                       |
+| ARCH-825 | AI BYO-key               | `ANTHROPIC_API_KEY` / `OPENAI_API_KEY` via env or Settings page                                                                                                                                                                                                                                                                                                | `README.md:75-76`; `02-ai-architecture.md` §2                                          |
+| ARCH-826 | WAL mode                 | SQLite WAL enabled; concurrent reads during writes. Set in **both** the legacy `createDb()` helper and the singleton.                                                                                                                                                                                                                                          | `apps/web/src/db/index.ts:36`; `apps/web/src/db/index.ts:98`                           |
+| ARCH-827 | `foreign_keys = ON`      | Enforced at connection level, in both init paths                                                                                                                                                                                                                                                                                                               | `apps/web/src/db/index.ts:38`; `apps/web/src/db/index.ts:100`                          |
+| ARCH-828 | `busy_timeout = 5000`    | 5-second write-wait, in both init paths                                                                                                                                                                                                                                                                                                                        | `apps/web/src/db/index.ts:37`; `apps/web/src/db/index.ts:99`                           |
+| ARCH-829 | Next.js telemetry        | **Not disabled by the project.** The Dockerfile sets `NODE_ENV=production` (`Dockerfile:14`) but no `NEXT_TELEMETRY_DISABLED`. `README.md:288` tells users to `set NEXT_TELEMETRY_DISABLED=1` themselves. `AGENTS.md:260` claims the flag is in the Dockerfile — **that claim is false** and is the only place in the repo that states it as shipped behavior. | `Dockerfile:13-14`; `README.md:288`; `AGENTS.md:260`                                   |
 
 **Drift note:** `createDb()` (`apps/web/src/db/index.ts:31-72`) is an unreferenced duplicate of the singleton initialization (`:81-137`); the singleton mirrors its upgrade queries. Two init paths set the same pragmas, so the pragma line numbers above differ by path — a maintenance drift risk.
 
@@ -545,50 +545,50 @@ apps/web (runtime dependencies — apps/web/package.json:12-53)
 
 ## 10. Important Technical Constraints
 
-| ID | Constraint | Detail | Evidence |
-|---|---|---|---|
-| ARCH-801 | **Node 22+ required** | Hard requirement; `node:22-slim` in both Dockerfile stages | `package.json:10-12`; `Dockerfile:2`, `Dockerfile:13` |
-| ARCH-802 | **pnpm 11.0.8 required** | Pinned via `packageManager` field; `--frozen-lockfile` in CI and in the Dockerfile | `package.json:13`; `Dockerfile:8`; `.github/workflows/ci.yml:19` |
-| ARCH-803 | **ESM-only** | All packages use `"type": "module"`; no CommonJS at runtime | `packages/core/package.json:6`; `packages/importers/package.json:6`; `apps/web/package.json:5`; `tsconfig.base.json:5` |
-| ARCH-804 | **TypeScript strict** | `strict: true`, `noUncheckedIndexedAccess: true` | `tsconfig.base.json:7`, `tsconfig.base.json:8` |
-| ARCH-805 | **`noUncheckedIndexedAccess`** | Every `arr[i]` is `T \| undefined`; use `!` only when provably in range | `tsconfig.base.json:8`; `AGENTS.md` §Formatting / structure |
-| ARCH-806 | **`better-sqlite3` must be serverExternal** | Prevents bundling; process-resident | `next.config.ts:6`; `AGENTS.md:257` |
-| ARCH-807 | **No `import.meta` in sync/broker code** | Sync code runs in browser-less Node; `import.meta` is not polyfilled there. **VERIFIED** — grep for `import.meta` across `apps/web/src/server/` and `apps/web/src/app/api/` returns zero matches | `AGENTS.md` §Async / state |
-| ARCH-808 | **Execution immutability** | Executions are append-only; `contentHash` uniqueness enforced by DB index | `03-domain-model.md:ARCH-059` |
-| ARCH-809 | **Trade key stability** | Key format `accountId\|symbol\|direction\|openedAt` must never change without migration | `03-domain-model.md:ARCH-065` |
-| ARCH-810 | **Annotations survive rebuild** | `notes`, `tagsJson`, `mistakesJson`, `rating`, `stopLoss`, `profitTarget`, `playbookId` are not part of the upsert set — `rebuild.ts` writes only `computed` fields (`:49-72`) via `.onConflictDoUpdate({ target: trades.key, set: computed })` (`:75`) | `apps/web/src/server/rebuild.ts:49-75`; `03-domain-model.md:ARCH-067` |
-| ARCH-811 | **Prop firm cash ledger is separate** | `prop_accounts` / `prop_entries` are distinct from `accounts` / `trades`; `journalAccountId` is a reference, not FK cascade | `03-domain-model.md:ARCH-078` |
-| ARCH-812 | **IBKR timezone lock** | `ibkr_sync_time_zone` is asserted on first sync; mixed-timezone accounts require recovery | `AGENTS.md` §IBKR broker sync; `apps/web/src/server/ibkr-sync-timezone.ts` |
-| ARCH-813 | **AI tools limited to 4 per agent run** | `maxToolCalls: 4`, `maxSteps: 4`. The constants live in `ai-contracts.ts` (`:47-48`, `:54-55`); enforcement is in `ai-runtime.ts` (`:165-167`, `:177`, `:195-196`, `:228-230`, `:240`, `:258-259`) | `apps/web/src/server/ai-contracts.ts:47-48`, `:54-55`; `apps/web/src/server/ai-runtime.ts:165-167` |
-| ARCH-814 | **AI never streams** | `streamText` is not used anywhere; all calls are non-streaming `generateText`. **VERIFIED** — grep for `streamText` across `apps/web/src/` returns zero matches | `02-ai-architecture.md` §8 |
-| ARCH-815 | **No persistent chat** | No `conversations`/`messages` tables; each request builds a fresh aggregate context. **VERIFIED** — grep across `apps/web/src/db/` returns zero matches | `02-ai-architecture.md` §7 |
-| ARCH-816 | **Serverless not supported** | SQLite requires a persistent disk; no external DB in this release | `README.md:82` |
-| ARCH-817 | **No telemetry (qualified)** | The project ships no telemetry SDK and no analytics calls, but it does make outbound requests to brokers, market-data providers, and AI providers. Next.js anonymous framework telemetry is **not** disabled in the shipped image — users are told to set `NEXT_TELEMETRY_DISABLED=1` themselves. `AGENTS.md:260` asserts the flag is in the Dockerfile; it is not. | `README.md:288`; `AGENTS.md:260`; `Dockerfile:13-14` (absence) |
-| ARCH-818 | **Desktop sidecar runtime ≠ Docker runtime** | The Docker image builds and runs on Node 22 (`Dockerfile:2`, `:13`); the Tauri sidecar is Node 24.11.0 (`desktop/README.md:25`, `AGENTS.md:113`), and `AGENTS.md:88` states 22.11.0 — the repo is internally inconsistent | `Dockerfile:2`; `desktop/README.md:25`; `AGENTS.md:88`, `AGENTS.md:113` |
+| ID       | Constraint                                   | Detail                                                                                                                                                                                                                                                                                                                                                              | Evidence                                                                                                               |
+| -------- | -------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------- |
+| ARCH-801 | **Node 22+ required**                        | Hard requirement; `node:22-slim` in both Dockerfile stages                                                                                                                                                                                                                                                                                                          | `package.json:10-12`; `Dockerfile:2`, `Dockerfile:13`                                                                  |
+| ARCH-802 | **pnpm 11.0.8 required**                     | Pinned via `packageManager` field; `--frozen-lockfile` in CI and in the Dockerfile                                                                                                                                                                                                                                                                                  | `package.json:13`; `Dockerfile:8`; `.github/workflows/ci.yml:19`                                                       |
+| ARCH-803 | **ESM-only**                                 | All packages use `"type": "module"`; no CommonJS at runtime                                                                                                                                                                                                                                                                                                         | `packages/core/package.json:6`; `packages/importers/package.json:6`; `apps/web/package.json:5`; `tsconfig.base.json:5` |
+| ARCH-804 | **TypeScript strict**                        | `strict: true`, `noUncheckedIndexedAccess: true`                                                                                                                                                                                                                                                                                                                    | `tsconfig.base.json:7`, `tsconfig.base.json:8`                                                                         |
+| ARCH-805 | **`noUncheckedIndexedAccess`**               | Every `arr[i]` is `T \| undefined`; use `!` only when provably in range                                                                                                                                                                                                                                                                                             | `tsconfig.base.json:8`; `AGENTS.md` §Formatting / structure                                                            |
+| ARCH-806 | **`better-sqlite3` must be serverExternal**  | Prevents bundling; process-resident                                                                                                                                                                                                                                                                                                                                 | `next.config.ts:6`; `AGENTS.md:257`                                                                                    |
+| ARCH-807 | **No `import.meta` in sync/broker code**     | Sync code runs in browser-less Node; `import.meta` is not polyfilled there. **VERIFIED** — grep for `import.meta` across `apps/web/src/server/` and `apps/web/src/app/api/` returns zero matches                                                                                                                                                                    | `AGENTS.md` §Async / state                                                                                             |
+| ARCH-808 | **Execution immutability**                   | Executions are append-only; `contentHash` uniqueness enforced by DB index                                                                                                                                                                                                                                                                                           | `03-domain-model.md:ARCH-059`                                                                                          |
+| ARCH-809 | **Trade key stability**                      | Key format `accountId\|symbol\|direction\|openedAt` must never change without migration                                                                                                                                                                                                                                                                             | `03-domain-model.md:ARCH-065`                                                                                          |
+| ARCH-810 | **Annotations survive rebuild**              | `notes`, `tagsJson`, `mistakesJson`, `rating`, `stopLoss`, `profitTarget`, `playbookId` are not part of the upsert set — `rebuild.ts` writes only `computed` fields (`:49-72`) via `.onConflictDoUpdate({ target: trades.key, set: computed })` (`:75`)                                                                                                             | `apps/web/src/server/rebuild.ts:49-75`; `03-domain-model.md:ARCH-067`                                                  |
+| ARCH-811 | **Prop firm cash ledger is separate**        | `prop_accounts` / `prop_entries` are distinct from `accounts` / `trades`; `journalAccountId` is a reference, not FK cascade                                                                                                                                                                                                                                         | `03-domain-model.md:ARCH-078`                                                                                          |
+| ARCH-812 | **IBKR timezone lock**                       | `ibkr_sync_time_zone` is asserted on first sync; mixed-timezone accounts require recovery                                                                                                                                                                                                                                                                           | `AGENTS.md` §IBKR broker sync; `apps/web/src/server/ibkr-sync-timezone.ts`                                             |
+| ARCH-813 | **AI tools limited to 4 per agent run**      | `maxToolCalls: 4`, `maxSteps: 4`. The constants live in `ai-contracts.ts` (`:47-48`, `:54-55`); enforcement is in `ai-runtime.ts` (`:165-167`, `:177`, `:195-196`, `:228-230`, `:240`, `:258-259`)                                                                                                                                                                  | `apps/web/src/server/ai-contracts.ts:47-48`, `:54-55`; `apps/web/src/server/ai-runtime.ts:165-167`                     |
+| ARCH-814 | **AI never streams**                         | `streamText` is not used anywhere; all calls are non-streaming `generateText`. **VERIFIED** — grep for `streamText` across `apps/web/src/` returns zero matches                                                                                                                                                                                                     | `02-ai-architecture.md` §8                                                                                             |
+| ARCH-815 | **No persistent chat**                       | No `conversations`/`messages` tables; each request builds a fresh aggregate context. **VERIFIED** — grep across `apps/web/src/db/` returns zero matches                                                                                                                                                                                                             | `02-ai-architecture.md` §7                                                                                             |
+| ARCH-816 | **Serverless not supported**                 | SQLite requires a persistent disk; no external DB in this release                                                                                                                                                                                                                                                                                                   | `README.md:82`                                                                                                         |
+| ARCH-817 | **No telemetry (qualified)**                 | The project ships no telemetry SDK and no analytics calls, but it does make outbound requests to brokers, market-data providers, and AI providers. Next.js anonymous framework telemetry is **not** disabled in the shipped image — users are told to set `NEXT_TELEMETRY_DISABLED=1` themselves. `AGENTS.md:260` asserts the flag is in the Dockerfile; it is not. | `README.md:288`; `AGENTS.md:260`; `Dockerfile:13-14` (absence)                                                         |
+| ARCH-818 | **Desktop sidecar runtime ≠ Docker runtime** | The Docker image builds and runs on Node 22 (`Dockerfile:2`, `:13`); the Tauri sidecar is Node 24.11.0 (`desktop/README.md:25`, `AGENTS.md:113`), and `AGENTS.md:88` states 22.11.0 — the repo is internally inconsistent                                                                                                                                           | `Dockerfile:2`; `desktop/README.md:25`; `AGENTS.md:88`, `AGENTS.md:113`                                                |
 
 ---
 
 ## 11. Build & Test Commands
 
-| Command | Effect | Evidence |
-|---|---|---|
-| `pnpm install --frozen-lockfile` | Workspace install (all packages) | `README.md:39`; `Dockerfile:8` |
-| `pnpm dev` | Next.js Turbopack dev server on `:3000` | `package.json:15`; `apps/web/package.json:7` |
-| `pnpm build` | Next.js production build + static copy script | `package.json:16`; `apps/web/package.json:8` |
-| `pnpm start` | Serve existing standalone build | `package.json:17`; `apps/web/package.json:9` |
-| `pnpm preview` | Build then start (same port as dev) | `package.json:18`; `README.md:46-50` |
-| `pnpm test` | `vitest run` — all packages + apps/web | `package.json:19` |
-| `pnpm test:watch` | Vitest watch mode | `package.json:20` |
-| `pnpm typecheck` | `pnpm -r --parallel typecheck` | `package.json:21` |
-| `pnpm format` | Prettier write | `package.json:22` |
-| `pnpm format:check` | Prettier check | `package.json:23` |
-| `pnpm --filter web build` | Build standalone Next.js output | `README.md` |
-| `pnpm desktop:build` (root) | → `pnpm --filter desktop build:app` (Tauri release build) | `package.json:25`; `desktop/package.json:10` |
-| `pnpm desktop:build:debug` (root) | → `pnpm --filter desktop build:debug` | `package.json:24`; `desktop/package.json:12` |
-| `pnpm tauri dev` (**from `desktop/`**) | Tauri desktop dev | `desktop/package.json:8`; `AGENTS.md:89` |
-| `pnpm build:app` (**from `desktop/`**) | Tauri standalone `.exe` (release) | `desktop/package.json:10`; `AGENTS.md:97` |
-| `pnpm setup:sidecar` (**from `desktop/`**) | Download + verify the Node sidecar | `desktop/package.json:14`; `desktop/README.md:25` |
-| `docker compose up -d` | Docker deployment | `README.md:64`; `docker-compose.yml:2-14` |
+| Command                                    | Effect                                                    | Evidence                                          |
+| ------------------------------------------ | --------------------------------------------------------- | ------------------------------------------------- |
+| `pnpm install --frozen-lockfile`           | Workspace install (all packages)                          | `README.md:39`; `Dockerfile:8`                    |
+| `pnpm dev`                                 | Next.js Turbopack dev server on `:3000`                   | `package.json:15`; `apps/web/package.json:7`      |
+| `pnpm build`                               | Next.js production build + static copy script             | `package.json:16`; `apps/web/package.json:8`      |
+| `pnpm start`                               | Serve existing standalone build                           | `package.json:17`; `apps/web/package.json:9`      |
+| `pnpm preview`                             | Build then start (same port as dev)                       | `package.json:18`; `README.md:46-50`              |
+| `pnpm test`                                | `vitest run` — all packages + apps/web                    | `package.json:19`                                 |
+| `pnpm test:watch`                          | Vitest watch mode                                         | `package.json:20`                                 |
+| `pnpm typecheck`                           | `pnpm -r --parallel typecheck`                            | `package.json:21`                                 |
+| `pnpm format`                              | Prettier write                                            | `package.json:22`                                 |
+| `pnpm format:check`                        | Prettier check                                            | `package.json:23`                                 |
+| `pnpm --filter web build`                  | Build standalone Next.js output                           | `README.md`                                       |
+| `pnpm desktop:build` (root)                | → `pnpm --filter desktop build:app` (Tauri release build) | `package.json:25`; `desktop/package.json:10`      |
+| `pnpm desktop:build:debug` (root)          | → `pnpm --filter desktop build:debug`                     | `package.json:24`; `desktop/package.json:12`      |
+| `pnpm tauri dev` (**from `desktop/`**)     | Tauri desktop dev                                         | `desktop/package.json:8`; `AGENTS.md:89`          |
+| `pnpm build:app` (**from `desktop/`**)     | Tauri standalone `.exe` (release)                         | `desktop/package.json:10`; `AGENTS.md:97`         |
+| `pnpm setup:sidecar` (**from `desktop/`**) | Download + verify the Node sidecar                        | `desktop/package.json:14`; `desktop/README.md:25` |
+| `docker compose up -d`                     | Docker deployment                                         | `README.md:64`; `docker-compose.yml:2-14`         |
 
 **CI pipeline order** (`.github/workflows/ci.yml:20-25`): format:check → typecheck → test → `node scripts/check-licenses.mjs` → package builds → app build.
 
@@ -598,28 +598,28 @@ apps/web (runtime dependencies — apps/web/package.json:12-53)
 
 ## 12. Key Files Reference
 
-| File | Role | Evidence |
-|---|---|---|
-| `packages/core/src/round-trips.ts` | `buildRoundTrips`, `consumeLots`, `finalizeCycle` — FIFO/LIFO/WAVG | `AGENTS.md` §Important Files |
-| `packages/core/src/edge-score.ts` | `computeEdgeScore`, `EDGE_SCORE_VERSION = 2` (`:29`), documented weights | `AGENTS.md` §Important Files; `packages/core/src/edge-score.ts:29` |
-| `packages/core/src/metrics.ts` | `computeMetrics`, realized-R, profit factor | `AGENTS.md` §Important Files |
-| `packages/importers/src/detect.ts` | `parseAuto`, `detectFormat`, `FORMATS` registry (`:40`) | `AGENTS.md` §Important Files; `packages/importers/src/detect.ts:40` |
-| `packages/importers/src/formats/fills.ts` | `makeFillsFormat`, `rowsToFills` — declarative column spec | `AGENTS.md` §Important Files |
-| `packages/importers/src/formats/history.ts` | Bridge from the fill-format layer into the history-import pipeline | `packages/importers/src/formats/history.ts:1` |
-| `packages/importers/src/history/import.ts` | `importTradeHistory()` — adapter dispatch for historical statements | `packages/importers/src/history/import.ts:1-6` |
-| `apps/web/src/db/schema.ts` | Full Drizzle schema | `AGENTS.md` §Important Files |
-| `apps/web/src/db/bootstrap.ts` | `BOOTSTRAP_SQL` idempotent DDL + `ALTER TABLE` guards | `AGENTS.md` §Important Files |
-| `apps/web/src/db/index.ts` | Drizzle singleton + SQLite WAL/pragma configuration | `apps/web/src/db/index.ts:81-137` |
-| `apps/web/src/server/executions.ts` | `insertExecutions`, `partitionExecutions`, `executionProblem` | `AGENTS.md` §Important Files |
-| `apps/web/src/server/rebuild.ts` | `rebuildAccount` — reads execs, builds round-trips, upserts by key | `AGENTS.md` §Important Files; `apps/web/src/server/rebuild.ts:49-75` |
-| `apps/web/src/server/sync.ts` | Broker sync via `@luxalgo/broker-sdk`; `SyncOutcome` | `AGENTS.md:190` |
-| `apps/web/src/server/auth.ts` | HMAC session token + `verifySession` — the actual session check | `apps/web/src/server/auth.ts:12-15`, `:23-29` |
-| `apps/web/src/server/api.ts` | `handler()` — uniform auth + error JSON | `apps/web/src/server/api.ts:20-39` |
-| `apps/web/src/server/ai.ts` + `ai-runtime.ts` + `ai-prompts.ts` + `ai-scope.ts` | AI reflection runtime, tool factory, prompt builders, scope validation | `02-ai-architecture.md` §1 |
-| `apps/web/src/server/market-data/` | Provider adapters: `alpaca.ts`, `oanda.ts`, `public-crypto.ts` (binance + coinbase), `london-strategic-edge.ts` (LSE), `csv.ts`, plus `provider.ts`, `http.ts`, `transport.ts`, `estimates.ts`, `connections.ts` | filesystem listing of `apps/web/src/server/market-data/` |
-| `apps/web/src/components/dashboard-layout.tsx` | Drag-to-reorder dashboard cards, saved layouts | `AGENTS.md` §Important Files |
-| `apps/web/src/components/shell.tsx` | Sidebar, theme/privacy toggles, page transitions | `AGENTS.md` §Important Files |
-| `apps/web/src/components/charts/tokens.ts` | Resolves Tailwind/CSS vars for ECharts canvas | `AGENTS.md` §Important Files |
-| `scripts/check-licenses.mjs` | Allowlist CI gate | `AGENTS.md` §Important Files; `.github/workflows/ci.yml:23` |
-| `scripts/verify-features.py` | E2E HTTP smoke against disposable journal | `AGENTS.md` §Important Files |
-| `scripts/benchmark-journal.py` | Latency benchmarks on `/api/stats`, `/api/analysis`, etc. | `AGENTS.md` §Important Files |
+| File                                                                            | Role                                                                                                                                                                                                             | Evidence                                                             |
+| ------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------- |
+| `packages/core/src/round-trips.ts`                                              | `buildRoundTrips`, `consumeLots`, `finalizeCycle` — FIFO/LIFO/WAVG                                                                                                                                               | `AGENTS.md` §Important Files                                         |
+| `packages/core/src/edge-score.ts`                                               | `computeEdgeScore`, `EDGE_SCORE_VERSION = 2` (`:29`), documented weights                                                                                                                                         | `AGENTS.md` §Important Files; `packages/core/src/edge-score.ts:29`   |
+| `packages/core/src/metrics.ts`                                                  | `computeMetrics`, realized-R, profit factor                                                                                                                                                                      | `AGENTS.md` §Important Files                                         |
+| `packages/importers/src/detect.ts`                                              | `parseAuto`, `detectFormat`, `FORMATS` registry (`:40`)                                                                                                                                                          | `AGENTS.md` §Important Files; `packages/importers/src/detect.ts:40`  |
+| `packages/importers/src/formats/fills.ts`                                       | `makeFillsFormat`, `rowsToFills` — declarative column spec                                                                                                                                                       | `AGENTS.md` §Important Files                                         |
+| `packages/importers/src/formats/history.ts`                                     | Bridge from the fill-format layer into the history-import pipeline                                                                                                                                               | `packages/importers/src/formats/history.ts:1`                        |
+| `packages/importers/src/history/import.ts`                                      | `importTradeHistory()` — adapter dispatch for historical statements                                                                                                                                              | `packages/importers/src/history/import.ts:1-6`                       |
+| `apps/web/src/db/schema.ts`                                                     | Full Drizzle schema                                                                                                                                                                                              | `AGENTS.md` §Important Files                                         |
+| `apps/web/src/db/bootstrap.ts`                                                  | `BOOTSTRAP_SQL` idempotent DDL + `ALTER TABLE` guards                                                                                                                                                            | `AGENTS.md` §Important Files                                         |
+| `apps/web/src/db/index.ts`                                                      | Drizzle singleton + SQLite WAL/pragma configuration                                                                                                                                                              | `apps/web/src/db/index.ts:81-137`                                    |
+| `apps/web/src/server/executions.ts`                                             | `insertExecutions`, `partitionExecutions`, `executionProblem`                                                                                                                                                    | `AGENTS.md` §Important Files                                         |
+| `apps/web/src/server/rebuild.ts`                                                | `rebuildAccount` — reads execs, builds round-trips, upserts by key                                                                                                                                               | `AGENTS.md` §Important Files; `apps/web/src/server/rebuild.ts:49-75` |
+| `apps/web/src/server/sync.ts`                                                   | Broker sync via `@luxalgo/broker-sdk`; `SyncOutcome`                                                                                                                                                             | `AGENTS.md:190`                                                      |
+| `apps/web/src/server/auth.ts`                                                   | HMAC session token + `verifySession` — the actual session check                                                                                                                                                  | `apps/web/src/server/auth.ts:12-15`, `:23-29`                        |
+| `apps/web/src/server/api.ts`                                                    | `handler()` — uniform auth + error JSON                                                                                                                                                                          | `apps/web/src/server/api.ts:20-39`                                   |
+| `apps/web/src/server/ai.ts` + `ai-runtime.ts` + `ai-prompts.ts` + `ai-scope.ts` | AI reflection runtime, tool factory, prompt builders, scope validation                                                                                                                                           | `02-ai-architecture.md` §1                                           |
+| `apps/web/src/server/market-data/`                                              | Provider adapters: `alpaca.ts`, `oanda.ts`, `public-crypto.ts` (binance + coinbase), `london-strategic-edge.ts` (LSE), `csv.ts`, plus `provider.ts`, `http.ts`, `transport.ts`, `estimates.ts`, `connections.ts` | filesystem listing of `apps/web/src/server/market-data/`             |
+| `apps/web/src/components/dashboard-layout.tsx`                                  | Drag-to-reorder dashboard cards, saved layouts                                                                                                                                                                   | `AGENTS.md` §Important Files                                         |
+| `apps/web/src/components/shell.tsx`                                             | Sidebar, theme/privacy toggles, page transitions                                                                                                                                                                 | `AGENTS.md` §Important Files                                         |
+| `apps/web/src/components/charts/tokens.ts`                                      | Resolves Tailwind/CSS vars for ECharts canvas                                                                                                                                                                    | `AGENTS.md` §Important Files                                         |
+| `scripts/check-licenses.mjs`                                                    | Allowlist CI gate                                                                                                                                                                                                | `AGENTS.md` §Important Files; `.github/workflows/ci.yml:23`          |
+| `scripts/verify-features.py`                                                    | E2E HTTP smoke against disposable journal                                                                                                                                                                        | `AGENTS.md` §Important Files                                         |
+| `scripts/benchmark-journal.py`                                                  | Latency benchmarks on `/api/stats`, `/api/analysis`, etc.                                                                                                                                                        | `AGENTS.md` §Important Files                                         |

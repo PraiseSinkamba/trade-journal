@@ -6,13 +6,13 @@
 
 ## 8.1 Node.js Runtime
 
-| Concern | Value | Source |
-|---------|-------|--------|
-| Node version | `>= 22` (Docker: `node:22-slim`) | `package.json:10-11`, `Dockerfile:2,13` |
-| Package manager | pnpm 11.0.8 | `package.json:13` |
-| Module system | ESM (`"type": "module"` in `apps/web/package.json`) | `ARCH-401` |
-| Build tool | Next.js 15.5.23 with Turbopack (dev) | `apps/web/package.json:7,43` |
-| Output mode | `standalone` — self-contained `node apps/web/server.js` | `apps/web/next.config.ts:4`, `Dockerfile:26` |
+| Concern         | Value                                                   | Source                                       |
+| --------------- | ------------------------------------------------------- | -------------------------------------------- |
+| Node version    | `>= 22` (Docker: `node:22-slim`)                        | `package.json:10-11`, `Dockerfile:2,13`      |
+| Package manager | pnpm 11.0.8                                             | `package.json:13`                            |
+| Module system   | ESM (`"type": "module"` in `apps/web/package.json`)     | `ARCH-401`                                   |
+| Build tool      | Next.js 15.5.23 with Turbopack (dev)                    | `apps/web/package.json:7,43`                 |
+| Output mode     | `standalone` — self-contained `node apps/web/server.js` | `apps/web/next.config.ts:4`, `Dockerfile:26` |
 
 Sources: `package.json:10-13`; `Dockerfile:2,13,26`; `apps/web/next.config.ts:4`
 
@@ -45,6 +45,7 @@ CMD ["node", "apps/web/server.js"]     # :26
 ```
 
 Key properties:
+
 - **Multi-stage build** — builder dependencies not present in runner image.
 - **Non-root user** (`node`) in final image (`:22`).
 - **Data volume** (`./data:/data`) — SQLite DB and `.secret` key file live here.
@@ -83,18 +84,19 @@ Note: `docker-compose.yml` contains **no** `NEXT_TELEMETRY_DISABLED` comment —
 
 ### Core
 
-| Variable | Required | Default | Effect |
-|----------|----------|---------|--------|
-| `JOURNAL_DATA_DIR` | No | `/data/trade-journal` (code default, all platforms) | SQLite DB and `.secret` file location |
-| `JOURNAL_PASSWORD` | No | — (none) | Enables password gate |
-| `JOURNAL_SECRET` | No | auto-generated `.secret` | Encryption key for broker/AI credentials |
+| Variable           | Required | Default                                             | Effect                                   |
+| ------------------ | -------- | --------------------------------------------------- | ---------------------------------------- |
+| `JOURNAL_DATA_DIR` | No       | `/data/trade-journal` (code default, all platforms) | SQLite DB and `.secret` file location    |
+| `JOURNAL_PASSWORD` | No       | — (none)                                            | Enables password gate                    |
+| `JOURNAL_SECRET`   | No       | auto-generated `.secret`                            | Encryption key for broker/AI credentials |
 
 **`JOURNAL_DATA_DIR` default mismatch — live defect.** The code default is `process.env.JOURNAL_DATA_DIR ?? "/data/trade-journal"` (`apps/web/src/db/index.ts:8`) — an **absolute POSIX path on every platform**, not a dev/Docker split. Two other places disagree with the code:
 
-- `.env.example:10` — *"Where the SQLite database lives. Default: ./data"*
-- `apps/web/src/lib/export-format.ts:13` — *"(JOURNAL_DATA_DIR, default ./data)"*
+- `.env.example:10` — _"Where the SQLite database lives. Default: ./data"_
+- `apps/web/src/lib/export-format.ts:13` — _"(JOURNAL_DATA_DIR, default ./data)"_
 
 Consequences:
+
 - **Docker:** the image sets `JOURNAL_DATA_DIR=/data` explicitly (`Dockerfile:15`), and compose sets the same — so the code default never applies there.
 - **Desktop (Tauri):** the child process sets `JOURNAL_DATA_DIR=%APPDATA%\TradeJournal\data` explicitly (`desktop/src-tauri/src/server.rs:61`) — the code default never applies there either.
 - **Bare `pnpm dev` on Windows:** the code default **does** apply, and `/data/trade-journal` resolves to `C:\data\trade-journal` — the SQLite DB and `.secret` key file land on the system drive, not in the repo. This is the only affected path, and it is the one a developer hits first.
@@ -105,18 +107,18 @@ Fixing it is an application-code change (out of scope for this report), but the 
 
 ### AI Providers
 
-| Variable | Required | Default | Effect |
-|----------|----------|---------|--------|
-| `OPENAI_API_KEY` | No (BYO-key) | — | OpenAI key (takes priority over saved) |
-| `ANTHROPIC_API_KEY` | No (BYO-key) | — | Anthropic key (takes priority over saved) |
+| Variable            | Required     | Default | Effect                                    |
+| ------------------- | ------------ | ------- | ----------------------------------------- |
+| `OPENAI_API_KEY`    | No (BYO-key) | —       | OpenAI key (takes priority over saved)    |
+| `ANTHROPIC_API_KEY` | No (BYO-key) | —       | Anthropic key (takes priority over saved) |
 
 ### Standalone server / Next.js
 
-| Variable | Default | Effect |
-|----------|---------|--------|
-| `PORT` | `3000` | HTTP server port — set in the Docker runner (`Dockerfile:25`) |
-| `HOSTNAME` | `0.0.0.0` | Bind address — consumed by the Next standalone server (`Dockerfile:25`), **not** a Next.js built-in |
-| `NODE_ENV` | `production` | In Docker runner (`Dockerfile:14`) and in the desktop sidecar (`desktop/src-tauri/src/server.rs:63`) |
+| Variable                  | Default              | Effect                                                                                                                      |
+| ------------------------- | -------------------- | --------------------------------------------------------------------------------------------------------------------------- |
+| `PORT`                    | `3000`               | HTTP server port — set in the Docker runner (`Dockerfile:25`)                                                               |
+| `HOSTNAME`                | `0.0.0.0`            | Bind address — consumed by the Next standalone server (`Dockerfile:25`), **not** a Next.js built-in                         |
+| `NODE_ENV`                | `production`         | In Docker runner (`Dockerfile:14`) and in the desktop sidecar (`desktop/src-tauri/src/server.rs:63`)                        |
 | `NEXT_TELEMETRY_DISABLED` | **Not set anywhere** | Should be `1` to disable Next.js anonymous telemetry — the repo states it is set in the Dockerfile, and it is not. See §8.7 |
 
 `ARCH-404`
@@ -125,15 +127,15 @@ Fixing it is an application-code change (out of scope for this report), but the 
 
 ## 8.4 Database
 
-| Concern | Value | ARCH |
-|---------|-------|------|
-| Engine | better-sqlite3 ^12.2.0 | `ARCH-405` |
-| Mode | WAL (Write-Ahead Logging) — **explicitly set**, not SQLite's default (the default journal mode is `delete`) | `ARCH-405` |
-| Busy timeout | `busy_timeout = 5000` (5 s) | `ARCH-405` |
-| Foreign keys | `FOREIGN_KEYS = ON` enforced | `ARCH-405` |
-| Location | `{JOURNAL_DATA_DIR}/journal.db` | `ARCH-405` |
-| Schema tool | Drizzle ORM ^0.45.2 | `ARCH-405` |
-| Migrations | Hand-rolled: `BOOTSTRAP_SQL` + additive `ALTER TABLE` upgrades. No `drizzle-kit` config | `ARCH-405a` |
+| Concern      | Value                                                                                                       | ARCH        |
+| ------------ | ----------------------------------------------------------------------------------------------------------- | ----------- |
+| Engine       | better-sqlite3 ^12.2.0                                                                                      | `ARCH-405`  |
+| Mode         | WAL (Write-Ahead Logging) — **explicitly set**, not SQLite's default (the default journal mode is `delete`) | `ARCH-405`  |
+| Busy timeout | `busy_timeout = 5000` (5 s)                                                                                 | `ARCH-405`  |
+| Foreign keys | `FOREIGN_KEYS = ON` enforced                                                                                | `ARCH-405`  |
+| Location     | `{JOURNAL_DATA_DIR}/journal.db`                                                                             | `ARCH-405`  |
+| Schema tool  | Drizzle ORM ^0.45.2                                                                                         | `ARCH-405`  |
+| Migrations   | Hand-rolled: `BOOTSTRAP_SQL` + additive `ALTER TABLE` upgrades. No `drizzle-kit` config                     | `ARCH-405a` |
 
 Sources: `apps/web/package.json:35` (better-sqlite3), `:40` (drizzle-orm); `apps/web/src/db/index.ts:8` (data dir), `:34` (db path), `:36-38` (pragmas), `:39` (`BOOTSTRAP_SQL`), `:40-67` (upgrades), `:81-135` (singleton)
 
@@ -166,19 +168,31 @@ The SQLite file is local to the process. No connection pooling, no multi-process
 
 ```typescript
 export const AI_FEATURE_POLICIES: Readonly<Record<AiFeature, AiExecutionPolicy>> = {
-  reflection:      { maxOutputTokens: 1200, maxRetries: 2 },
-  askJournalAgent:{ maxOutputTokens: 1200, maxRetries: 2, timeoutMs: 30_000, maxSteps: 4, maxToolCalls: 4 },
-  reportsAgent:   { maxOutputTokens: 1200, maxRetries: 2, timeoutMs: 30_000, maxSteps: 4, maxToolCalls: 4 },
-  statementImport:{ maxOutputTokens: 32_000, maxRetries: 0, timeoutMs: 120_000 },
+  reflection: { maxOutputTokens: 1200, maxRetries: 2 },
+  askJournalAgent: {
+    maxOutputTokens: 1200,
+    maxRetries: 2,
+    timeoutMs: 30_000,
+    maxSteps: 4,
+    maxToolCalls: 4,
+  },
+  reportsAgent: {
+    maxOutputTokens: 1200,
+    maxRetries: 2,
+    timeoutMs: 30_000,
+    maxSteps: 4,
+    maxToolCalls: 4,
+  },
+  statementImport: { maxOutputTokens: 32_000, maxRetries: 0, timeoutMs: 120_000 },
 };
 ```
 
-| Feature | Max output tokens | Retries | Timeout | Tool loop |
-|---------|------------------|---------|---------|-----------|
-| `reflection` | 1,200 | 2 | — | No |
-| `askJournalAgent` | 1,200 | 2 | 30 s | 4 steps × 4 calls |
-| `reportsAgent` | 1,200 | 2 | 30 s | 4 steps × 4 calls |
-| `statementImport` | 32,000 | 0 | 120 s | **No** |
+| Feature           | Max output tokens | Retries | Timeout | Tool loop         |
+| ----------------- | ----------------- | ------- | ------- | ----------------- |
+| `reflection`      | 1,200             | 2       | —       | No                |
+| `askJournalAgent` | 1,200             | 2       | 30 s    | 4 steps × 4 calls |
+| `reportsAgent`    | 1,200             | 2       | 30 s    | 4 steps × 4 calls |
+| `statementImport` | 32,000            | 0       | 120 s   | **No**            |
 
 `statementImport` has **no tool loop**: it runs through `runObjectAi` (`apps/web/src/server/ai-runtime.ts:284`), whose request type `ObjectAiRequest` (`:45-53`) has no `createTools` field — a single `generateText` call with an `output` schema. The policy also declares no `maxSteps`/`maxToolCalls` (`ai-contracts.ts:57`).
 
@@ -206,10 +220,10 @@ No budget enforcement, no spend alerts — cost is borne by the user's provider 
 
 `VERIFIED` (violation) — the repo documents the opposite:
 
-| Claim | Location |
-|-------|----------|
-| *"**No telemetry:** `NEXT_TELEMETRY_DISABLED=1` in the Dockerfile; `set NEXT_TELEMETRY_DISABLED=1` locally if desired."* | `AGENTS.md:260` |
-| *"Next.js telemetry. The project ships with NEXT_TELEMETRY_DISABLED=1."* | `.omp/hooks/pre/telemetry-guard.ts:7` |
+| Claim                                                                                                                    | Location                              |
+| ------------------------------------------------------------------------------------------------------------------------ | ------------------------------------- |
+| _"**No telemetry:** `NEXT_TELEMETRY_DISABLED=1` in the Dockerfile; `set NEXT_TELEMETRY_DISABLED=1` locally if desired."_ | `AGENTS.md:260`                       |
+| _"Next.js telemetry. The project ships with NEXT_TELEMETRY_DISABLED=1."_                                                 | `.omp/hooks/pre/telemetry-guard.ts:7` |
 
 The enforcement hook blocks outbound calls to telemetry endpoints on the premise that the project already disables Next.js telemetry (`.omp/hooks/pre/telemetry-guard.ts:10,29`). That premise is false for the Docker image.
 
@@ -225,7 +239,7 @@ This is therefore **not** an optional recommendation — it is a **documented pr
 
 `VERIFIED` — No `rate-limit`, `upstash-ratelimit`, or equivalent dependency in `apps/web/package.json:12-52` or the root `package.json:28-34`. No custom rate-limiting middleware. Provider-side limits (OpenAI/Anthropic) are relied upon for abuse prevention.
 
-The one concrete exposure is the login endpoint: `POST /api/auth` (`apps/web/src/app/api/auth/route.ts:7-19`) has **no attempt counter, delay, or lockout** — password guesses are unbounded. This matters because the password is the *only* credential protecting the whole journal.
+The one concrete exposure is the login endpoint: `POST /api/auth` (`apps/web/src/app/api/auth/route.ts:7-19`) has **no attempt counter, delay, or lockout** — password guesses are unbounded. This matters because the password is the _only_ credential protecting the whole journal.
 
 Note the distinction: the market-data transport's limits (6 concurrent, 2 per host, 64 queue depth, 350 ms per-host interval — `apps/web/src/server/market-data/transport.ts:9,27,44`) **are** a rate limit, but they throttle **outbound** calls to the data provider, not inbound requests.
 
@@ -239,18 +253,18 @@ Note the distinction: the market-data transport's limits (6 concurrent, 2 per ho
 
 All processing is synchronous and user-driven:
 
-| Scenario | Mechanism |
-|----------|-----------|
-| Trade import | HTTP POST → sync DB write → return |
-| AI recap | HTTP POST → sync model call → return |
-| Daily recap generation | HTTP POST → sync model call → return |
+| Scenario                  | Mechanism                                                                               |
+| ------------------------- | --------------------------------------------------------------------------------------- |
+| Trade import              | HTTP POST → sync DB write → return                                                      |
+| AI recap                  | HTTP POST → sync model call → return                                                    |
+| Daily recap generation    | HTTP POST → sync model call → return                                                    |
 | Broker sync (ctrader MCP) | HTTP POST → **MCP JSON-RPC over an HTTP transport** to the configured endpoint → return |
-| Notebook autosave | Debounced HTTP PATCH (500 ms) |
-| Market data polling | `setTimeout` rate-limited queue (in-process) |
+| Notebook autosave         | Debounced HTTP PATCH (500 ms)                                                           |
+| Market data polling       | `setTimeout` rate-limited queue (in-process)                                            |
 
 No `setInterval`, no cron, no message queue, no worker threads.
 
-**Broker sync is an external process call, not an internal worker.** `CTraderMcpClient` (`apps/web/src/server/ctrader-mcp/client.ts:21-31`) builds a `type: "http"` MCP transport pointing at `options.endpoint` and drives it with `createMCPClient` from `@ai-sdk/mcp`. `mode: "local"` implies a **separately running local MCP server process** that the journal talks to over HTTP — so "no background processes" means *the journal spawns none*, not *the journal never talks to another process*.
+**Broker sync is an external process call, not an internal worker.** `CTraderMcpClient` (`apps/web/src/server/ctrader-mcp/client.ts:21-31`) builds a `type: "http"` MCP transport pointing at `options.endpoint` and drives it with `createMCPClient` from `@ai-sdk/mcp`. `mode: "local"` implies a **separately running local MCP server process** that the journal talks to over HTTP — so "no background processes" means _the journal spawns none_, not _the journal never talks to another process_.
 
 `ARCH-411`
 
@@ -288,22 +302,22 @@ There is no migration runner — schema management is `BOOTSTRAP_SQL` plus the h
 ```yaml
 steps:
   - pnpm install --frozen-lockfile
-  - pnpm format:check        # Prettier
-  - pnpm typecheck           # tsc --noEmit
-  - pnpm test                # vitest run
+  - pnpm format:check # Prettier
+  - pnpm typecheck # tsc --noEmit
+  - pnpm test # vitest run
   - node scripts/check-licenses.mjs
   - pnpm -r --filter "./packages/*" build
-  - pnpm build               # Next.js web build
+  - pnpm build # Next.js web build
 ```
 
-| Gate | Tool | Fail-on |
-|------|------|---------|
-| Format | Prettier | Any diff |
-| Types | TypeScript (`tsc --noEmit`) | Type errors |
-| Tests | Vitest | Any test failure |
-| License check | `check-licenses.mjs` | Unknown/unlisted license |
-| Package build | `pnpm -r build` | Build failure |
-| Web build | `next build` | Build failure |
+| Gate          | Tool                        | Fail-on                  |
+| ------------- | --------------------------- | ------------------------ |
+| Format        | Prettier                    | Any diff                 |
+| Types         | TypeScript (`tsc --noEmit`) | Type errors              |
+| Tests         | Vitest                      | Any test failure         |
+| License check | `check-licenses.mjs`        | Unknown/unlisted license |
+| Package build | `pnpm -r build`             | Build failure            |
+| Web build     | `next build`                | Build failure            |
 
 No security scanning (e.g., `npm audit`, SARIF upload), no CodeQL, no Lighthouse CI, no bundle size gate — confirmed absent from both `ci.yml` and `release.yml`.
 
@@ -315,19 +329,19 @@ No security scanning (e.g., `npm audit`, SARIF upload), no CodeQL, no Lighthouse
 
 A second workflow publishes the two public workspace packages to npm. It is `workflow_dispatch`-only (`:15`) — tags never publish — and uses **OIDC trusted publishing** rather than an npm token (`:19` `id-token: write` for npm provenance).
 
-| Step | Command |
-|------|---------|
-| Install | `pnpm install --frozen-lockfile` |
-| Types | `pnpm typecheck` |
-| Tests | `pnpm test` |
-| Package build | `pnpm -r --filter "./packages/*" build` |
-| Publish | `pnpm -r --filter "./packages/*" publish --access public --no-git-checks` |
+| Step          | Command                                                                   |
+| ------------- | ------------------------------------------------------------------------- |
+| Install       | `pnpm install --frozen-lockfile`                                          |
+| Types         | `pnpm typecheck`                                                          |
+| Tests         | `pnpm test`                                                               |
+| Package build | `pnpm -r --filter "./packages/*" build`                                   |
+| Publish       | `pnpm -r --filter "./packages/*" publish --access public --no-git-checks` |
 
 Published package contract:
 
-| Package | `publishConfig` | Notes |
-|---------|-----------------|-------|
-| `@luxalgo/journal-core` | `packages/core/package.json:39-51` | `dist/index.js` (ESM) + `dist/index.cjs` (CJS) + `.d.ts` |
+| Package                      | `publishConfig`                      | Notes                                                                                    |
+| ---------------------------- | ------------------------------------ | ---------------------------------------------------------------------------------------- |
+| `@luxalgo/journal-core`      | `packages/core/package.json:39-51`   | `dist/index.js` (ESM) + `dist/index.cjs` (CJS) + `.d.ts`                                 |
 | `@luxalgo/journal-importers` | `packages/importers/package.json:42` | Depends on `journal-core` via `workspace:*`, rewritten to a real version at publish time |
 
 Both packages are `MIT`-licensed and marked `publishConfig.access: "public"` — i.e. they are part of the public npm surface of this project.
@@ -338,17 +352,17 @@ Both packages are `MIT`-licensed and marked `publishConfig.access: "public"` —
 
 ## 8.12 Hosting Constraints
 
-| Constraint | Implication |
-|-----------|-------------|
-| SQLite on a local volume | The data directory must be on a **persistent local volume**; not suitable for ephemeral rootfs hosts (Fargate, Heroku-style dynos, some Kubernetes CSI setups) |
-| Single Node process | No horizontal scaling via multi-process Next.js; a manual process manager is needed for restarts (`restart: unless-stopped` in compose) |
-| Single WAL writer | All DB operations serialise through one SQLite writer; `busy_timeout = 5000` bounds lock waits |
-| No connection pooling | better-sqlite3 is synchronous and in-process — there is no pool to configure |
-| No CDN configuration | Static assets served by Next.js standalone; a CDN must be added externally |
-| Port 3000 default | Must be mapped via `ports: 3000:3000` in compose or `-p 3000:3000` on `docker run` |
-| No health endpoint | `app/api/` contains no `health` route; liveness/readiness probes require a custom route that does not exist |
-| No TLS termination in-repo | `docker-compose.yml` publishes `3000:3000` in plain HTTP; TLS must be provided by an external reverse proxy |
-| Unpinned base image | `node:22-slim` is a floating tag — pin to `@sha256:` for reproducible production builds |
+| Constraint                 | Implication                                                                                                                                                    |
+| -------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| SQLite on a local volume   | The data directory must be on a **persistent local volume**; not suitable for ephemeral rootfs hosts (Fargate, Heroku-style dynos, some Kubernetes CSI setups) |
+| Single Node process        | No horizontal scaling via multi-process Next.js; a manual process manager is needed for restarts (`restart: unless-stopped` in compose)                        |
+| Single WAL writer          | All DB operations serialise through one SQLite writer; `busy_timeout = 5000` bounds lock waits                                                                 |
+| No connection pooling      | better-sqlite3 is synchronous and in-process — there is no pool to configure                                                                                   |
+| No CDN configuration       | Static assets served by Next.js standalone; a CDN must be added externally                                                                                     |
+| Port 3000 default          | Must be mapped via `ports: 3000:3000` in compose or `-p 3000:3000` on `docker run`                                                                             |
+| No health endpoint         | `app/api/` contains no `health` route; liveness/readiness probes require a custom route that does not exist                                                    |
+| No TLS termination in-repo | `docker-compose.yml` publishes `3000:3000` in plain HTTP; TLS must be provided by an external reverse proxy                                                    |
+| Unpinned base image        | `node:22-slim` is a floating tag — pin to `@sha256:` for reproducible production builds                                                                        |
 
 ### Database Deployment Assumption — SQLite Only
 
@@ -388,48 +402,48 @@ trade-journal-desktop.exe  (Rust / Tauri 2)
   └── webview window → http://127.0.0.1:<discovered-port>
 ```
 
-| Concern | Detail | Evidence |
-|---------|--------|----------|
+| Concern        | Detail                                                                                                                                                           | Evidence                                                                                                       |
+| -------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------- |
 | Sidecar binary | Node **v24.11.0** win-x64, downloaded (not committed) and SHA-256-verified, renamed to the Tauri triple-suffixed form `binaries/node-x86_64-pc-windows-msvc.exe` | `desktop/src-tauri/scripts/setup-sidecar-node.ps1:20,23-24`; dispatcher `desktop/scripts/run-sidecar-setup.js` |
-| Sidecar launch | Tauri's shell sidecar API — handles the platform/triple suffix and bundled-path lookup | `desktop/src-tauri/src/server.rs:57-70` |
-| Bundled server | The Next.js standalone output, copied to `.next/tauri-dist/apps/web/` and bundled as a Tauri resource (`tauri.conf.json` `bundle.resources`) | `apps/web/scripts/copy-static-build.js`; `desktop/src-tauri/tauri.conf.json` |
-| Port discovery | Regex on the sidecar's stdout; emits the `server-ready` Tauri event, and the main window navigates to the URL | `desktop/src-tauri/src/server.rs:72-88`; `desktop/src-tauri/src/lib.rs:151-159` |
-| IPC contract | Three Tauri commands — `get_server_status`, `restart_server`, `open_data_folder` — plus the `server-ready` / `server-error` events | `desktop/src-tauri/src/lib.rs:13-46`, `:171-175` |
-| Lifecycle | Tray menu: Show / Restart Server / Open Data Folder / Quit. Close hides the window instead of exiting; Quit kills the sidecar then exits | `desktop/src-tauri/src/lib.rs:50-120`, `:124-134` |
+| Sidecar launch | Tauri's shell sidecar API — handles the platform/triple suffix and bundled-path lookup                                                                           | `desktop/src-tauri/src/server.rs:57-70`                                                                        |
+| Bundled server | The Next.js standalone output, copied to `.next/tauri-dist/apps/web/` and bundled as a Tauri resource (`tauri.conf.json` `bundle.resources`)                     | `apps/web/scripts/copy-static-build.js`; `desktop/src-tauri/tauri.conf.json`                                   |
+| Port discovery | Regex on the sidecar's stdout; emits the `server-ready` Tauri event, and the main window navigates to the URL                                                    | `desktop/src-tauri/src/server.rs:72-88`; `desktop/src-tauri/src/lib.rs:151-159`                                |
+| IPC contract   | Three Tauri commands — `get_server_status`, `restart_server`, `open_data_folder` — plus the `server-ready` / `server-error` events                               | `desktop/src-tauri/src/lib.rs:13-46`, `:171-175`                                                               |
+| Lifecycle      | Tray menu: Show / Restart Server / Open Data Folder / Quit. Close hides the window instead of exiting; Quit kills the sidecar then exits                         | `desktop/src-tauri/src/lib.rs:50-120`, `:124-134`                                                              |
 
 ### Dev vs prod URLs
 
-| Mode | URL | Detail |
-|------|-----|--------|
-| `tauri dev` | `http://localhost:3000` | `tauri.conf.json` `build.devUrl` — the webview loads a **separately running** Next dev server (`pnpm --filter web dev`); no sidecar is spawned for the UI |
-| `tauri build` | `http://127.0.0.1:<ephemeral>` | The bundled standalone server is spawned as a sidecar and its port discovered at runtime |
+| Mode          | URL                            | Detail                                                                                                                                                    |
+| ------------- | ------------------------------ | --------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `tauri dev`   | `http://localhost:3000`        | `tauri.conf.json` `build.devUrl` — the webview loads a **separately running** Next dev server (`pnpm --filter web dev`); no sidecar is spawned for the UI |
+| `tauri build` | `http://127.0.0.1:<ephemeral>` | The bundled standalone server is spawned as a sidecar and its port discovered at runtime                                                                  |
 
 ### Data directory behaviour
 
 The desktop runtime **overrides** `JOURNAL_DATA_DIR` explicitly, so the `/data/trade-journal` code default never applies here:
 
-| Path | Value | Evidence |
-|------|-------|----------|
-| Data dir | `%APPDATA%\TradeJournal\data` | `desktop/src-tauri/src/paths.rs:8-16`; `desktop/src-tauri/src/lib.rs:127-129` |
-| SQLite file | `%APPDATA%\TradeJournal\data\journal.db` | `apps/web/src/db/index.ts:8,34` |
-| `.secret` key | same directory | `apps/web/src/server/crypto.ts:16-19` |
-| Env passed to child | `JOURNAL_DATA_DIR=<data dir>` | `desktop/src-tauri/src/server.rs:61` |
+| Path                | Value                                    | Evidence                                                                      |
+| ------------------- | ---------------------------------------- | ----------------------------------------------------------------------------- |
+| Data dir            | `%APPDATA%\TradeJournal\data`            | `desktop/src-tauri/src/paths.rs:8-16`; `desktop/src-tauri/src/lib.rs:127-129` |
+| SQLite file         | `%APPDATA%\TradeJournal\data\journal.db` | `apps/web/src/db/index.ts:8,34`                                               |
+| `.secret` key       | same directory                           | `apps/web/src/server/crypto.ts:16-19`                                         |
+| Env passed to child | `JOURNAL_DATA_DIR=<data dir>`            | `desktop/src-tauri/src/server.rs:61`                                          |
 
 The data directory lives **outside** the install directory, so app upgrades do not touch user data.
 
 ### Windows-specific concerns
 
-| Concern | Detail |
-|---------|--------|
-| Path prefix | The Rust side strips the Windows extended-length prefix `\\?\` from the resource path — Node 24's `realpathSync` otherwise resolves only to the drive root and fails `EISDIR` (`desktop/src-tauri/src/server.rs:48-55`) |
-| Native module ABI | `better-sqlite3` is a native addon compiled against a specific Node ABI. Changing the Node version used to build requires `node-gyp rebuild` in `apps/web/node_modules/better-sqlite3` (`desktop/README.md`, "Build fails — better-sqlite3 ABI mismatch") |
-| Node version mismatch | The sidecar is Node 24 while the Docker image is Node 22; `next build` is documented to crash under some Node 24 patch versions, which is why the sidecar pins v24.11.0 |
-| Windows-only bundling | `bundle.targets: ["msi", "nsis"]` — no macOS or Linux desktop builds are configured (`desktop/src-tauri/tauri.conf.json`) |
-| No auto-update | No Tauri updater is configured — upgrades require reinstalling the installer |
-| No code signing | Installers are unsigned; Windows SmartScreen will warn |
-| MSI needs a GUI session | The MSI install cannot run silently in every environment |
-| CSP disabled | `app.security.csp: null` in `tauri.conf.json` — the webview runs without a Content-Security-Policy |
-| Tray-only lifecycle | Closing the window hides it; the Node sidecar keeps running until Quit is chosen from the tray |
+| Concern                 | Detail                                                                                                                                                                                                                                                    |
+| ----------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Path prefix             | The Rust side strips the Windows extended-length prefix `\\?\` from the resource path — Node 24's `realpathSync` otherwise resolves only to the drive root and fails `EISDIR` (`desktop/src-tauri/src/server.rs:48-55`)                                   |
+| Native module ABI       | `better-sqlite3` is a native addon compiled against a specific Node ABI. Changing the Node version used to build requires `node-gyp rebuild` in `apps/web/node_modules/better-sqlite3` (`desktop/README.md`, "Build fails — better-sqlite3 ABI mismatch") |
+| Node version mismatch   | The sidecar is Node 24 while the Docker image is Node 22; `next build` is documented to crash under some Node 24 patch versions, which is why the sidecar pins v24.11.0                                                                                   |
+| Windows-only bundling   | `bundle.targets: ["msi", "nsis"]` — no macOS or Linux desktop builds are configured (`desktop/src-tauri/tauri.conf.json`)                                                                                                                                 |
+| No auto-update          | No Tauri updater is configured — upgrades require reinstalling the installer                                                                                                                                                                              |
+| No code signing         | Installers are unsigned; Windows SmartScreen will warn                                                                                                                                                                                                    |
+| MSI needs a GUI session | The MSI install cannot run silently in every environment                                                                                                                                                                                                  |
+| CSP disabled            | `app.security.csp: null` in `tauri.conf.json` — the webview runs without a Content-Security-Policy                                                                                                                                                        |
+| Tray-only lifecycle     | Closing the window hides it; the Node sidecar keeps running until Quit is chosen from the tray                                                                                                                                                            |
 
 ### Security posture on the desktop transport
 
@@ -445,26 +459,26 @@ The desktop webview talks to `http://127.0.0.1:<port>` — plain HTTP on loopbac
 
 ## Evidence Register
 
-| ID | Source | Status |
-|----|--------|--------|
-| ARCH-400 | `package.json:10-13`; `Dockerfile:2,13,26`; `apps/web/package.json:5,7,43`; `apps/web/next.config.ts:4` | VERIFIED |
-| ARCH-401 | `apps/web/package.json:5` | VERIFIED |
-| ARCH-402 | `Dockerfile:2,13,14,15,22,23,24,25,26` | VERIFIED — quote now includes `ENV PORT=3000 HOSTNAME=0.0.0.0` |
-| ARCH-403 | `docker-compose.yml:1-16` | VERIFIED |
-| ARCH-404 | `apps/web/src/db/index.ts:8` (`/data/trade-journal`); `.env.example:10`; `apps/web/src/lib/export-format.ts:13`; `Dockerfile:15` | VERIFIED — **default corrected** to `/data/trade-journal` |
-| ARCH-404a | Grep `NEXT_TELEMETRY_DISABLED` in `Dockerfile`, `docker-compose.yml`, `.env.example` → zero hits | VERIFIED |
-| ARCH-405 | `apps/web/package.json:35,40`; `apps/web/src/db/index.ts:8,34,36-38` | VERIFIED |
-| ARCH-405a | `apps/web/src/db/index.ts:39` (`BOOTSTRAP_SQL`), `:40-67` and `:105-131` (additive `ALTER TABLE` upgrades) | VERIFIED — hand-rolled migration path, no `drizzle-kit` |
-| ARCH-406 | `Dockerfile:26`; `apps/web/src/db/index.ts:81-135` | VERIFIED |
-| ARCH-407 | `apps/web/src/server/ai-contracts.ts:41-58` | VERIFIED — all values exact |
-| ARCH-407a | `apps/web/src/server/ai-contracts.ts:57`; `apps/web/src/server/ai-runtime.ts:45-53,284` | VERIFIED — `statementImport` has **no** tool loop |
-| ARCH-408 | `apps/web/src/server/ai-runtime.ts:130-313`; 4 AI routes return `ok({...})` | VERIFIED |
-| ARCH-409 | `Dockerfile` — `NEXT_TELEMETRY_DISABLED` not set; contradicts `AGENTS.md:260` and `.omp/hooks/pre/telemetry-guard.ts:7` | VERIFIED — **documented invariant violated** |
-| ARCH-410 | `apps/web/package.json:12-52`, `package.json:28-34` — no rate-limit dep; `apps/web/src/app/api/auth/route.ts:7-19` — no lockout | VERIFIED |
-| ARCH-411 | Grep `setInterval\|cron\|worker_threads` — no background schedulers; `apps/web/src/server/ctrader-mcp/client.ts:21-31` — MCP over HTTP | VERIFIED |
-| ARCH-412 | `apps/web/src/db/index.ts:81-135` — module-level IIFE, not `db.open()` | VERIFIED — **mechanism corrected** |
-| ARCH-413 | `.github/workflows/ci.yml:19-25` | VERIFIED — exact order and commands |
-| ARCH-413b | `.github/workflows/release.yml:15,19,26-41`; `packages/core/package.json:39-51`; `packages/importers/package.json:42` | VERIFIED — release pipeline now covered |
-| ARCH-414 | `Dockerfile`; `docker-compose.yml`; `apps/web/next.config.ts:4`; `apps/web/src/db/index.ts:1-2` | VERIFIED — garbled token removed |
-| ARCH-415 | `apps/web/package.json:35,41`; `apps/web/src/server/ai-contracts.ts:42,57`; `apps/web/src/server/ai-capabilities.ts:50-61` | VERIFIED — context builders emit aggregate/bucket text, not raw rows |
-| ARCH-415a | `desktop/src-tauri/src/server.rs:48-70,72-88`; `desktop/src-tauri/src/lib.rs:13-46,124-134,151-159`; `desktop/src-tauri/src/paths.rs:8-16`; `desktop/src-tauri/tauri.conf.json`; `desktop/src-tauri/scripts/setup-sidecar-node.ps1:20,23-24`; `pnpm-workspace.yaml:4`; `package.json:24-25` | VERIFIED — Tauri desktop runtime documented |
+| ID        | Source                                                                                                                                                                                                                                                                                      | Status                                                               |
+| --------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------- |
+| ARCH-400  | `package.json:10-13`; `Dockerfile:2,13,26`; `apps/web/package.json:5,7,43`; `apps/web/next.config.ts:4`                                                                                                                                                                                     | VERIFIED                                                             |
+| ARCH-401  | `apps/web/package.json:5`                                                                                                                                                                                                                                                                   | VERIFIED                                                             |
+| ARCH-402  | `Dockerfile:2,13,14,15,22,23,24,25,26`                                                                                                                                                                                                                                                      | VERIFIED — quote now includes `ENV PORT=3000 HOSTNAME=0.0.0.0`       |
+| ARCH-403  | `docker-compose.yml:1-16`                                                                                                                                                                                                                                                                   | VERIFIED                                                             |
+| ARCH-404  | `apps/web/src/db/index.ts:8` (`/data/trade-journal`); `.env.example:10`; `apps/web/src/lib/export-format.ts:13`; `Dockerfile:15`                                                                                                                                                            | VERIFIED — **default corrected** to `/data/trade-journal`            |
+| ARCH-404a | Grep `NEXT_TELEMETRY_DISABLED` in `Dockerfile`, `docker-compose.yml`, `.env.example` → zero hits                                                                                                                                                                                            | VERIFIED                                                             |
+| ARCH-405  | `apps/web/package.json:35,40`; `apps/web/src/db/index.ts:8,34,36-38`                                                                                                                                                                                                                        | VERIFIED                                                             |
+| ARCH-405a | `apps/web/src/db/index.ts:39` (`BOOTSTRAP_SQL`), `:40-67` and `:105-131` (additive `ALTER TABLE` upgrades)                                                                                                                                                                                  | VERIFIED — hand-rolled migration path, no `drizzle-kit`              |
+| ARCH-406  | `Dockerfile:26`; `apps/web/src/db/index.ts:81-135`                                                                                                                                                                                                                                          | VERIFIED                                                             |
+| ARCH-407  | `apps/web/src/server/ai-contracts.ts:41-58`                                                                                                                                                                                                                                                 | VERIFIED — all values exact                                          |
+| ARCH-407a | `apps/web/src/server/ai-contracts.ts:57`; `apps/web/src/server/ai-runtime.ts:45-53,284`                                                                                                                                                                                                     | VERIFIED — `statementImport` has **no** tool loop                    |
+| ARCH-408  | `apps/web/src/server/ai-runtime.ts:130-313`; 4 AI routes return `ok({...})`                                                                                                                                                                                                                 | VERIFIED                                                             |
+| ARCH-409  | `Dockerfile` — `NEXT_TELEMETRY_DISABLED` not set; contradicts `AGENTS.md:260` and `.omp/hooks/pre/telemetry-guard.ts:7`                                                                                                                                                                     | VERIFIED — **documented invariant violated**                         |
+| ARCH-410  | `apps/web/package.json:12-52`, `package.json:28-34` — no rate-limit dep; `apps/web/src/app/api/auth/route.ts:7-19` — no lockout                                                                                                                                                             | VERIFIED                                                             |
+| ARCH-411  | Grep `setInterval\|cron\|worker_threads` — no background schedulers; `apps/web/src/server/ctrader-mcp/client.ts:21-31` — MCP over HTTP                                                                                                                                                      | VERIFIED                                                             |
+| ARCH-412  | `apps/web/src/db/index.ts:81-135` — module-level IIFE, not `db.open()`                                                                                                                                                                                                                      | VERIFIED — **mechanism corrected**                                   |
+| ARCH-413  | `.github/workflows/ci.yml:19-25`                                                                                                                                                                                                                                                            | VERIFIED — exact order and commands                                  |
+| ARCH-413b | `.github/workflows/release.yml:15,19,26-41`; `packages/core/package.json:39-51`; `packages/importers/package.json:42`                                                                                                                                                                       | VERIFIED — release pipeline now covered                              |
+| ARCH-414  | `Dockerfile`; `docker-compose.yml`; `apps/web/next.config.ts:4`; `apps/web/src/db/index.ts:1-2`                                                                                                                                                                                             | VERIFIED — garbled token removed                                     |
+| ARCH-415  | `apps/web/package.json:35,41`; `apps/web/src/server/ai-contracts.ts:42,57`; `apps/web/src/server/ai-capabilities.ts:50-61`                                                                                                                                                                  | VERIFIED — context builders emit aggregate/bucket text, not raw rows |
+| ARCH-415a | `desktop/src-tauri/src/server.rs:48-70,72-88`; `desktop/src-tauri/src/lib.rs:13-46,124-134,151-159`; `desktop/src-tauri/src/paths.rs:8-16`; `desktop/src-tauri/tauri.conf.json`; `desktop/src-tauri/scripts/setup-sidecar-node.ps1:20,23-24`; `pnpm-workspace.yaml:4`; `package.json:24-25` | VERIFIED — Tauri desktop runtime documented                          |

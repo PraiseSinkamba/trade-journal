@@ -477,10 +477,7 @@ export const genericCsvAdapter: SourceAdapter = {
           ? parseExecutions(records, mapping, dateOrder, ctx.timeZone, issues)
           : parseTradePerRow(records, mapping, dateOrder, ctx.timeZone, issues);
 
-    const skippedReasons: SkippedReason[] = [
-      ...statusSkippedReasons,
-      ...parsed.skippedReasons,
-    ];
+    const skippedReasons: SkippedReason[] = [...statusSkippedReasons, ...parsed.skippedReasons];
 
     return {
       closed: sortTrades(parsed.closed),

@@ -6,21 +6,21 @@ Review fixes are applied; verification and the task-files-only commit require th
 
 ## Changed Files
 
-| File | Change |
-| --- | --- |
-| `apps/web/src/server/ai-contracts.ts` | Added the closed `askJournalAgent` feature, policy (`30s`, `4` steps, `4` tool calls), prompt version, and redacted step/tool-call metadata. |
-| `apps/web/src/server/ai-runtime.ts` | Added one provider-neutral `generateText` tool loop with `isStepCount`, runtime-owned tool-call budget, a 30s timeout, safe budget exhaustion behavior, redacted metadata, and a conservative per-step output allocation whose four-step sum cannot exceed the 1,200-token Ask execution budget. |
-| `apps/web/src/server/ai.ts` | Added frozen-scope closures for `get_journal_summary`, `find_trades`, and `get_trade_detail`, plus the Ask-only facade. |
-| `apps/web/src/server/trades-query.ts` | Added an optional timezone argument so scoped tools use the approved timezone if the journal setting changes during an agent execution. |
-| `apps/web/src/server/ai-prompts.ts` | Updated the initial Ask prompt to distinguish aggregate context from bounded read-only tool results. |
-| `apps/web/src/app/api/ai/ask/route.ts` | Migrated only Ask Journal to one `runAskJournalAi` execution while retaining `{ answer, scope }`. |
-| `apps/web/tests/ai-ask-agent.test.ts` | Added deterministic tool scope, invalid-argument, out-of-scope key, no-write, budget, and frozen-timezone behavior tests. |
-| `apps/web/tests/ai-scope.test.ts` | Updated Ask route seam and asserts exactly one agent execution with the unchanged response shape. |
-| `apps/web/tests/ai-runtime.test.ts` | Added finite Ask policy, one loop invocation, total-output allocation, runtime-supplied four-call budget / fifth-call denial, step stopper, and agent metadata coverage. |
-| `apps/web/tests/ai-capability.test.ts` | Added a deterministic initial-aggregate frozen-timezone regression test. |
-| `apps/web/tests/ai-prompts.test.ts` | Updated the Ask prompt behavior assertion. |
-| `docs/ai-scope.md` | Documented the scoped Ask tool contract, bounds, and verification surface. |
-| `.omp/style/ai-integration.md` | Updated the current AI contract to identify Ask as the sole bounded tool-using flow. |
+| File                                   | Change                                                                                                                                                                                                                                                                                           |
+| -------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| `apps/web/src/server/ai-contracts.ts`  | Added the closed `askJournalAgent` feature, policy (`30s`, `4` steps, `4` tool calls), prompt version, and redacted step/tool-call metadata.                                                                                                                                                     |
+| `apps/web/src/server/ai-runtime.ts`    | Added one provider-neutral `generateText` tool loop with `isStepCount`, runtime-owned tool-call budget, a 30s timeout, safe budget exhaustion behavior, redacted metadata, and a conservative per-step output allocation whose four-step sum cannot exceed the 1,200-token Ask execution budget. |
+| `apps/web/src/server/ai.ts`            | Added frozen-scope closures for `get_journal_summary`, `find_trades`, and `get_trade_detail`, plus the Ask-only facade.                                                                                                                                                                          |
+| `apps/web/src/server/trades-query.ts`  | Added an optional timezone argument so scoped tools use the approved timezone if the journal setting changes during an agent execution.                                                                                                                                                          |
+| `apps/web/src/server/ai-prompts.ts`    | Updated the initial Ask prompt to distinguish aggregate context from bounded read-only tool results.                                                                                                                                                                                             |
+| `apps/web/src/app/api/ai/ask/route.ts` | Migrated only Ask Journal to one `runAskJournalAi` execution while retaining `{ answer, scope }`.                                                                                                                                                                                                |
+| `apps/web/tests/ai-ask-agent.test.ts`  | Added deterministic tool scope, invalid-argument, out-of-scope key, no-write, budget, and frozen-timezone behavior tests.                                                                                                                                                                        |
+| `apps/web/tests/ai-scope.test.ts`      | Updated Ask route seam and asserts exactly one agent execution with the unchanged response shape.                                                                                                                                                                                                |
+| `apps/web/tests/ai-runtime.test.ts`    | Added finite Ask policy, one loop invocation, total-output allocation, runtime-supplied four-call budget / fifth-call denial, step stopper, and agent metadata coverage.                                                                                                                         |
+| `apps/web/tests/ai-capability.test.ts` | Added a deterministic initial-aggregate frozen-timezone regression test.                                                                                                                                                                                                                         |
+| `apps/web/tests/ai-prompts.test.ts`    | Updated the Ask prompt behavior assertion.                                                                                                                                                                                                                                                       |
+| `docs/ai-scope.md`                     | Documented the scoped Ask tool contract, bounds, and verification surface.                                                                                                                                                                                                                       |
+| `.omp/style/ai-integration.md`         | Updated the current AI contract to identify Ask as the sole bounded tool-using flow.                                                                                                                                                                                                             |
 
 ## Tool Contract
 

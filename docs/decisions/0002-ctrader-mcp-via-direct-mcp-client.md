@@ -61,8 +61,8 @@ to the new module. Every other broker continues to flow through
   module needs to be retired or reduced to a thin adapter that calls
   `connect({ broker: "ctrader-mcp" })`.
 - Forbidden: any new direct broker HTTP call anywhere else in the repo;
-any import of cTrader vendor SDKs or OAuth libraries outside the
-cTrader MCP module.
+  any import of cTrader vendor SDKs or OAuth libraries outside the
+  cTrader MCP module.
 
 ## Scope (revision 2026-10-17)
 

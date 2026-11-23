@@ -24,28 +24,30 @@
 
 ## File Structure
 
-| File | Responsibility |
-|---|---|
-| `apps/web/src/server/ai-runtime.ts` | Server-only provider resolution, SDK invocation, policy application, normalized safe errors, and redacted execution metadata. |
-| `apps/web/src/server/ai-contracts.ts` | Feature IDs, execution-policy types/constants, prompt-version identifiers, result metadata, and error discriminants. |
-| `apps/web/src/server/ai-prompts.ts` | Exact reflection system instruction and feature-specific prompt builders currently assembled in AI routes. |
-| `apps/web/src/server/ai.ts` | Reflection facade retaining the current `runAi` behavior while delegating to the runtime. |
-| `apps/web/src/server/ai-import.ts` | Statement-import adapter retaining its extraction schema and strict validation while delegating invocation to the runtime. |
-| `apps/web/src/app/api/ai/{ask,recap,critique}/route.ts` | Thin request/context adapters calling prompt builders; their HTTP response contracts do not change. |
-| `apps/web/tests/ai-runtime.test.ts` | Isolated unit tests for policy, provider selection, metadata, error normalization, and redaction. |
-| `apps/web/tests/ai-settings.test.ts` | Existing BYO-key/provider tests extended only where the central resolver changes public server behavior. |
-| `apps/web/tests/ai-import.test.ts` | Existing import safety tests extended to prove import policy remains no-retry and time-bounded. |
-| `apps/web/tests/ai-scope.test.ts` | Existing route/scope tests updated only for prompt-builder extraction seams. |
+| File                                                    | Responsibility                                                                                                                |
+| ------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------- |
+| `apps/web/src/server/ai-runtime.ts`                     | Server-only provider resolution, SDK invocation, policy application, normalized safe errors, and redacted execution metadata. |
+| `apps/web/src/server/ai-contracts.ts`                   | Feature IDs, execution-policy types/constants, prompt-version identifiers, result metadata, and error discriminants.          |
+| `apps/web/src/server/ai-prompts.ts`                     | Exact reflection system instruction and feature-specific prompt builders currently assembled in AI routes.                    |
+| `apps/web/src/server/ai.ts`                             | Reflection facade retaining the current `runAi` behavior while delegating to the runtime.                                     |
+| `apps/web/src/server/ai-import.ts`                      | Statement-import adapter retaining its extraction schema and strict validation while delegating invocation to the runtime.    |
+| `apps/web/src/app/api/ai/{ask,recap,critique}/route.ts` | Thin request/context adapters calling prompt builders; their HTTP response contracts do not change.                           |
+| `apps/web/tests/ai-runtime.test.ts`                     | Isolated unit tests for policy, provider selection, metadata, error normalization, and redaction.                             |
+| `apps/web/tests/ai-settings.test.ts`                    | Existing BYO-key/provider tests extended only where the central resolver changes public server behavior.                      |
+| `apps/web/tests/ai-import.test.ts`                      | Existing import safety tests extended to prove import policy remains no-retry and time-bounded.                               |
+| `apps/web/tests/ai-scope.test.ts`                       | Existing route/scope tests updated only for prompt-builder extraction seams.                                                  |
 
 ---
 
 ### Task 1: Define explicit AI contracts and feature policies
 
 **Files:**
+
 - Create: `apps/web/src/server/ai-contracts.ts`
 - Create: `apps/web/tests/ai-runtime.test.ts`
 
 **Interfaces:**
+
 - Produces `AiFeature`, `AiExecutionPolicy`, `AiExecutionMeta`, `AiRuntimeError`, `AI_FEATURE_POLICIES`, and `AI_PROMPT_VERSIONS`.
 - Consumed by the runtime, reflection facade, and import adapter.
 
@@ -53,10 +55,7 @@
 
 ```ts
 import { describe, expect, it } from "vitest";
-import {
-  AI_FEATURE_POLICIES,
-  AI_PROMPT_VERSIONS,
-} from "../src/server/ai-contracts";
+import { AI_FEATURE_POLICIES, AI_PROMPT_VERSIONS } from "../src/server/ai-contracts";
 
 describe("AI feature policies", () => {
   it("keeps reflection bounded and statement import non-retrying", () => {
@@ -154,11 +153,13 @@ git commit -m "Define policy boundaries for AI execution"
 ### Task 2: Create the server-only provider runtime
 
 **Files:**
+
 - Create: `apps/web/src/server/ai-runtime.ts`
 - Modify: `apps/web/tests/ai-runtime.test.ts`
 - Modify: `apps/web/src/server/settings.ts`
 
 **Interfaces:**
+
 - Consumes `AiFeature`, `AiExecutionPolicy`, `AiExecutionMeta`, and `AiRuntimeError` from `ai-contracts.ts`.
 - Produces `runTextAi(request)` and `runObjectAi(request)` returning `{ output, meta }`.
 - `runTextAi` accepts `{ feature: "reflection"; configuration: AiRuntimeConfiguration; promptVersion: string; system: string; prompt: string }`.
@@ -183,11 +184,13 @@ it("uses the OpenAI configuration and disables OpenAI storage", async () => {
   });
 
   expect(mockCreateOpenAI).toHaveBeenCalledWith({ apiKey: "secret" });
-  expect(mockGenerateText).toHaveBeenCalledWith(expect.objectContaining({
-    providerOptions: { openai: { store: false } },
-    maxRetries: 2,
-    maxOutputTokens: 1200,
-  }));
+  expect(mockGenerateText).toHaveBeenCalledWith(
+    expect.objectContaining({
+      providerOptions: { openai: { store: false } },
+      maxRetries: 2,
+      maxOutputTokens: 1200,
+    }),
+  );
 });
 
 it("returns only redacted execution metadata", async () => {
@@ -247,7 +250,6 @@ export const resolveAiConfiguration = (): {
 
 Use the existing encrypted-key/environment-override helpers already in this file; do not move encryption logic into the runtime. The import path retains its existing caller-selected `AiImportOptions`; it converts its already-validated provider, model, and key into `AiRuntimeConfiguration` so its public API remains unchanged.
 
-
 - [ ] **Step 4: Implement the runtime with the current SDK semantics**
 
 ```ts
@@ -299,6 +301,7 @@ git commit -m "Centralize provider-safe AI execution"
 ### Task 3: Extract reflection prompts and migrate existing reflection calls
 
 **Files:**
+
 - Create: `apps/web/src/server/ai-prompts.ts`
 - Modify: `apps/web/src/server/ai.ts`
 - Modify: `apps/web/src/app/api/ai/ask/route.ts`
@@ -309,6 +312,7 @@ git commit -m "Centralize provider-safe AI execution"
 - Modify: `apps/web/tests/ai-settings.test.ts`
 
 **Interfaces:**
+
 - `buildAskJournalPrompt(input: AskJournalPromptInput): string`
 - `buildDailyRecapPrompt(input: DailyRecapPromptInput): string`
 - `buildTradeCritiquePrompt(input: TradeCritiquePromptInput): string`
@@ -383,6 +387,7 @@ git commit -m "Move reflection prompts behind AI feature boundaries"
 ### Task 4: Migrate structured statement parsing without changing its safety protocol
 
 **Files:**
+
 - Modify: `apps/web/src/server/ai-import.ts`
 - Modify: `apps/web/src/app/api/import/route.ts`
 - Modify: `apps/web/src/app/import/page.tsx`
@@ -392,6 +397,7 @@ git commit -m "Move reflection prompts behind AI feature boundaries"
 - Modify: `apps/web/tests/ai-import-ui.test.ts`
 
 **Interfaces:**
+
 - Consumes `runObjectAi` with `feature: "statementImport"` and the server-only `resolveAiConfiguration()` result.
 - Changes `parseStatementWithAi` to accept only `statement` and an optional cancellation signal; it no longer accepts caller-provided provider/model/key data.
 - The import API accepts only the existing AI-preview intent flag, never an API key, model ID, or provider ID.
@@ -404,25 +410,27 @@ Add route/component tests in `ai-import.test.ts` and `ai-import-ui.test.ts` prov
 Add runtime/import assertions:
 
 ```ts
-expect(mockRunObjectAi).toHaveBeenCalledWith(expect.objectContaining({
-  feature: "statementImport",
-  promptVersion: "statement-import-v1",
-  output: expect.anything(),
-  abortSignal: expect.any(AbortSignal),
-}));
+expect(mockRunObjectAi).toHaveBeenCalledWith(
+  expect.objectContaining({
+    feature: "statementImport",
+    promptVersion: "statement-import-v1",
+    output: expect.anything(),
+    abortSignal: expect.any(AbortSignal),
+  }),
+);
 
-expect(mockGenerateText).toHaveBeenCalledWith(expect.objectContaining({
-  maxRetries: 0,
-  maxOutputTokens: 32_000,
-}));
+expect(mockGenerateText).toHaveBeenCalledWith(
+  expect.objectContaining({
+    maxRetries: 0,
+    maxOutputTokens: 32_000,
+  }),
+);
 
 mockRunObjectAi.mockResolvedValueOnce({
   output: validExtraction,
   meta: { finishReason: "length" },
 });
-await expect(parseStatementWithAi(statement)).rejects.toThrow(
-  "AI response was incomplete",
-);
+await expect(parseStatementWithAi(statement)).rejects.toThrow("AI response was incomplete");
 ```
 
 Keep existing cases for empty result, multiple accounts, malformed execution values, duplicate fills, missing source references, and no model call during commit.
@@ -466,10 +474,7 @@ const { output, meta } = await runObjectAi({
   messages: [
     {
       role: "user",
-      content: [
-        { type: "text", text: detectedColumnPrefixAndInstruction },
-        ...input,
-      ],
+      content: [{ type: "text", text: detectedColumnPrefixAndInstruction }, ...input],
     },
   ],
   output: Output.object({ schema }),
@@ -505,11 +510,13 @@ git commit -m "Keep AI import credentials on the server"
 ### Task 5: Verify foundation parity and document the migration boundary
 
 **Files:**
+
 - Modify: `docs/ai-scope.md`
 - Modify: `docs/superpowers/specs/2026-10-08-contextual-ai-workspace-design.md`
 - Modify: `.omp/style/ai-integration.md`
 
 **Interfaces:**
+
 - Produces documentation that distinguishes implemented execution foundation from future assistant-session, tool/capability, draft-card, and UI work.
 
 - [ ] **Step 1: Write documentation assertions as a review checklist**

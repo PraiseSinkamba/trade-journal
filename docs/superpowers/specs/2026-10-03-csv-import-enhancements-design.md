@@ -27,7 +27,7 @@ Two reported pains in `apps/web/src/app/import`:
   contamination and JSON truncation.
 - Let users refute a wrongly-detected format and map columns manually
   from the existing preview UI, without re-uploading.
-- Surface the per-row reasons parsers drop rows, so users can see *why*
+- Surface the per-row reasons parsers drop rows, so users can see _why_
   a format dropped their trades and decide whether to map manually.
 
 ## Non-goals
@@ -40,11 +40,11 @@ Two reported pains in `apps/web/src/app/import`:
 
 ## Scope summary
 
-| Section | Change | Files | Risk |
-|---|---|---|---|
-| 1 | Skip-reasons surfacing | `packages/importers/src/types.ts`, parsers (8 files), `apps/web/src/app/api/import/route.ts`, `apps/web/src/app/import/page.tsx` | Low. Type widening; old count preserved. |
-| 2 | Refute-and-remap affordance | `apps/web/src/app/import/page.tsx` | Low. UI-only, existing API already supports `mapping`. |
-| 3 | AI prompt tightening + token bump + header context | `apps/web/src/server/ai-import.ts` | Low. Prompt-only + numeric bump. |
+| Section | Change                                             | Files                                                                                                                            | Risk                                                   |
+| ------- | -------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------ |
+| 1       | Skip-reasons surfacing                             | `packages/importers/src/types.ts`, parsers (8 files), `apps/web/src/app/api/import/route.ts`, `apps/web/src/app/import/page.tsx` | Low. Type widening; old count preserved.               |
+| 2       | Refute-and-remap affordance                        | `apps/web/src/app/import/page.tsx`                                                                                               | Low. UI-only, existing API already supports `mapping`. |
+| 3       | AI prompt tightening + token bump + header context | `apps/web/src/server/ai-import.ts`                                                                                               | Low. Prompt-only + numeric bump.                       |
 
 ## Section 1 — Skip-reasons surfacing
 
@@ -57,7 +57,7 @@ Two reported pains in `apps/web/src/app/import`:
 if (!symbol || !openedAt || !closedAt || ...) { skippedRows++; continue; }
 ```
 
-The user sees `9 rows skipped` with no indication of *why*.
+The user sees `9 rows skipped` with no indication of _why_.
 
 ### Change
 
@@ -97,7 +97,7 @@ The user sees `9 rows skipped` with no indication of *why*.
 5. UI in `apps/web/src/app/import/page.tsx`: replace the inline
    "· N rows skipped" text with a button that opens a small disclosure
    panel listing the first 5 reasons inline (`row 7 — unparseable open
-   timestamp`) and an "and N more" expander for the remainder. Format
+timestamp`) and an "and N more" expander for the remainder. Format
    matches the existing executions preview pattern
    (`preview.executions.slice(0, 5)`). No parser internals exposed.
 
@@ -209,7 +209,7 @@ of `apps/web/src/app/import/page.tsx`):
    interest, fees-as-line-items, cancellations, expired orders, working
    orders, status lines, equity/margin totals, summary totals, account
    info rows. If a row in the statement is one of these, ignore it; if
-   *every* row could plausibly be one of these and no real trades are
+   _every_ row could plausibly be one of these and no real trades are
    present, return `executions: []` with `complete: true` and a
    `warnings` entry explaining "no trade rows found."
 
@@ -266,7 +266,7 @@ of `apps/web/src/app/import/page.tsx`):
   continue to work after the addition of `skippedReasons`. Keep both.
 - **AI prompt regression**: tightening the prompt could shift behaviour
   on previously-working files. Mitigation: keep the existing rules
-  verbatim; only *add* the inventory list and the header-context block.
+  verbatim; only _add_ the inventory list and the header-context block.
 - **UI layout**: the refute-and-remap disclosure sits inside an already-
   crowded card. Mitigation: replace the totals row, not stack beneath
   it.

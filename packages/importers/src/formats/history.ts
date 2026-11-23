@@ -1,7 +1,13 @@
 import { importTradeHistory } from "../history/import";
 import { normalizeHeader } from "../history/aliases";
 import type { ImportResult } from "../history/model";
-import type { ImportFormat, ImportOptions, ImportedExecution, ParsedImport, SkippedReason } from "../types";
+import type {
+  ImportFormat,
+  ImportOptions,
+  ImportedExecution,
+  ParsedImport,
+  SkippedReason,
+} from "../types";
 
 /** Options for the history path; `adapterId` is the only way to use the generic alias mapper. */
 export interface HistoryParseOptions extends ImportOptions {
@@ -217,13 +223,21 @@ export const parseHistory = (
         else if (!trade.direction) reason = "missing trade direction";
         else if (trade.entryTime === null || !Number.isFinite(trade.entryTime))
           reason = "missing or invalid entry time";
-        else if (trade.exitTime === null || !Number.isFinite(trade.exitTime) || trade.exitTime < trade.entryTime)
+        else if (
+          trade.exitTime === null ||
+          !Number.isFinite(trade.exitTime) ||
+          trade.exitTime < trade.entryTime
+        )
           reason = "missing or invalid exit time";
         else if (trade.entryPrice === null || !Number.isFinite(trade.entryPrice))
           reason = "missing entry price";
         else if (trade.exitPrice === null || !Number.isFinite(trade.exitPrice))
           reason = "missing exit price";
-        else if (trade.quantity === null || !(trade.quantity > 0) || !Number.isFinite(trade.quantity))
+        else if (
+          trade.quantity === null ||
+          !(trade.quantity > 0) ||
+          !Number.isFinite(trade.quantity)
+        )
           reason = "missing or non-positive quantity";
         for (const row of trade.sourceRows) {
           skippedReasons.push({ row, reason });

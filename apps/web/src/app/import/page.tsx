@@ -33,11 +33,7 @@ import { AI_IMPORT_MAX_BYTES, AI_IMPORT_MAX_TEXT } from "@/lib/ai-import";
 import { readHeaders, type SkippedReason } from "@luxalgo/journal-importers";
 import { XLSX_MAX_BYTES } from "@/lib/xlsx-import";
 import { Checkbox } from "@/components/ui/checkbox";
-import {
-  cTraderMcpBrokerId,
-  defaultEndpoint,
-  type CTraderAccount,
-} from "@/lib/ctrader-mcp-form";
+import { cTraderMcpBrokerId, defaultEndpoint, type CTraderAccount } from "@/lib/ctrader-mcp-form";
 
 interface BrokerInfo {
   id: string;
@@ -178,9 +174,7 @@ function FileImport() {
   // configured hosted provider still serves the import.
   const importProvider =
     selectedAiProvider === "compatible"
-      ? (["openai", "anthropic"] as const).find((provider) =>
-          aiConnections?.[provider]?.configured,
-        )
+      ? (["openai", "anthropic"] as const).find((provider) => aiConnections?.[provider]?.configured)
       : selectedAiProvider;
   const aiReady = Boolean(importProvider && aiConnections?.[importProvider]?.configured);
   const aiUnavailableMessage = importProvider
@@ -1180,8 +1174,7 @@ function CTraderMcpFields({
           inputMode="text"
         />
         <p className="mt-1 text-xs text-muted-foreground">
-          Default points at cTrader Desktop&apos;s embedded MCP server
-          ({defaultEndpoint}).
+          Default points at cTrader Desktop&apos;s embedded MCP server ({defaultEndpoint}).
         </p>
       </div>
       <div>
@@ -1220,7 +1213,8 @@ function CTraderMcpFields({
             <SelectContent>
               {previewAccounts.map((acct) => (
                 <SelectItem key={acct.id} value={String(acct.id)}>
-                  {acct.brokerTitle} · {acct.login} ({acct.currency}) · ${acct.balance.toFixed(2)} · {acct.isLive ? "Live" : "Demo"}
+                  {acct.brokerTitle} · {acct.login} ({acct.currency}) · ${acct.balance.toFixed(2)} ·{" "}
+                  {acct.isLive ? "Live" : "Demo"}
                 </SelectItem>
               ))}
             </SelectContent>
@@ -1244,11 +1238,11 @@ function CTraderMcpFields({
         />
         <p className="mt-1 text-xs text-muted-foreground">
           {(() => {
-              const acct = previewAccounts.find((a) => String(a.id) === accountId);
-              return acct
-                ? `Live cTrader balance: $${acct.balance.toFixed(2)} (will be set on create unless you change this field).`
-                : "Set to 0 if you're not sure; you can update it later.";
-            })()}
+            const acct = previewAccounts.find((a) => String(a.id) === accountId);
+            return acct
+              ? `Live cTrader balance: $${acct.balance.toFixed(2)} (will be set on create unless you change this field).`
+              : "Set to 0 if you're not sure; you can update it later.";
+          })()}
         </p>
       </div>
     </>

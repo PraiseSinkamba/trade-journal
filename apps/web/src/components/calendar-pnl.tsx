@@ -7,11 +7,7 @@ import { Pnl } from "./pnl";
 import { MonetaryValue, usePrivacy } from "./privacy";
 import type { CalendarPnlPoint } from "@/lib/calendar-insights";
 import { CalendarDayPreview } from "./calendar-day-preview";
-import {
-  HoverCard,
-  HoverCardContent,
-  HoverCardTrigger,
-} from "./ui/hover-card";
+import { HoverCard, HoverCardContent, HoverCardTrigger } from "./ui/hover-card";
 
 const compactFormatters = new Map<string, Intl.NumberFormat>();
 const compactMoney = (value: number, currency: string) => {

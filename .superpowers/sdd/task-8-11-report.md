@@ -2,12 +2,12 @@
 
 ## Summary
 
-| # | Task | Primitive | Commit SHA | Subject | Typecheck | Restore summary |
-|---|------|----------|-----------|---------|-----------|----------------|
-| 8 | Task 8 | skeleton | `7d02e6c` | Restore skeleton primitive on shadcn registry | PASS | Merged `data-slot="skeleton"` from registry into backup (plain wrapper); fixed import from bare `cn` → `@/lib/utils` |
-| 9 | Task 9 | label | `dc8b437` | Restore label primitive on shadcn registry | PASS | Kept Radix `LabelPrimitive.Root` from backup; added `data-slot="label"` from registry; fixed import |
-| 10 | Task 10 | input | `0ab0f92` | Restore input primitive on shadcn registry | PASS | Kept plain `<input>` from backup; added `data-slot="input"` from registry; shadcn wanted `@base-ui/react/input` dep — skipped |
-| 11 | Task 11 | textarea | `6f32b52` | Restore textarea primitive on shadcn registry | PASS | Kept plain `<textarea>` from backup; added `data-slot="textarea"` from registry; fixed import |
+| #   | Task    | Primitive | Commit SHA | Subject                                       | Typecheck | Restore summary                                                                                                               |
+| --- | ------- | --------- | ---------- | --------------------------------------------- | --------- | ----------------------------------------------------------------------------------------------------------------------------- |
+| 8   | Task 8  | skeleton  | `7d02e6c`  | Restore skeleton primitive on shadcn registry | PASS      | Merged `data-slot="skeleton"` from registry into backup (plain wrapper); fixed import from bare `cn` → `@/lib/utils`          |
+| 9   | Task 9  | label     | `dc8b437`  | Restore label primitive on shadcn registry    | PASS      | Kept Radix `LabelPrimitive.Root` from backup; added `data-slot="label"` from registry; fixed import                           |
+| 10  | Task 10 | input     | `0ab0f92`  | Restore input primitive on shadcn registry    | PASS      | Kept plain `<input>` from backup; added `data-slot="input"` from registry; shadcn wanted `@base-ui/react/input` dep — skipped |
+| 11  | Task 11 | textarea  | `6f32b52`  | Restore textarea primitive on shadcn registry | PASS      | Kept plain `<textarea>` from backup; added `data-slot="textarea"` from registry; fixed import                                 |
 
 ## Observations
 

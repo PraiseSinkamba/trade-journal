@@ -195,6 +195,14 @@ export const metaTraderAdapter: SourceAdapter = {
       (stillOpen ? open : closed).push(trade);
     }
 
-    return { closed: sortTrades(closed), open, issues, mapping, skippedRows, skippedReasons, dedupeSafe: true };
+    return {
+      closed: sortTrades(closed),
+      open,
+      issues,
+      mapping,
+      skippedRows,
+      skippedReasons,
+      dedupeSafe: true,
+    };
   },
 };

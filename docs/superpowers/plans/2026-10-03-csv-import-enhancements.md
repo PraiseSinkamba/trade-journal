@@ -15,6 +15,7 @@
 ### Modified files (no new files in this slice)
 
 **`packages/importers/src/`**
+
 - `types.ts` — add `SkippedReason` and `skippedReasons` to `ParsedImport`.
 - `formats/fills.ts` — propagate reasons from `rowsToFills`.
 - `formats/ibkr.ts` — replace `skippedRows++` with reason push.
@@ -29,6 +30,7 @@
 - `history/adapters/generic.ts`, `metatrader.ts`, `mt5deals.ts`, `tradingview.ts` — push reasons.
 
 **`apps/web/src/`**
+
 - `app/api/import/route.ts` — surface `skippedReasons` in the preview response.
 - `app/import/page.tsx` — refute-and-remap affordance + skip-reasons disclosure panel + pass `headers` to AI requests.
 - `lib/ai-import.ts` — accept optional `headers?: string[]` on `AiStatement`.
@@ -57,9 +59,11 @@
 ### Task 1.1: Add `SkippedReason` to `ParsedImport`
 
 **Files:**
+
 - Modify: `packages/importers/src/types.ts:49`
 
 **Produces:**
+
 ```ts
 export interface SkippedReason {
   /** 1-based row number in the parsed file, or null when the row index is unknown. */
@@ -107,6 +111,7 @@ git commit -m "feat(importers): surface per-row skip reasons on ParsedImport"
 ### Task 1.2: Update `rowsToFills` to emit reasons
 
 **Files:**
+
 - Modify: `packages/importers/src/formats/fills.ts:53-99`
 
 **Produces:** `rowsToFills` returns `{ executions: ImportedExecution[]; skippedRows: number; skippedReasons: SkippedReason[] }`.
@@ -141,7 +146,10 @@ export const rowsToFills = (
     const quantity = parseQuantity(pick(row, columns.quantity));
     const price = parseMoney(pick(row, columns.price));
     const fee = parseMoney(pick(row, columns.fees?.[0] ?? "") ?? "");
-    const timestamp = parseTimestamp(pick(row, columns.timestamp ?? columns.date?.[0] ?? ""), options.timeZone);
+    const timestamp = parseTimestamp(
+      pick(row, columns.timestamp ?? columns.date?.[0] ?? ""),
+      options.timeZone,
+    );
 
     if (!symbol || !side || !timestamp || quantity <= 0 || price <= 0) {
       skippedRows++;
@@ -199,6 +207,7 @@ git commit -m "feat(importers): propagate skip reasons through rowsToFills consu
 ### Task 1.3: Update legacy parser literals (ibkr, metatrader, tradezella)
 
 **Files:**
+
 - Modify: `packages/importers/src/formats/ibkr.ts`
 - Modify: `packages/importers/src/formats/metatrader.ts`
 - Modify: `packages/importers/src/formats/tradezella.ts`
@@ -258,6 +267,7 @@ git commit -m "feat(importers): emit per-row reasons from legacy format parsers"
 ### Task 1.4: Update `parseHistory` and adapters
 
 **Files:**
+
 - Modify: `packages/importers/src/formats/history.ts`
 - Modify: `packages/importers/src/history/import.ts`
 - Modify: `packages/importers/src/history/adapters/adapter.ts`
@@ -303,6 +313,7 @@ git commit -m "feat(importers): propagate skip reasons through history adapters 
 ### Task 1.5: Tests for skip-reasons
 
 **Files:**
+
 - Create: `packages/importers/tests/skipped-reasons.test.ts`
 
 - [ ] **Step 1: Write the test file**
@@ -332,7 +343,11 @@ describe("skipped-reasons", () => {
   });
 
   it("parseWithMapping reports a reason per skipped row", () => {
-    const csv = ["Symbol,Side,Qty,Price,Timestamp", "ES,buy,1,4500,2024-01-02T10:00:00Z", ",buy,1,4500,2024-01-02T10:00:00Z"].join("\n");
+    const csv = [
+      "Symbol,Side,Qty,Price,Timestamp",
+      "ES,buy,1,4500,2024-01-02T10:00:00Z",
+      ",buy,1,4500,2024-01-02T10:00:00Z",
+    ].join("\n");
     const result = parseWithMapping(csv, {
       symbol: "Symbol",
       side: "Side",
@@ -377,6 +392,7 @@ git commit -m "test(importers): cover per-row skip reasons"
 ### Task 1.6: Surface reasons in the API and import page
 
 **Files:**
+
 - Modify: `apps/web/src/app/api/import/route.ts:105`
 - Modify: `apps/web/src/app/import/page.tsx:45-50,528-532,544-572`
 
@@ -410,35 +426,35 @@ import type { SkippedReason } from "@luxalgo/journal-importers";
 Replace the existing `{preview.totals.skippedRows > 0 && (...)}` block (around line 528) with a `<details>` element:
 
 ```tsx
-{preview.totals.skippedRows > 0 && (
-  <details className="text-muted-foreground">
-    <summary className="cursor-pointer">
-      · {preview.totals.skippedRows} rows skipped —{" "}
-      {preview.totals.skippedReasons.length} detailed
-    </summary>
-    <ul className="ml-4 mt-1 list-disc">
-      {preview.totals.skippedReasons.slice(0, 5).map((reason, idx) => (
-        <li key={idx}>
-          row {reason.row ?? "?"} — {reason.reason}
-        </li>
-      ))}
-      {preview.totals.skippedRows > 5 && (
-        <li>and {preview.totals.skippedRows - 5} more</li>
-      )}
-      {preview.totals.skippedReasonsTruncated && (
-        <li>showing the first 50 of {preview.totals.skippedRows} skip reasons</li>
-      )}
-    </ul>
-  </details>
-)}
+{
+  preview.totals.skippedRows > 0 && (
+    <details className="text-muted-foreground">
+      <summary className="cursor-pointer">
+        · {preview.totals.skippedRows} rows skipped — {preview.totals.skippedReasons.length}{" "}
+        detailed
+      </summary>
+      <ul className="ml-4 mt-1 list-disc">
+        {preview.totals.skippedReasons.slice(0, 5).map((reason, idx) => (
+          <li key={idx}>
+            row {reason.row ?? "?"} — {reason.reason}
+          </li>
+        ))}
+        {preview.totals.skippedRows > 5 && <li>and {preview.totals.skippedRows - 5} more</li>}
+        {preview.totals.skippedReasonsTruncated && (
+          <li>showing the first 50 of {preview.totals.skippedRows} skip reasons</li>
+        )}
+      </ul>
+    </details>
+  );
+}
 ```
 
 - [ ] **Step 3: Smoke check**
 
 Start the dev server with `pnpm dev`. Manually trigger a known-bad parse (upload the user's 9-row failing CSV in non-AI path). Confirm:
 
-  · the disclosure renders with reasons.
-  · the count and reason count match.
+· the disclosure renders with reasons.
+· the count and reason count match.
 
 - [ ] **Step 4: Commit**
 
@@ -454,6 +470,7 @@ git commit -m "feat(web): surface per-row skip reasons in import preview"
 ### Task 2.1: Add the manual-override link in the preview card
 
 **Files:**
+
 - Modify: `apps/web/src/app/import/page.tsx:516-535`
 
 - [ ] **Step 1: Add state and link**
@@ -495,8 +512,29 @@ import ImportPage from "@/app/import/page";
 
 vi.mock("next/navigation", () => ({ useRouter: () => ({ push: vi.fn() }) }));
 vi.mock("@/lib/use-api", () => ({
-  useApi: () => ({ data: { formats: [{ id: "tradezella", label: "TradeZella" }], timeZone: "UTC", importTimeZone: "UTC", aiConnections: { openai: { configured: false }, anthropic: { configured: false } } }, error: null }),
-  postJson: vi.fn().mockResolvedValue({ detected: "tradezella", totals: { executions: 0, symbols: 0, skippedRows: 0, skippedReasons: [], skippedReasonsTruncated: false, from: null, to: null }, headers: ["Symbol","Side","Qty","Price"], needsMapping: false }),
+  useApi: () => ({
+    data: {
+      formats: [{ id: "tradezella", label: "TradeZella" }],
+      timeZone: "UTC",
+      importTimeZone: "UTC",
+      aiConnections: { openai: { configured: false }, anthropic: { configured: false } },
+    },
+    error: null,
+  }),
+  postJson: vi.fn().mockResolvedValue({
+    detected: "tradezella",
+    totals: {
+      executions: 0,
+      symbols: 0,
+      skippedRows: 0,
+      skippedReasons: [],
+      skippedReasonsTruncated: false,
+      from: null,
+      to: null,
+    },
+    headers: ["Symbol", "Side", "Qty", "Price"],
+    needsMapping: false,
+  }),
 }));
 
 describe("refute-and-remap", () => {
@@ -514,11 +552,11 @@ If the test is impractical due to environment setup complexity, skip and rely on
 
 `pnpm dev`. Upload the failing TradeZella file. Confirm:
 
-  · The badge shows "tradezella".
-  · "Wrong format? Map columns manually" link is visible.
-  · Click → totals collapse, mapper appears with all the headers.
-  · Map columns, click "Preview with mapping" → preview updates with mapped totals.
-  · Click "Import" → executions saved correctly.
+· The badge shows "tradezella".
+· "Wrong format? Map columns manually" link is visible.
+· Click → totals collapse, mapper appears with all the headers.
+· Map columns, click "Preview with mapping" → preview updates with mapped totals.
+· Click "Import" → executions saved correctly.
 
 - [ ] **Step 4: Commit**
 
@@ -534,6 +572,7 @@ git commit -m "feat(web): add refute-and-remap affordance to import preview"
 ### Task 3.1: Accept optional `headers` in `AiStatement`
 
 **Files:**
+
 - Modify: `apps/web/src/lib/ai-import.ts`
 - Modify: `apps/web/src/server/ai-import.ts:30-35, 178-230`
 
@@ -640,6 +679,7 @@ git commit -m "feat(web): tighten AI import prompt and pass file headers as cont
 ## Self-Review
 
 **Spec coverage:**
+
 - § 1 skip-reasons: Task 1.1–1.6 ✓
 - § 2 refute-and-remap: Task 2.1 ✓
 - § 3 AI prompt + token bump + headers: Task 3.1 ✓
@@ -648,6 +688,7 @@ git commit -m "feat(web): tighten AI import prompt and pass file headers as cont
 **Placeholders scan:** No "TBD", "TODO", "implement later", or similar. All code blocks are complete.
 
 **Type consistency:**
+
 - `SkippedReason` defined in Task 1.1, used in 1.2–1.6.
 - `skippedReasonsTruncated` boolean field consistent across API and page.
 - `preview.headers` already used by existing mapper UI; reused for `showManualMapper`.

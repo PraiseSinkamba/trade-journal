@@ -12,16 +12,16 @@
 
 ## File Structure
 
-| File | Responsibility | Status |
-| --- | --- | --- |
-| `apps/web/src/server/settings.ts` | Add `getCurrentAccountId`, `setCurrentAccountId` | Modify (append) |
-| `apps/web/src/app/api/settings/route.ts` | GET includes `currentAccountId`; PATCH accepts `currentAccountId?: string \| null` | Modify |
-| `apps/web/src/lib/use-account-default.ts` | New hook: resolves default id, validates against `/api/accounts?summary=1`, exposes `setDefault` | Create |
-| `apps/web/src/components/account-picker.tsx` | Accept `defaultId`; auto-fill when empty + valid; persist on every `onValueChange` | Modify |
-| `apps/web/src/components/manual-trade-entry.tsx` | Replace empty initial `accountId` with `useAccountDefault()` | Modify |
-| `apps/web/src/app/import/page.tsx` | Replace empty initial `accountId`; persist after a successful commit/connect | Modify |
-| `apps/web/src/components/account-selector.tsx` | URL auto-fill from default when `?accounts` is absent; persist on every select | Modify |
-| `apps/web/tests/account-default.test.ts` | Vitest suite covering server + hook behavior | Create |
+| File                                             | Responsibility                                                                                   | Status          |
+| ------------------------------------------------ | ------------------------------------------------------------------------------------------------ | --------------- |
+| `apps/web/src/server/settings.ts`                | Add `getCurrentAccountId`, `setCurrentAccountId`                                                 | Modify (append) |
+| `apps/web/src/app/api/settings/route.ts`         | GET includes `currentAccountId`; PATCH accepts `currentAccountId?: string \| null`               | Modify          |
+| `apps/web/src/lib/use-account-default.ts`        | New hook: resolves default id, validates against `/api/accounts?summary=1`, exposes `setDefault` | Create          |
+| `apps/web/src/components/account-picker.tsx`     | Accept `defaultId`; auto-fill when empty + valid; persist on every `onValueChange`               | Modify          |
+| `apps/web/src/components/manual-trade-entry.tsx` | Replace empty initial `accountId` with `useAccountDefault()`                                     | Modify          |
+| `apps/web/src/app/import/page.tsx`               | Replace empty initial `accountId`; persist after a successful commit/connect                     | Modify          |
+| `apps/web/src/components/account-selector.tsx`   | URL auto-fill from default when `?accounts` is absent; persist on every select                   | Modify          |
+| `apps/web/tests/account-default.test.ts`         | Vitest suite covering server + hook behavior                                                     | Create          |
 
 No new dependencies, no schema migration, no new endpoint.
 
@@ -34,7 +34,7 @@ From the project's `.omp/AGENTS.md` and the spec:
 - TypeScript strict, ESM, no `any`. Existing conventions: `import { … } from "@/…"` aliases, helper at top of files.
 - No new dependencies. Reuses existing settings store, API route, and `useApi`/`postJson` helpers.
 - All UI copy stays user-facing — no internal field names in user-visible strings.
-- One commit per task; commit messages lead with the *what*, not the file path.
+- One commit per task; commit messages lead with the _what_, not the file path.
 - Validation against the accounts table happens on read, not on write — a stale id falls back silently.
 - Run `pnpm format:check && pnpm typecheck && pnpm test` at the end of each task that affects TypeScript.
 
@@ -43,9 +43,11 @@ From the project's `.omp/AGENTS.md` and the spec:
 ### Task 1: Server helpers for `currentAccountId`
 
 **Files:**
+
 - Modify: `apps/web/src/server/settings.ts` (append two exports after the existing settings helpers, near the bottom before the AI helpers).
 
 **Produces:**
+
 ```ts
 export const getCurrentAccountId = (): string | null => getSetting("currentAccountId");
 export const setCurrentAccountId = (id: string | null): void => {
@@ -87,6 +89,7 @@ git commit -m "Add currentAccountId settings helpers"
 ### Task 2: Expose `currentAccountId` through `/api/settings`
 
 **Files:**
+
 - Modify: `apps/web/src/app/api/settings/route.ts`
   - Import `getCurrentAccountId`, `setCurrentAccountId` from `@/server/settings` (extend the existing import block).
   - Extend `SettingsBody` with `currentAccountId?: string | null`.
@@ -94,6 +97,7 @@ git commit -m "Add currentAccountId settings helpers"
   - In the PATCH transaction block, persist `currentAccountId` when `body.currentAccountId !== undefined`.
 
 **Produces:**
+
 ```ts
 // GET
 {
@@ -198,6 +202,7 @@ git commit -m "Expose currentAccountId through /api/settings"
 ### Task 3: `useAccountDefault` hook
 
 **Files:**
+
 - Create: `apps/web/src/lib/use-account-default.ts`
 
 **Produces:** a client-side hook that resolves `settings.currentAccountId` against the live account list and exposes a setter.
@@ -292,6 +297,7 @@ git commit -m "Add useAccountDefault hook"
 ### Task 4: `AccountPicker` auto-fill + persist
 
 **Files:**
+
 - Modify: `apps/web/src/components/account-picker.tsx`
 
 **Produces:** the picker accepts an optional `defaultId` prop. After both `/api/accounts` and (when provided) `/api/settings` resolve, if `value` is empty and either there is exactly one non-archived account or `defaultId` is a non-archived account, the picker calls `onChange(...)` once. On every user pick the picker calls `setDefault(newId)` when provided.
@@ -437,6 +443,7 @@ git commit -m "Auto-fill AccountPicker from remembered default"
 ### Task 5: Manual trade entry uses `useAccountDefault`
 
 **Files:**
+
 - Modify: `apps/web/src/components/manual-trade-entry.tsx`
 
 **Produces:** `accountId` initial state driven by `useAccountDefault().defaultId`. The picker auto-fills as soon as accounts resolve.
@@ -446,6 +453,7 @@ git commit -m "Auto-fill AccountPicker from remembered default"
 Replace the existing `useState("")` line and the `<AccountPicker … />` invocation:
 
 Before (around lines 16 and 77):
+
 ```tsx
 import { AccountPicker } from "./account-picker";
 …
@@ -493,6 +501,7 @@ git commit -m "Manual trade entry auto-picks from remembered account"
 ### Task 6: Import page auto-picks + persists on commit/connect
 
 **Files:**
+
 - Modify: `apps/web/src/app/import/page.tsx`
 
 **Produces:** `FileImport` initial state for `accountId` driven by `useAccountDefault`. After a successful commit (line 330) and successful broker connect (line 932), the page calls `setDefault(accountId | created.id)`.
@@ -532,9 +541,7 @@ Replace the existing `<AccountPicker … />` invocation near line 732:
   onChange={(id) => {
     setAccountId(id);
     setReviewOptions({});
-    setPreview((current) =>
-      current ? { ...current, reconciliation: undefined } : null,
-    );
+    setPreview((current) => (current ? { ...current, reconciliation: undefined } : null));
   }}
   kind="import"
   defaultId={defaultId}
@@ -603,6 +610,7 @@ git commit -m "Import page auto-picks account and persists on success"
 ### Task 7: Header `AccountSelector` URL auto-fill + persist
 
 **Files:**
+
 - Modify: `apps/web/src/components/account-selector.tsx`
 
 **Produces:** when the URL has no `?accounts=`, the component writes the persisted default to the URL (auto-fill). Every explicit user select — including demo, including "All accounts" — writes to both URL and `setDefault`.
@@ -724,6 +732,7 @@ git commit -m "Header dropdown auto-fills URL and persists selection"
 ### Task 8: Tests for the server + hook roundtrip
 
 **Files:**
+
 - Create: `apps/web/tests/account-default.test.ts`
 
 **Produces:** Vitest suite covering (a) server helpers get/set/clear, (b) `/api/settings` GET includes the field, (c) PATCH persists and null clears, (d) `useAccountDefault` returns `null` for archived/missing ids.
@@ -878,6 +887,7 @@ git commit -m "Apply prettier formatting" || echo "Nothing to commit"
 ## Self-Review
 
 **1. Spec coverage**
+
 - Single-account auto-pick → Task 4 (AccountPicker) + Task 7 (header).
 - Multi-account + remembered → Tasks 4, 5, 6, 7.
 - Header URL auto-fill when no `?accounts=` → Task 7.
@@ -890,6 +900,7 @@ git commit -m "Apply prettier formatting" || echo "Nothing to commit"
 **2. Placeholder scan** — none. Every code step contains the actual code.
 
 **3. Type consistency**
+
 - `useAccountDefault` returns `{ defaultId, loading, setDefault }` everywhere it's consumed (Tasks 4, 5, 6, 7).
 - `getCurrentAccountId()` / `setCurrentAccountId(id | null)` is consistent across Tasks 1, 2, 7, 8.
 - `currentAccountId` matches the server field name everywhere.
