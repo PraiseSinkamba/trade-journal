@@ -6,7 +6,8 @@ import { eq, inArray, like } from "drizzle-orm";
 import type { ImportedExecution } from "@luxalgo/journal-importers";
 import type { ReviewQuestionTransport } from "../src/server/intelligence/contracts/insights";
 import type { IntelligenceWorker } from "../src/server/intelligence/composition";
-import { workflowActionId } from "../src/lib/intelligence-interactions";
+import { workflowActionId, commandRequestBody } from "../src/lib/intelligence-interactions";
+import type { InteractionIntent } from "../src/lib/intelligence-interactions";
 import { createExperienceStore } from "../src/server/intelligence/infrastructure/experience-store";
 import { createEngagementCoordinator } from "../src/server/intelligence/experience/interactions";
 import { buildOpportunityRequest } from "../src/server/intelligence/experience/producer";
@@ -83,6 +84,7 @@ let { GET: getControls, POST: postControls } =
   await import("../src/app/api/intelligence/controls/route");
 let { GET: getObservations, POST: postObservations } =
   await import("../src/app/api/intelligence/observations/route");
+let { POST: postCommands } = await import("../src/app/api/intelligence/commands/route");
 let { currentInsightOf } = await import("../src/app/api/intelligence/queries");
 const { REVIEW_QUESTION_PROMPT_VERSION } =
   await import("../src/server/intelligence/infrastructure/review-transport");
@@ -171,6 +173,7 @@ const reopenJournal = async (): Promise<{
     await import("../src/app/api/intelligence/controls/route"));
   ({ GET: getObservations, POST: postObservations } =
     await import("../src/app/api/intelligence/observations/route"));
+  ({ POST: postCommands } = await import("../src/app/api/intelligence/commands/route"));
   jobs = createJobStore(db);
   dispatcher = createOutboxDispatcher({
     db,
@@ -331,12 +334,18 @@ const observations = () => db.select().from(intelligenceObservations).all();
 /** The shape the scoped surface answers with. */
 interface ServedScope {
   readonly observations: { readonly id: string; readonly accountId: string }[];
-  readonly intents: {
-    readonly kind: string;
-    readonly subject: { readonly id: string };
-    readonly insight?: { readonly question: string; readonly sourceRevision: string };
-  }[];
+  readonly intents: InteractionIntent[];
 }
+
+/** The question a served review intent carries, when it carries one. */
+const insightOf = (intent: InteractionIntent) =>
+  intent.kind === "observation-review" ? intent.insight : undefined;
+
+/** The served review intent, narrowed to the review the operator acts on. */
+const reviewOf = (intent: InteractionIntent) => {
+  if (intent.kind !== "observation-review") throw new Error("The served intent is not a review.");
+  return intent;
+};
 
 /**
  * The scoped surface, as the inbox reads it.
@@ -436,6 +445,14 @@ const observationsGet = (path: string) => new Request(`http://localhost${path}`)
 /** A review the inbox starts, as the inbox posts it. */
 const observationsPost = (body: unknown) =>
   new Request("http://localhost/api/intelligence/observations", {
+    method: "POST",
+    headers: { "Content-Type": "application/json", Origin: "http://localhost" },
+    body: JSON.stringify(body),
+  });
+
+/** The operator's command, as the card sends it. */
+const commandsPost = (body: unknown) =>
+  new Request("http://localhost/api/intelligence/commands", {
     method: "POST",
     headers: { "Content-Type": "application/json", Origin: "http://localhost" },
     body: JSON.stringify(body),
@@ -1156,6 +1173,120 @@ describe("the review question on the card", () => {
     );
     expect(refused.status).toBe(403);
     expect(await refused.json()).toEqual({ error: "scope_denied" });
+  });
+
+  it("takes the operator's command while the question is on the card", async () => {
+    const account = createAccount("acct-command-with-question");
+    configureProvider();
+    enablePolicy([account]);
+    insertTrade(account);
+    const { transport } = createTransport(() => QUESTION);
+    await drainWorker(providerWorker(transport));
+
+    const observation = observations()[0]!;
+    const start = await postObservations(observationsPost({ observationId: observation.id }));
+    expect(start.status).toBe(200);
+
+    // The card the operator acts on carries the question.
+    const body = await servedScope(account);
+    expect(body.intents).toHaveLength(1);
+    expect(insightOf(body.intents[0]!)?.question).toBe(QUESTION);
+
+    // The command the card would send: the action id and the revision the
+    // server issued, with the question neither changing nor demanding
+    // anything.
+    const intent = reviewOf(body.intents[0]!);
+    const acknowledge = intent.actions.find((action) => action.action === "acknowledge")!;
+    const request = commandRequestBody(intent, acknowledge, {
+      commandId: "cmd-acknowledge-with-question",
+    });
+    expect(request).not.toBeNull();
+    expect(request).toEqual({
+      actionId: acknowledge.actionId,
+      commandId: "cmd-acknowledge-with-question",
+      expectedRevision: intent.expectedRevision,
+      action: "acknowledge",
+    });
+
+    // The command route accepts it and the review completes.
+    const outcome = await postCommands(
+      commandsPost({
+        actionId: request!.actionId,
+        commandId: request!.commandId,
+        expectedRevision: request!.expectedRevision,
+        action: request!.action,
+      }),
+    );
+    expect(outcome.status).toBe(200);
+    expect(workflowRows()[0]!.status).toBe("completed");
+
+    // The question is still the journal's, and it never crossed the wire
+    // inside the command.
+    const stored = db.select().from(intelligenceInsights).all();
+    expect(stored).toHaveLength(1);
+    expect(stored[0]!.question).toBe(QUESTION);
+    expect(JSON.stringify(request)).not.toContain(QUESTION);
+  });
+
+  it("still refuses a stale command while the question is on the card", async () => {
+    const account = createAccount("acct-stale-with-question");
+    configureProvider();
+    enablePolicy([account]);
+    insertTrade(account);
+    const { transport } = createTransport(() => QUESTION);
+    await drainWorker(providerWorker(transport));
+
+    const observation = observations()[0]!;
+    const start = await postObservations(observationsPost({ observationId: observation.id }));
+    expect(start.status).toBe(200);
+
+    const body = await servedScope(account);
+    expect(insightOf(body.intents[0]!)?.question).toBe(QUESTION);
+    const intent = reviewOf(body.intents[0]!);
+    const acknowledge = intent.actions.find((action) => action.action === "acknowledge")!;
+    const defer = intent.actions.find((action) => action.action === "defer")!;
+
+    // The revision the card carries is the one the workflow is on.
+    expect(intent.expectedRevision).toBe(workflowRows()[0]!.revision);
+
+    // The operator defers the review: the workflow leaves for `scheduled` and
+    // its revision moves on. The effect then brings it back to wait, so the
+    // workflow is again in a status where ACKNOWLEDGE is legal — only the
+    // revision is now wrong. That is what makes the next command a test of
+    // the revision check and of nothing else.
+    const deferred = await postCommands(
+      commandsPost({
+        actionId: defer.actionId,
+        commandId: "cmd-defer-with-question",
+        expectedRevision: intent.expectedRevision,
+        action: "defer",
+        deferUntil: NOW,
+      }),
+    );
+    expect(deferred.status).toBe(200);
+    expect(workflowRows()[0]!.status).toBe("scheduled");
+    composition.workflowEngine.applyWorkflowEffect(intent.workflowId, intent.expectedRevision + 1);
+    expect(workflowRows()[0]!.status).toBe("waiting_for_user");
+    expect(workflowRows()[0]!.revision).toBeGreaterThan(intent.expectedRevision);
+
+    // The card the operator holds is now stale. Its command is refused by the
+    // REVISION check: the question does not make that check go soft.
+    const stale = await postCommands(
+      commandsPost({
+        actionId: acknowledge.actionId,
+        commandId: "cmd-stale-with-question",
+        expectedRevision: intent.expectedRevision,
+        action: "acknowledge",
+      }),
+    );
+    expect(stale.status).toBe(409);
+    const refusal = (await stale.json()) as { error: string; currentRevision: number };
+    expect(refusal.error).toBe("stale_revision");
+    expect(refusal.currentRevision).toBe(workflowRows()[0]!.revision);
+
+    // The refusal changed nothing: the workflow still waits for the operator.
+    expect(workflowRows()[0]!.status).toBe("waiting_for_user");
+    expect(workflowRows()[0]!.revision).toBeGreaterThan(intent.expectedRevision);
   });
 });
 

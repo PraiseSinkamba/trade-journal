@@ -22,6 +22,7 @@ they stored.
 | `apps/web/src/components/intelligence/interaction-card.tsx` | the labelled block and its privacy mask                                |
 | `apps/web/tests/intelligence-slice-b.test.ts`               | the end-to-end proof                                                   |
 | `apps/web/tests/intelligence-insight-card.test.ts`          | the card and the mask                                                  |
+| `apps/web/tests/intelligence-insight-smoke.test.ts`         | the shipped worker bundle, end to end                                  |
 | `docs/intelligence-operations.md`                           | where the question appears, and why a stored question may not be shown |
 | `docs/superpowers/plans/ai-native-journal/phase-24.md`      | the plan this phase was built from                                     |
 
@@ -96,7 +97,20 @@ allowance is spent across cases.
 | serves the question again after the journal is reopened              | the journal is closed and reopened on the same directory, the route module is imported again, and the question is still served                 |
 
 The card test proves the label, the question while privacy is off, and the
-mask while privacy is on.
+mask while privacy is on. A fourth card case proves the keyboard is left
+where it was: the question adds text, not controls, so the focusable set on
+the card is EXACTLY the one it had without the question — the Acknowledge
+button and nothing else — and the evidence list is untouched. It renders
+BOTH privacy states, each on its own mount, because the provider reads the
+saved preference when it mounts.
+
+The two command cases close the last leg of the plan's chain. The provider
+path previously stopped at the scoped GET; the operator's command was only
+exercised on the provider-FREE path, where no question is on the card. The
+command body the card builds is now proved twice: it carries exactly the
+action id, the revision and the action (the question is in neither the body
+nor the intent's own command fields), the command route applies it, and the
+workflow's revision check still bites when the card carries a question.
 
 ## The teeth bar
 
@@ -113,6 +127,50 @@ seen to pass again. Both results are recorded.
 | 5b  | the question belongs to the observation it is served for    | the reader drops the observation id comparison               | 1 case failed  | restored | 23 passed |
 | 6   | the question is served only inside the account's scope      | the route reads the insight for another account              | 4 cases failed | restored | 23 passed |
 | 6a  | the reader compares the account itself                      | the reader drops the account comparison                      | 0 cases failed | restored | 23 passed |
+
+Every count in this table was MEASURED on the tree this report describes,
+with the two new cases in place: the slice-b suite holds 25 cases, the card
+suite 4. The counts of breaks 1, 5 and 6 therefore rose with the new cases —
+the two command cases assert a served question, so they fail with the rest
+when the surface stops serving one.
+
+Break 8 widens break 6: it removes the scope filter from the observation
+list itself, so another account's observation enters the scope at all. Two
+cases fail — the per-account question case and the scope case — which shows
+the scope is held by the list, not only by the reader.
+
+Break 9 is the bundle's own teeth. The capability handler is removed from
+the production worker registration, the bundle is rebuilt, and the smoke sees
+the worker start, take its lease and process the job, yet store NO question:
+the assertion fails. With the registration restored the bundle stores it and
+the app serves it. This is the defect class the smoke exists for: a source
+test can pass while the shipped bundle never runs the leg.
+
+Break 7 is what keeps the question out of the command. The command body
+builder is given the question as the correction; the command case then fails,
+because the body the card sends must carry the action id, the revision and
+the action, and nothing else.
+
+Break 10 is what makes the stale-command case a test of the REVISION check.
+The revision is checked twice: once in the command service
+(`experience/commands.ts`) and once in the engine
+(`experience/workflows.ts`). Disabling only the service's check leaves the
+engine's, so the case still passes — that is defence in depth, not a gap.
+Disabling BOTH lets the stale command through and the case fails, which
+proves the case pins the check rather than some other refusal.
+
+The stale case is built to isolate the revision check. The operator DEFERS
+the review, so the workflow leaves for `scheduled` and its revision moves on;
+the effect then brings it back to waiting, where `acknowledge` is legal
+again. Only the revision is now wrong, so the refusal can come from nothing
+else. An earlier version of the case gave the review first and then sent a
+second command, and that version could not tell the revision check from the
+status guard — the workflow was already `completed`, so any command was
+refused. The defer-and-return shape is what makes the case bite.
+
+Break 11 is what makes the keyboard case strong. The question is rendered as
+a button, and the card case fails on the focusable count: the question adds
+text, never a control.
 
 Break 2 first showed no failure: the evidence-revision check was not
 observable through the surface, so a direct reader case was added, and the
@@ -143,26 +201,43 @@ scope biting end to end, through the route.
 | web + worker production build                                                                             | succeeded                                                                 |
 | bundled worker smoke                                                                                      | the shipped worker stored the question and the app served it              |
 
-The 79 format failures are pre-existing: stashing this phase's changes leaves
-the same 79 warnings on the pristine tree. Every file this phase touched is
-Prettier-clean.
+The format failures are pre-existing, and the count is measured, not
+remembered: a pristine worktree at the parent commit fails the same 73
+TRACKED files. The working tree shows 78 in total, and the extra five are
+untracked local artefacts (four generated Tauri schema files and the local
+scout brief), which git does not track and CI does not see. Every file this
+phase touched is Prettier-clean, the phase report included.
 
 ### The bundled-worker smoke
 
-The SHIPPED artifact was started as its own process, not the source. The
-smoke seeded a synthetic journal with the application's own modules (an
-account, the provider settings, the background policy and one live trade
-change), pointed the journal at a loopback provider stub, started
-`apps/web/.next/worker-dist/worker-entry.cjs`, and then:
+`apps/web/tests/intelligence-insight-smoke.test.ts` drives the ARTIFACT, not
+the source. It builds the worker bundle the way the release builds it
+(`scripts/build-worker.mjs`), seeds a synthetic journal with the
+application's own modules (an account, the provider settings, the background
+policy and one live trade change), points the journal at a loopback provider
+stub, starts the bundle as its own process and then:
 
-1. the worker reported `{"type":"ready"}` and took its lease;
-2. it consumed the capability job and stored the question in
-   `intelligence_insights`;
+1. the worker reported `{"type":"ready"}` and took its lease (the lease row
+   is read back from the journal);
+2. it consumed the capability job, asked the provider exactly once and stored
+   the question in `intelligence_insights` — the provider count is checked
+   again after a wait, so a second call would be seen, and the stored row
+   count is checked too;
 3. the app's scoped GET was called against the same journal — the review was
    started first, because the question is served where a review waits — and
    it answered with the question the worker had stored.
 
 Both halves passed: the bundled worker stored it, and the app served it.
+
+The suite builds the bundle itself because the CI gate runs the tests BEFORE
+the application build, so no prebuilt artifact exists when the tests run. The
+trade change needs `JOURNAL_EVENT_CAPTURE=1` to reach the worker's outbox —
+production capture is off until the historical baseline exists — and the
+synthetic case turns it on for itself.
+
+The worker runs in its own process on the platform clock, so the smoke's
+waits are real waits; no deterministic time control can reach a separate
+process.
 
 ## Boundaries
 
@@ -186,7 +261,15 @@ Both halves passed: the bundled worker stored it, and the app served it.
 - The reader's account comparison is a second line of defence: the store's
   own filter already refuses a foreign question (teeth break 6a showed this —
   dropping the comparison fails no case). The end-to-end scope claim rests on
-  teeth break 6.
+  teeth breaks 6 and 8.
+- The keyboard case proves the card's controls are still native and named
+  while the question is on it. It does not prove an ORDER of navigation
+  between two cards: the inbox never had one, and the question adds no
+  control to order.
+- The bundled-worker smoke proves the shipped bundle asks the provider once
+  and stores the question, and that the app serves it. It does not prove the
+  bundle against a REAL provider: the endpoint is a loopback stub, so the
+  credential path is exercised only as far as the stub answers.
 
 ## The review
 
@@ -223,3 +306,56 @@ the money, the inbox and `components/privacy.tsx` are untouched, the
 app-layer store access follows the retention-route precedent, the boundaries
 test passes, and there is no new dependency, migration, prompt or stored
 provider response.
+
+**Run 4** covered this pass's test additions and found six defects, five of
+them in what this pass wrote. All six are fixed:
+
+1. The report claimed "79 format failures, all on untouched files" while the
+   report ITSELF was one of the failures — the new tables were not
+   pipe-aligned. The report is Prettier-clean now, and the count is measured
+   against a pristine worktree: 73 tracked files fail before this pass and
+   the same 73 after it. The extra five the working tree shows are untracked
+   local artefacts, which CI never sees.
+2. The teeth counts were measured on the 23-case suite, before the two new
+   cases landed. Every count in the table was re-measured on the tree this
+   report describes; breaks 1, 5 and 6 now fail more cases, because the new
+   cases assert a served question too.
+3. The smoke's cleanup awaited the child's exit unconditionally. A child
+   that died early — exactly the case where the bundle is broken — made
+   `once(child, "exit")` wait for an event that had already fired, so the
+   smoke hung to its timeout and swallowed the diagnostic. The exit is now
+   awaited only while the child is alive, and the failing break reports the
+   worker's own output again.
+4. The report claimed the worker "took its lease" while nothing read the
+   lease row. The smoke now reads it back from the journal.
+5. The keyboard case proved only that the controls were native and named,
+   so a NEW native button for the question would still have passed it. The
+   case now pins the focusable set exactly: one button, the Acknowledge one.
+6. The provider count was a snapshot taken at the first stored question, so
+   "exactly once" was not durable. The smoke now waits and checks the count
+   again, and checks that only one question row exists.
+
+The reviewer confirmed the rest of this pass: the smoke drives the real
+artifact (`scripts/build-worker.mjs` produces `worker-entry.cjs`, and only
+`worker-entry.ts` starts a worker, so the question can only come from the
+bundle); the "the question never crosses the wire inside the command"
+assertion is real, because the body is the one the production
+`commandRequestBody` builds; the two new command cases are non-vacuous; the
+per-file environment variables cannot leak into another suite (vitest runs
+one process per file); and the import-graph rules still hold.
+
+**Run 5** found three further defects in this pass's tests, all now fixed:
+
+7. The stale-command case could not tell the REVISION check from the STATUS
+   guard. It gave the review first, so the workflow was already `completed`
+   and every later command was refused by the status. The case now DEFERS
+   the review and lets the effect bring it back to waiting, so the status is
+   legal and only the revision is wrong. Teeth break 10 measures it: with
+   both revision checks disabled the case fails.
+8. The keyboard case's selector omitted `a[href]`, so a native link on the
+   card would still have passed it. The selector now covers links.
+9. The keyboard case rendered only the masked branch, so a control in the
+   UNMASKED branch would still have passed it. It now renders both privacy
+   states, each on its own mount, because the provider reads the saved
+   preference when it mounts. Teeth break 11 measures it: with the question
+   rendered as a button the case fails.
