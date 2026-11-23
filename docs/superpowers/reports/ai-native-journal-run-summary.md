@@ -1,4 +1,4 @@
-# AI-native journal — the 21-phase run, in one document
+# AI-native journal — the run, in one document
 
 Between 2026-10-25 and 2026-11-18 the AI-native journal modernization ran as 21 phases on the branch
 `codex/ai-native-journal`. Every phase was reviewed, proved and verified by a destination gate run
@@ -9,6 +9,11 @@ feature branch. All 21 phases are integrated and verified; `main` was never touc
 pushed, opened a pull request or merged into `main`, and the coordinator index records `main`
 unchanged at `4ae868d`.
 
+A follow-on effort of three further phases (22, 23 and 24) then closed the third of the three open
+items that run left recorded: the persisted home for an AI-assisted insight. Those phases are
+covered here too, in [the optional-AI feature](#the-optional-ai-feature--three-phases-on-top). The
+whole of it is now 24 phases on the same branch, with the same discipline.
+
 This document is the map. It says what each phase built, what it touched, what the review and the
 gate caught, and where the detail lives. The detail is not repeated here: every phase has its own
 plan, its own phase report and its own integration record, and the gate table of a phase is in that
@@ -16,17 +21,17 @@ phase's integration record, not in this file.
 
 ## The run at a glance
 
-| Measure                                                         | Value                                                                                                              |
-| --------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------ |
-| Phases                                                          | 21                                                                                                                 |
-| Integration records                                             | 21                                                                                                                 |
-| Dispatches                                                      | 37                                                                                                                 |
-| Phase commits listed in the integration records                 | 115 (the sum of the per-phase `commits` lists in the coordinator index)                                            |
-| Files changed, insertions, deletions                            | 253 files changed, 59968 insertions(+), 1612 deletions(-) — the scale the coordinator index records for the branch |
-| Migrations                                                      | 7 (`0001-legacy-baseline` … `0007-intelligence-experience`)                                                        |
-| Tests at the final release gate                                 | `pnpm test` 1375 passed in 116 files; `cargo test` 5 passed; the icon generator's own header test 1 passed         |
-| Whole-project suite, first phase to last                        | 850 passed / 1 skipped in 86 files (Phase 01) → 1375 passed in 116 files (Phase 21)                                |
-| Destination-gate command rows across the 21 integration records | 183 (counted from the gate tables)                                                                                 |
+| Measure                                                         | Value                                                                                                                        |
+| --------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------- |
+| Phases                                                          | 24 — 21 in the modernization run, then 3 for the optional-AI feature                                                         |
+| Integration records                                             | 24                                                                                                                           |
+| Dispatches                                                      | 44 — 37 in the modernization run, then 7 for the three feature phases                                                        |
+| Phase commits listed in the integration records                 | 115 (the sum of the per-phase `commits` lists in the coordinator index)                                                      |
+| Files changed, insertions, deletions                            | 253 files changed, 59968 insertions(+), 1612 deletions(-) — the scale the coordinator index records for the branch           |
+| Migrations                                                      | 8 (`0001-legacy-baseline` … `0008-ai-insights`)                                                                              |
+| Tests at the final release gate                                 | `pnpm test` 1434 passed in 120 files after the feature; `cargo test` 5 passed; the icon generator's own header test 1 passed |
+| Whole-project suite, first phase to last                        | 850 passed / 1 skipped in 86 files (Phase 01) → 1375 passed in 116 files (Phase 21) → 1434 passed in 120 files (Phase 24)    |
+| Destination-gate command rows across the 24 integration records | 183 for the 21-phase run, plus 8 for each of the three feature phases                                                        |
 
 The shape of the work: the run turned a single-user journal into a governed runtime. A committed
 trade change leaves a durable event in the same transaction as the change; a single fenced worker
@@ -579,9 +584,108 @@ attempted and recorded as blocked host evidence. **Detail** —
 [phase report](./ai-native-journal-phase-21.md) ·
 [plan](../plans/ai-native-journal/phase-21.md)
 
+## The optional-AI feature — three phases on top
+
+The 21-phase run left three items open, and the third of them was this: _the persisted home for an
+AI-assisted insight_. The chain's AI leg had no table of its own — an opportunity carried no text,
+and a provider call may not happen inside a write transaction — so the optional-AI node of the
+design chain could not be wired. Three further phases on the same branch closed it, under the same
+discipline: a plan committed before each implementation, a review of the exact commits, a
+coordinator's teeth proof that the claimed behaviours had tests that could fail, a `--no-ff` merge,
+and a destination gate run alone on an idle host.
+
+### Phase 22 — the persisted home for a revision-bound result
+
+**Delivered** — the `intelligence_insights` table in migration `0008-ai-insights`, holding only what
+it should: the validated question, the source and scope references, the capability version, the
+producing run reference and the creation time. No prompt, no credential and no raw provider response
+has a column, and the only writer persists nothing else. The contract
+`apps/web/src/server/intelligence/contracts/insights.ts` exports `AI_INSIGHT_CAPABILITY_VERSION = "1"`
+and `insightBusinessKey`, whose format `insight:<capabilityVersion>:<accountId>:<sourceRevision>` is
+ONE identity for the run enqueue, the job deduplication and the stored row. The store
+`apps/web/src/server/intelligence/infrastructure/insight-store.ts` resolves the subject's current
+projection revision at read time, so a corrected source hides the older question at once, and the
+questions are wired into the account purge, the reset, the 90-day knowledge prune and the restore
+ledger. **Changed** — the four schema files, the two new server files, `retention.ts`, five existing
+tests, two documents, the plan and the report: 18 files, +1851 / −153. One migration; `0001`–`0007`
+byte-unchanged. Merge `dd30430`. **What was caught** — the implementation review returned PASS on
+all ten requirements, and the coordinator's teeth proof confirmed six behaviours decisive by
+mutation. It also established something the review could not: removing the ACCOUNT foreign key's
+cascade leaves the suite green, because the OBSERVATION cascade already takes the question with the
+observation it was made from, and the observation always goes with its account. The account cascade
+and the explicit purge delete are therefore defence in depth on top of the load-bearing one — a
+redundancy recorded so that no later phase reads the account cascade as the guarantee it is not.
+Gate 8 of 8, `pnpm test` 1387 passed in 117 files. **Detail** —
+[integration](./ai-native-journal-integration-22.md) ·
+[phase report](./ai-native-journal-phase-22.md) ·
+[plan](../plans/ai-native-journal/phase-22.md)
+
+### Phase 23 — the fenced provider job for the review question
+
+**Delivered** — one live trade change produces one short review question, asked through a durable
+job the worker executes OUTSIDE any write transaction, and stored through one FENCED final
+transaction that rechecks the claim fence, the account, the consent, the policy revision, the pinned
+configuration, the current observation revision and the opportunity's liveness before it writes
+anything. The run and its job are written in the same transaction that persists the observation, so
+they commit or roll back together. The legacy background path now refuses any run carrying a
+capability id, before it reserves an attempt and before it reaches a provider, so a successful
+provider response alone can never complete an insight job. The deterministic path is untouched: with
+no policy, no consent, no provider, no live opportunity or a refusal at any gate, the journal
+behaves exactly as before and no question is stored. **Changed** — the capability and the enqueue,
+the asynchronous worker path, the transport, the composition root, the policy store, the contracts,
+the settings module (which gained transaction-scoped readers, so the run and the configuration it is
+pinned against come from ONE snapshot), the prompt file `apps/web/src/server/ai-review-insight.ts`,
+the operations guide, four test files, the plan and the report. No migration: the job payload rides
+the existing `intelligence_jobs` table, and `0001`–`0008` are byte-unchanged. Merge `06a443f`.
+**What was caught** — the implementation review returned FAIL with eight findings: two documentation
+tables that disagreed with the code in BOTH directions, an unproven claim that the suite confirmed
+the lease renewal and the opportunity's liveness, the transport dropping the prompt version and the
+call metadata, the stored business key never asserted, an orphaned helper that could still complete
+a run from a bare provider response, a duplicate reason code, and a stale refusal reason left on a
+run that later succeeded. The coordinator's mutation map then found NINE more claimed behaviours that
+no test could fail. Two repair rounds followed, the second of them fixing two documentation
+contradictions the repair itself had created, and the final scoped review returned PASS. The
+coordinator's twelve-mutation teeth proof was decisive on all twelve, with no non-decisive mutation.
+Gate 8 of 8, `pnpm test` 1418 passed in 118 files. **Detail** —
+[integration](./ai-native-journal-integration-23.md) ·
+[phase report](./ai-native-journal-phase-23.md) ·
+[plan](../plans/ai-native-journal/phase-23.md)
+
+### Phase 24 — the display and the end-to-end Slice B proof
+
+**Delivered** — the optional current insight on the scoped observation-review GET and the
+presentation DTO, rendered as LABELLED TEXT on the interaction card with the existing evidence and
+the existing privacy masking, and the proof of the whole chain through the normal observation →
+job → worker → scoped GET → user command path. The question is served only for an authorized
+account, a review that is actually offered and an evidence revision that review shows; the
+store owns the current-revision rule and the reader never overrides it. The inbox read is proved
+FREE: the runs, the jobs, the daily attempt reservations and the provider calls are counted before
+the scoped reads and must be identical after them, in the two-account case that reads twice and in
+the two cases that have no provider. The shipped worker bundle was proved to store the question and
+the app to serve it. **Changed** — the route, the queries, the DTO, the card, three test files, the
+operations guide, the plan and the report: 10 files, +1425 / −130, and then the two repair rounds,
+which touched NO production file at all. No migration. Merge `9c7a6a7`. **What was caught** — the
+implementation review returned FAIL with two findings, both about the PROOF rather than the code:
+the report and the operations guide claimed the GET never enqueues, never calls a provider and never
+writes, while the transport-call and insight counts were asserted BEFORE the scoped GETs and no
+case counted the runs, the jobs or the reservations after a GET; and the report claimed the proof
+drove the chain to the operator's command when no case with a stored question ever applied one. The
+coordinator's mutation map added that the account match is enforced twice with NEITHER check
+decisive on its own, that the intent-kind exclusivity is a type-level guarantee, that the
+card-shows-only-the-question guarantee is type-level, and that the UI card pairing was unpinned.
+Two repair rounds followed; the final scoped review returned PASS on every item. The coordinator's
+nine-run teeth proof was decisive on every mutation, with no non-decisive mutation, and it carries
+the defect the coordinator found in its own Phase B proof: a test filter that matches nothing makes
+vitest skip everything and exit 0, so the script runs a filtered CONTROL before each mutation and
+treats an unmatched filter as a script error rather than as a result. Gate 8 of 8, `pnpm test` 1434
+passed in 120 files. **Detail** —
+[integration](./ai-native-journal-integration-24.md) ·
+[phase report](./ai-native-journal-phase-24.md) ·
+[plan](../plans/ai-native-journal/phase-24.md)
+
 ## What remains open
 
-Three items are open. None of them is a broken behaviour in the integrated code; each is recorded
+Two items are open. None of them is a broken behaviour in the integrated code; each is recorded
 with its own evidence.
 
 1. **The Docker scratch-volume smoke — blocked host evidence, carried to G-FINAL.** The daemon is
@@ -605,13 +709,16 @@ npipe:////./pipe/dockerDesktopLinuxEngine` — and it was never claimed as passe
    in [the Phase 21 phase report](./ai-native-journal-phase-21.md) under
    _Three files this phase left unformatted_ and in
    [the operations release record](../../intelligence-operations.md).
-3. **The persisted home for an AI-assisted insight — a next-milestone item.** The chain's AI leg has
-   no table of its own: an opportunity carries no text, and a provider call may not happen inside a
-   write transaction. No phase in this run owns the migration that would give it one, and the leg
-   itself is optional, so this is a next-milestone item and not a hole in the Phase 20 or Phase 21
-   gates. Recorded in [the Phase 20 plan](../plans/ai-native-journal/phase-20.md) and
+3. **The persisted home for an AI-assisted insight — CLOSED by Phases 22, 23 and 24.** The chain's AI
+   leg had no table of its own: an opportunity carries no text, and a provider call may not happen
+   inside a write transaction. The item was recorded as a next-milestone item rather than a hole in
+   the Phase 20 or Phase 21 gates, in
+   [the Phase 20 plan](../plans/ai-native-journal/phase-20.md) and
    [the Phase 20 phase report](./ai-native-journal-phase-20.md) under _The next
-   phase's inputs_.
+   phase's inputs_. It is now closed: migration `0008-ai-insights` gives the leg its table, the
+   fenced provider job gives it a bounded and authorised producer, and the scoped GET and the card
+   give it a surface. See
+   [the optional-AI feature](#the-optional-ai-feature--three-phases-on-top) above.
 
 Two further surfaces are named in the same place and are also next-milestone items rather than
 defects: the replay seam and the job cancel exist in the code and neither has an operator surface,
@@ -621,9 +728,9 @@ which the runbook says plainly rather than implying otherwise.
 
 | What                                                                                                                                                                                                                               | Where                                                          | Count             |
 | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | -------------------------------------------------------------- | ----------------- |
-| Integration record per phase: merge SHA and parents, the ownership, schema and boundary verdicts, the full gate table with every exit code, the review verdict, any recorded gate failure                                          | `docs/superpowers/reports/ai-native-journal-integration-NN.md` | 21 files          |
-| Phase report per phase: what was built, the deviations, the commands the worker ran, the proof of teeth                                                                                                                            | `docs/superpowers/reports/ai-native-journal-phase-NN.md`       | 21 files          |
-| Plan per phase, committed before its implementation                                                                                                                                                                                | `docs/superpowers/plans/ai-native-journal/phase-NN.md`         | 21 files          |
+| Integration record per phase: merge SHA and parents, the ownership, schema and boundary verdicts, the full gate table with every exit code, the review verdict, any recorded gate failure                                          | `docs/superpowers/reports/ai-native-journal-integration-NN.md` | 24 files          |
+| Phase report per phase: what was built, the deviations, the commands the worker ran, the proof of teeth                                                                                                                            | `docs/superpowers/reports/ai-native-journal-phase-NN.md`       | 24 files          |
+| Plan per phase, committed before its implementation                                                                                                                                                                                | `docs/superpowers/plans/ai-native-journal/phase-NN.md`         | 24 files          |
 | Coordinator index: the run summary, the three open items, one entry per integration, and every dispatch including the revoked and abandoned ones                                                                                   | `docs/superpowers/reports/ai-native-journal-worktrees.json`    | 1 file            |
 | Operator runbook: the worker, the backlog, the dead letter, lease recovery, the no-provider behaviour, the opt-in budgets, retention, deletion and reset, the backup, the restore, the rollback, and the release acceptance record | `docs/intelligence-operations.md`                              | 657 lines         |
 | The G-A and G-FINAL gate definitions and the integration rules                                                                                                                                                                     | `docs/orchestration/ai-native-journal/integration-plan.md`     | 53 lines          |
