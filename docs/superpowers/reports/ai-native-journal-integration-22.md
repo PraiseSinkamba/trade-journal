@@ -116,27 +116,27 @@ SCHEMA VERDICT: ALLOWED
 
 ### The new migration
 
-| Property | Value |
-| --- | --- |
-| File | `apps/web/src/db/migrations/0008-ai-insights.ts` |
-| Version | 8 |
-| Name | `ai-insights` |
+| Property | Value                                                              |
+| -------- | ------------------------------------------------------------------ |
+| File     | `apps/web/src/db/migrations/0008-ai-insights.ts`                   |
+| Version  | 8                                                                  |
+| Name     | `ai-insights`                                                      |
 | Checksum | `0815aa9f1dd30f2250eb4ee7b94a526c8b1b0f1ac1345d8ef984922656c44aca` |
 
 The checksum artifact was regenerated: `apps/web/src/db/migration-checksums.json` at the candidate tip carries the version 8 entry for `0008-ai-insights.ts` with the checksum above. The manifest entry, the migration file name and the declared migration name agree.
 
 The gate step `pnpm --filter web migrations:check` exited 0 (passed): the regenerated checksum manifest matches the migration sources.
 
-| Migration | File | Git blob hash |
-| --- | --- | --- |
-| `0001` | `apps/web/src/db/migrations/0001-legacy-baseline.ts` | `5a2fd458699ecc523a237b9c13b33f35251c8453` (base = tip) |
-| `0002` | `apps/web/src/db/migrations/0002-trade-projections.ts` | `ae720a2c5beff259a16c71891548dd7f8e82b46e` (base = tip) |
-| `0003` | `apps/web/src/db/migrations/0003-durable-jobs.ts` | `030b6a8bf7688eaa4d8113665cba6cf526a8ef03` (base = tip) |
-| `0004` | `apps/web/src/db/migrations/0004-observations.ts` | `103bb72ea3b71c6d0ef047eb57cd6e4df2292f9e` (base = tip) |
-| `0005` | `apps/web/src/db/migrations/0005-intelligence-runtime.ts` | `353e55137c567af27e854fe9d2c6c4bb26c1ce4b` (base = tip) |
-| `0006` | `apps/web/src/db/migrations/0006-knowledge-scheduling.ts` | `86bdbf2fe7facb7565c2b3d253042e22dd2d6185` (base = tip) |
-| `0007` | `apps/web/src/db/migrations/0007-intelligence-experience.ts` | `fe693722d11445f2b6b73623d288a9199c2efdff` (base = tip) |
-| `0008` | `apps/web/src/db/migrations/0008-ai-insights.ts` | `923e98c408a5cd127e381c0c8e1b2f90a3f1960f` (added by this phase) |
+| Migration | File                                                         | Git blob hash                                                    |
+| --------- | ------------------------------------------------------------ | ---------------------------------------------------------------- |
+| `0001`    | `apps/web/src/db/migrations/0001-legacy-baseline.ts`         | `5a2fd458699ecc523a237b9c13b33f35251c8453` (base = tip)          |
+| `0002`    | `apps/web/src/db/migrations/0002-trade-projections.ts`       | `ae720a2c5beff259a16c71891548dd7f8e82b46e` (base = tip)          |
+| `0003`    | `apps/web/src/db/migrations/0003-durable-jobs.ts`            | `030b6a8bf7688eaa4d8113665cba6cf526a8ef03` (base = tip)          |
+| `0004`    | `apps/web/src/db/migrations/0004-observations.ts`            | `103bb72ea3b71c6d0ef047eb57cd6e4df2292f9e` (base = tip)          |
+| `0005`    | `apps/web/src/db/migrations/0005-intelligence-runtime.ts`    | `353e55137c567af27e854fe9d2c6c4bb26c1ce4b` (base = tip)          |
+| `0006`    | `apps/web/src/db/migrations/0006-knowledge-scheduling.ts`    | `86bdbf2fe7facb7565c2b3d253042e22dd2d6185` (base = tip)          |
+| `0007`    | `apps/web/src/db/migrations/0007-intelligence-experience.ts` | `fe693722d11445f2b6b73623d288a9199c2efdff` (base = tip)          |
+| `0008`    | `apps/web/src/db/migrations/0008-ai-insights.ts`             | `923e98c408a5cd127e381c0c8e1b2f90a3f1960f` (added by this phase) |
 
 ## Layer-boundary verdict
 
@@ -338,16 +338,16 @@ Core package imports (packages/core/src/time.ts):
 
 One full gate run on the destination branch, alone on the host, sequentially. Every exit code is the exit status of the command itself, never the status of a pipe.
 
-| Command | Exit | Result |
-| --- | --- | --- |
-| `pnpm install --frozen-lockfile` | 0 | passed |
-| `pnpm --filter web typecheck` | 0 | passed |
-| `pnpm --filter @luxalgo/journal-core --filter @luxalgo/journal-importers typecheck` | 0 | passed |
-| `pnpm --filter web migrations:check` | 0 | passed |
-| `node scripts/check-licenses.mjs` | 0 | passed |
-| `pnpm exec prettier --check <18 prettier-governed merged files>` | 0 | passed |
-| `pnpm build` | 0 | passed |
-| `pnpm test` | 0 | passed |
+| Command                                                                             | Exit | Result |
+| ----------------------------------------------------------------------------------- | ---- | ------ |
+| `pnpm install --frozen-lockfile`                                                    | 0    | passed |
+| `pnpm --filter web typecheck`                                                       | 0    | passed |
+| `pnpm --filter @luxalgo/journal-core --filter @luxalgo/journal-importers typecheck` | 0    | passed |
+| `pnpm --filter web migrations:check`                                                | 0    | passed |
+| `node scripts/check-licenses.mjs`                                                   | 0    | passed |
+| `pnpm exec prettier --check <18 prettier-governed merged files>`                    | 0    | passed |
+| `pnpm build`                                                                        | 0    | passed |
+| `pnpm test`                                                                         | 0    | passed |
 
 The prettier file list was computed after the merge, from the merge commit itself: `git diff --name-only 084408c2c663c771b03c55ee62b702af6c4ca102..dd30430086cf4eb0c21153f359dc851db159b2db` in the feature worktree, with deleted paths excluded because prettier cannot check them (18 merged files).
 

@@ -89,15 +89,15 @@ SCHEMA VERDICT: ALLOWED
 - The changed registry line in `apps/web/src/db/migrations.ts`: `import { intelligenceExperience } from "./migrations/0007-intelligence-experience.ts";`
 - The new migration file blob hash at the candidate tip is `fe693722d11445f2b6b73623d288a9199c2efdff`.
 
-| Migration | File | Git blob hash |
-| --- | --- | --- |
-| `0001` | `apps/web/src/db/migrations/0001-legacy-baseline.ts` | `5a2fd458699ecc523a237b9c13b33f35251c8453` (base = tip) |
-| `0002` | `apps/web/src/db/migrations/0002-trade-projections.ts` | `ae720a2c5beff259a16c71891548dd7f8e82b46e` (base = tip) |
-| `0003` | `apps/web/src/db/migrations/0003-durable-jobs.ts` | `030b6a8bf7688eaa4d8113665cba6cf526a8ef03` (base = tip) |
-| `0004` | `apps/web/src/db/migrations/0004-observations.ts` | `103bb72ea3b71c6d0ef047eb57cd6e4df2292f9e` (base = tip) |
-| `0005` | `apps/web/src/db/migrations/0005-intelligence-runtime.ts` | `353e55137c567af27e854fe9d2c6c4bb26c1ce4b` (base = tip) |
-| `0006` | `apps/web/src/db/migrations/0006-knowledge-scheduling.ts` | `86bdbf2fe7facb7565c2b3d253042e22dd2d6185` (base = tip) |
-| `0007` | `apps/web/src/db/migrations/0007-intelligence-experience.ts` | `fe693722d11445f2b6b73623d288a9199c2efdff` (added by this phase) |
+| Migration | File                                                         | Git blob hash                                                    |
+| --------- | ------------------------------------------------------------ | ---------------------------------------------------------------- |
+| `0001`    | `apps/web/src/db/migrations/0001-legacy-baseline.ts`         | `5a2fd458699ecc523a237b9c13b33f35251c8453` (base = tip)          |
+| `0002`    | `apps/web/src/db/migrations/0002-trade-projections.ts`       | `ae720a2c5beff259a16c71891548dd7f8e82b46e` (base = tip)          |
+| `0003`    | `apps/web/src/db/migrations/0003-durable-jobs.ts`            | `030b6a8bf7688eaa4d8113665cba6cf526a8ef03` (base = tip)          |
+| `0004`    | `apps/web/src/db/migrations/0004-observations.ts`            | `103bb72ea3b71c6d0ef047eb57cd6e4df2292f9e` (base = tip)          |
+| `0005`    | `apps/web/src/db/migrations/0005-intelligence-runtime.ts`    | `353e55137c567af27e854fe9d2c6c4bb26c1ce4b` (base = tip)          |
+| `0006`    | `apps/web/src/db/migrations/0006-knowledge-scheduling.ts`    | `86bdbf2fe7facb7565c2b3d253042e22dd2d6185` (base = tip)          |
+| `0007`    | `apps/web/src/db/migrations/0007-intelligence-experience.ts` | `fe693722d11445f2b6b73623d288a9199c2efdff` (added by this phase) |
 
 ## Layer-boundary verdict
 
@@ -202,16 +202,16 @@ Type-only database references (reported, no runtime dependency, not counted as v
 
 One full gate run on the destination branch, alone on the host, sequentially. Every exit code is the exit status of the command itself, never the status of a pipe.
 
-| Command | Exit | Result |
-| --- | --- | --- |
-| `pnpm install --frozen-lockfile` | 0 | passed |
-| `pnpm --filter web typecheck` | 0 | passed |
-| `pnpm --filter @luxalgo/journal-core --filter @luxalgo/journal-importers typecheck` | 0 | passed |
-| `pnpm --filter web migrations:check` | 0 | passed |
-| `node scripts/check-licenses.mjs` | 0 | passed |
-| `pnpm exec prettier --check <13 merged files>` | 0 | passed |
-| `pnpm build` | 0 | passed |
-| `pnpm test` | 0 | passed |
+| Command                                                                             | Exit | Result |
+| ----------------------------------------------------------------------------------- | ---- | ------ |
+| `pnpm install --frozen-lockfile`                                                    | 0    | passed |
+| `pnpm --filter web typecheck`                                                       | 0    | passed |
+| `pnpm --filter @luxalgo/journal-core --filter @luxalgo/journal-importers typecheck` | 0    | passed |
+| `pnpm --filter web migrations:check`                                                | 0    | passed |
+| `node scripts/check-licenses.mjs`                                                   | 0    | passed |
+| `pnpm exec prettier --check <13 merged files>`                                      | 0    | passed |
+| `pnpm build`                                                                        | 0    | passed |
+| `pnpm test`                                                                         | 0    | passed |
 
 The prettier file list was computed after the merge, from the merge commit itself: `git diff --name-only cd78d5fcc76d9c61bba8d9f4c486b78de2bec07c..a305aba1f5f0f10dc633fe40c44b0b49262c6769` in the feature worktree, with deleted paths excluded because prettier cannot check them (13 files).
 

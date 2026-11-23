@@ -77,14 +77,14 @@ SCHEMA VERDICT: ALLOWED
 - No path under `apps/web/src/db/` changed at all: `git diff --name-status --find-renames 19975e03e76345ccf2b9e78e0641fdf20e614203..fb166052687875c24fe5285697cd112d36127e15 -- apps/web/src/db/` is empty, so the schema, the migration registry and the checksum artifact are untouched.
 - Migrations `0001` through `0006` are byte-unchanged against the merge base `19975e03e76345ccf2b9e78e0641fdf20e614203`: the git blob hash of every migration file is identical at the merge base and at the candidate tip.
 
-| Migration | File | Git blob hash (base = tip) |
-| --- | --- | --- |
-| `0001` | `apps/web/src/db/migrations/0001-legacy-baseline.ts` | `5a2fd458699ecc523a237b9c13b33f35251c8453` |
-| `0002` | `apps/web/src/db/migrations/0002-trade-projections.ts` | `ae720a2c5beff259a16c71891548dd7f8e82b46e` |
-| `0003` | `apps/web/src/db/migrations/0003-durable-jobs.ts` | `030b6a8bf7688eaa4d8113665cba6cf526a8ef03` |
-| `0004` | `apps/web/src/db/migrations/0004-observations.ts` | `103bb72ea3b71c6d0ef047eb57cd6e4df2292f9e` |
-| `0005` | `apps/web/src/db/migrations/0005-intelligence-runtime.ts` | `353e55137c567af27e854fe9d2c6c4bb26c1ce4b` |
-| `0006` | `apps/web/src/db/migrations/0006-knowledge-scheduling.ts` | `86bdbf2fe7facb7565c2b3d253042e22dd2d6185` |
+| Migration | File                                                      | Git blob hash (base = tip)                 |
+| --------- | --------------------------------------------------------- | ------------------------------------------ |
+| `0001`    | `apps/web/src/db/migrations/0001-legacy-baseline.ts`      | `5a2fd458699ecc523a237b9c13b33f35251c8453` |
+| `0002`    | `apps/web/src/db/migrations/0002-trade-projections.ts`    | `ae720a2c5beff259a16c71891548dd7f8e82b46e` |
+| `0003`    | `apps/web/src/db/migrations/0003-durable-jobs.ts`         | `030b6a8bf7688eaa4d8113665cba6cf526a8ef03` |
+| `0004`    | `apps/web/src/db/migrations/0004-observations.ts`         | `103bb72ea3b71c6d0ef047eb57cd6e4df2292f9e` |
+| `0005`    | `apps/web/src/db/migrations/0005-intelligence-runtime.ts` | `353e55137c567af27e854fe9d2c6c4bb26c1ce4b` |
+| `0006`    | `apps/web/src/db/migrations/0006-knowledge-scheduling.ts` | `86bdbf2fe7facb7565c2b3d253042e22dd2d6185` |
 
 ## Layer-boundary verdict
 
@@ -164,16 +164,16 @@ Type-only database references (reported, no runtime dependency, not counted as v
 
 One full gate run on the destination branch, alone on the host, sequentially. Every exit code is the exit status of the command itself, never the status of a pipe.
 
-| Command | Exit | Result |
-| --- | --- | --- |
-| `pnpm install --frozen-lockfile` | 0 | passed |
-| `pnpm --filter web typecheck` | 0 | passed |
-| `pnpm --filter @luxalgo/journal-core --filter @luxalgo/journal-importers typecheck` | 0 | passed |
-| `pnpm --filter web migrations:check` | 0 | passed |
-| `node scripts/check-licenses.mjs` | 0 | passed |
-| `pnpm exec prettier --check <9 merged files>` | 0 | passed |
-| `pnpm build` | 0 | passed |
-| `pnpm test` | 0 | passed |
+| Command                                                                             | Exit | Result |
+| ----------------------------------------------------------------------------------- | ---- | ------ |
+| `pnpm install --frozen-lockfile`                                                    | 0    | passed |
+| `pnpm --filter web typecheck`                                                       | 0    | passed |
+| `pnpm --filter @luxalgo/journal-core --filter @luxalgo/journal-importers typecheck` | 0    | passed |
+| `pnpm --filter web migrations:check`                                                | 0    | passed |
+| `node scripts/check-licenses.mjs`                                                   | 0    | passed |
+| `pnpm exec prettier --check <9 merged files>`                                       | 0    | passed |
+| `pnpm build`                                                                        | 0    | passed |
+| `pnpm test`                                                                         | 0    | passed |
 
 The prettier file list was computed after the merge, from the merge commit itself: `git diff --name-only be748d72bae489ad4ea166fc85a92790b55d90da..fc1f61cecb122095a0a7585ed466f7ef3f62eea7` in the feature worktree (9 files).
 
