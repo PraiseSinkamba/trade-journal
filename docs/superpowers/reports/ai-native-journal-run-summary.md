@@ -700,10 +700,11 @@ npipe:////./pipe/dockerDesktopLinuxEngine` — and it was never claimed as passe
 2. **`pnpm format:check` is red.** The repository's format gate was already red at the base commit
    and is red now; the release acceptance record states it as red and does not claim it passed. The
    numbers were MEASURED again after the optional-AI feature, and they are: **71 files** fail in the
-   feature tree and **71 files** fail at the base commit \ in a fresh checkout. The two counts are equal
-   for different reasons: of the 71 in the feature tree, **67 are tracked and inherited** and **4 are
-   the gitignored Tauri-generated schema files** under \, which exist in a built tree
-   and not in a fresh checkout; the four base-era integration records that were among the base commit's
+   feature tree and **71 files** fail at the base commit `4ae868d` in a fresh checkout. The two counts
+   are equal for different reasons: of the 71 in the feature tree, **67 are tracked and inherited** and
+   **4 are the gitignored Tauri-generated schema files** under `desktop/src-tauri/gen/schemas/`, which
+   exist in a built tree and not in a fresh checkout; the four base-era integration records that were
+   among the base commit's
    failing files — phases 15, 16, 19 and 21 — were formatted when the final release gate caught that no
    integration record had ever been prettier-checked, which is why the tracked count fell by exactly
    four. **The 24-phase effort introduced none of them**: a cross-reference of the failing list against
