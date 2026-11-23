@@ -1,7 +1,7 @@
 {
   "schemaVersion": 1,
   "feature": "ai-native-journal",
-  "updatedAt": "2026-11-23T11:48:02Z",
+  "updatedAt": "2026-11-23T13:23:28Z",
   "owner": "parent OMP coordinator (exclusive owner of this record)",
   "repository": {
     "name": "trade-journal",
@@ -35,7 +35,7 @@
     },
     "featureBranch": "codex/ai-native-journal",
     "featureBootstrapSha": "0a278503fd67c0f9e82138dfecb744f4bfd307ad",
-    "featureHeadSha": "b1e7e482442d05cf00cb825ed2719bc9f83c4f12",
+    "featureHeadSha": "5bc00a7018d24d93cb5440e846a9f2bbf59dafd2",
     "featureHeadShaNote": "feature branch HEAD; the twenty-one phases are integrated and the optional-AI insight work continues from this tip on its own phase branches",
     "featureCheckpointCommits": [
       "0a278503fd67c0f9e82138dfecb744f4bfd307ad",
@@ -1936,7 +1936,7 @@
     "scale": "253 files changed, 60044 insertions(+), 1612 deletions(-)",
     "verification": "every phase was reviewed, teeth-proved by the coordinator, merged with --no-ff and verified by a destination gate on the destination branch alone on the host",
     "openItems": [
-      "the Docker scratch-volume smoke is blocked host evidence on this host and is carried to G-FINAL, where the CI docker job has a daemon",
+      "the Docker scratch-volume smoke passed on 2026-11-23, on the feature branch, after the operator started the daemon: the image built, the container answered HTTP on its published port, the scratch volume held the journal, and scripts/verify-features.py passed 10 feature checks with exit 0. One caveat: the build needed pnpm's registry fetches to be given more patience than the repository's Dockerfile carries, because this host's link to registry.npmjs.org stalls on the last few large tarballs; the flags change only how long the package manager waits, not the image.",
       "pnpm format:check exits 1. MEASURED after the optional-AI feature: 71 files fail in the feature tree and 71 fail at the base commit 4ae868d in a fresh checkout. Of the 71 in the feature tree, 67 are tracked and inherited and 4 are the gitignored Tauri-generated schema files, which exist in a built tree and not in a fresh checkout; the tracked count fell by exactly four because the final release gate caught that no integration record had ever been prettier-checked and the four base-era ones (phases 15, 16, 19, 21) were formatted. The 24-phase effort introduced none of them: the failing list cross-referenced against every path the effort changed returns zero. The count depends on untracked files in the working tree, so it is stated with the tree it was measured in.",
       "the persisted home for an AI-assisted insight: CLOSED by the optional-AI feature (Phases 22, 23 and 24). Migration 0008-ai-insights gives the leg its table, the fenced provider job gives it a bounded and authorised producer, and the scoped GET with the card gives it a surface."
     ],

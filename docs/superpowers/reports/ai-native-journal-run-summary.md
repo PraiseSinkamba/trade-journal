@@ -685,16 +685,20 @@ passed in 120 files. **Detail** —
 
 ## What remains open
 
-Two items are open. None of them is a broken behaviour in the integrated code; each is recorded
-with its own evidence.
+One item is open. It is not a broken behaviour in the integrated code; it is recorded with its own
+evidence.
 
-1. **The Docker scratch-volume smoke — blocked host evidence, carried to G-FINAL.** The daemon is
-   not running on this host, and starting it is the operator's call. The smoke was attempted in
-   Phase 21 and the output recorded — `failed to connect to the docker API at
-npipe:////./pipe/dockerDesktopLinuxEngine` — and it was never claimed as passed. The CI `docker`
-   job exists and has a daemon, so G-FINAL is where the item lands. Recorded in
+1. **The Docker scratch-volume smoke — CLOSED, passed on 2026-11-23.** The daemon is not running by default on
+   this host, and starting it is the operator's call; the operator asked for it, and the smoke was
+   run on the feature branch. The image built, the container answered HTTP on its published port, the
+   scratch volume held the journal, and `scripts/verify-features.py` passed **10 feature checks** with
+   exit 0. One caveat is recorded with it: the build needed pnpm's registry fetches to be given more
+   patience than the repository's Dockerfile carries, because this host's link to
+   registry.npmjs.org stalls on the last few large tarballs, and the repository's Dockerfile as
+   written aborted three times here at ~300 s. The flags change only how long the package manager
+   waits; they change nothing about the image. Recorded in
    [the Phase 21 phase report](./ai-native-journal-phase-21.md) under _The
-   Docker scratch-volume smoke — blocked host evidence_, in
+   Docker scratch-volume smoke_, in
    [the operations release record](../../intelligence-operations.md) and in the coordinator index's
    open items.
 2. **`pnpm format:check` is red.** The repository's format gate was already red at the base commit

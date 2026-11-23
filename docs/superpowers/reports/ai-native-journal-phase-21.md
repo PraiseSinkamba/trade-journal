@@ -265,6 +265,11 @@ check if the path is correct and if the daemon is running:
 open //./pipe/dockerDesktopLinuxEngine: The system cannot find the file specified.
 ```
 
+> **Follow-up, 2026-11-23.** The smoke was later run on this host, against the feature branch, and it
+> **passed**: **passed**: the image built, the container answered HTTP on its published port, the scratch volume held the journal, and `scripts/verify-features.py` passed **10 feature checks** with exit 0 (scoped fees and direction-aware stops, reimport deduplication and multiplier-aware R, breakeven tolerance, the advanced filters across trades/dashboard/journal/cross-analysis, rule check persistence and performance, routine checks, formatted notes and templates, the attachment round-trip and unsafe-format rejection, missed trades outside actual metrics, and currency recalculation). The container and the volume were removed afterwards. The build needed one change that is NOT in the repository's Dockerfile: pnpm's registry fetches were given `--fetch-timeout 900000 --fetch-retries 6 --fetch-retry-maxtimeout 180000 --network-concurrency 8`. The repository's Dockerfile as written aborted **three times** on this host, each at ~300 s with 450 of 453 packages downloaded, on the last few large tarballs (`next`, `@next/swc-linux-x64-gnu`, `echarts`). With the flags the same Dockerfile built in 999 s. The flags change only how long the package manager waits for a tarball, not what is installed, not what is built and not what the container runs — but they are not in the repository, so this host does NOT build the repository's Dockerfile as written. CI builds the repository's own Dockerfile on a runner whose registry throughput is not this host's; that has not been verified from here.
+>
+> The text above is left as it was written at Phase 21, because it was true then. The item is closed.
+
 This is recorded as **blocked host evidence**. It is not mocked, not stubbed and not claimed as
 passed. The job exists in CI (`docker`), where a daemon is available; the phase carries the item to
 the release gate (G-FINAL) as an item the destination gate must run.
