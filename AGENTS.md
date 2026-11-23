@@ -54,7 +54,7 @@ App boundaries:
 | `apps/web/src/components/ui/` | Radix-based primitives (button, dialog, dropdown, table, tabs, tooltip, calendar, date-picker, …). |
 | `apps/web/tests/` | 54 Vitest files for web logic (auth, importer integration, AI feedback, dashboard, market data, prop firms, …). |
 | `packages/core/tests/`, `packages/importers/tests/` | Engine + importer unit tests. |
-| `docs/` | Public guides: `edge-score.md`, `importers.md`, `market-data.md`, `prop-firms.md`, `design.md`, `calendar-insights.md`, `performance-trends.md`, `trade-explorer.md`, `ai-scope.md`, `samples/`, plus the live-learning docs `MISTAKES.md` (raw ledger) and `LEARNINGS.md` (distilled principles) — see the **Live learning workflow** below. |
+| `docs/` | Public guides: `edge-score.md`, `importers.md`, `market-data.md`, `prop-firms.md`, `design.md`, `calendar-insights.md`, `performance-trends.md`, `trade-explorer.md`, `ai-scope.md`, `intelligence.md`, `intelligence-operations.md`, `samples/`, plus the live-learning docs `MISTAKES.md` (raw ledger) and `LEARNINGS.md` (distilled principles) — see the **Live learning workflow** below. |
 | `scripts/` | `check-licenses.mjs` (CI gate), `verify-features.py`, `benchmark-journal.py`. |
 
 ## Development Commands

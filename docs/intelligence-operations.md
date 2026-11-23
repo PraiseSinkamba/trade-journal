@@ -5,21 +5,29 @@ backup, the restore and the rollback. Every command here is one an operator can 
 journal they own — except where a section says plainly that the operator has no surface for it
 yet, and names what is missing.
 
+Start with [Intelligence onboarding](./intelligence.md) for setup and the end-to-end flow.
+
 > **Never operate on live trader data to test a procedure.** Use a scratch journal
 > (`JOURNAL_DATA_DIR` pointing at a disposable directory) and synthetic credentials.
 
 ## What the runtime is made of
 
-| Part                    | Where it lives                                                                       | What it holds                                                                          |
-| ----------------------- | ------------------------------------------------------------------------------------ | -------------------------------------------------------------------------------------- |
-| the **worker**          | a separate process, forked by the journal supervisor                                 | claims jobs, runs the handlers, acknowledges the effects                               |
-| the **backlog**         | `intelligence_jobs`                                                                  | durable work: observations, seeds, schedule triggers, retention runs, workflow effects |
-| the **outbox**          | `domain_outbox` and `event_deliveries`                                               | the committed change events and what each handler did with them                        |
-| the **observations**    | `intelligence_observations` and `observation_evidence`                               | what the journal concluded about a trade, and the revisions it rests on                |
-| the **insights**        | `intelligence_insights`                                                              | one generated review question per source revision                                      |
-| the **knowledge**       | `knowledge_sources`, `knowledge_hypotheses`, `knowledge_patterns`                    | what the journal concluded about the operator's own notes and rules                    |
-| the **experience**      | `intelligence_workflows`, `intelligence_opportunities`, `intelligence_conversations` | the interactions the operator still has open                                           |
-| the **background runs** | `intelligence_runs` and `intelligence_budget_reservations`                           | the background AI attempts, their pinned configuration and their daily allowance       |
+| Part                    | Where it lives                                                                       | What it holds                                                                                                          |
+| ----------------------- | ------------------------------------------------------------------------------------ | ---------------------------------------------------------------------------------------------------------------------- |
+| the **worker**          | a separate process, forked by the journal supervisor                                 | claims jobs, runs the handlers, acknowledges the effects                                                               |
+| the **backlog**         | `intelligence_jobs`                                                                  | durable work: observations, seeds, schedule triggers, retention runs, workflow effects, `run_capability` provider jobs |
+| the **outbox**          | `domain_outbox` and `event_deliveries`                                               | the committed change events and what each handler did with them                                                        |
+| the **observations**    | `intelligence_observations` and `observation_evidence`                               | what the journal concluded about a trade, and the revisions it rests on                                                |
+| the **insights**        | `intelligence_insights`                                                              | one generated review question per source revision                                                                      |
+| the **knowledge**       | `knowledge_sources`, `knowledge_hypotheses`, `knowledge_patterns`                    | what the journal concluded about the operator's own notes and rules                                                    |
+| the **experience**      | `intelligence_workflows`, `intelligence_opportunities`, `intelligence_conversations` | the interactions the operator still has open                                                                           |
+| the **background runs** | `intelligence_runs` and `intelligence_budget_reservations`                           | the background AI attempts, their pinned configuration and their daily allowance                                       |
+| the **controls**        | `intelligence_policy` and `settings`                                                 | revisioned background policy and operator engagement switches                                                          |
+| the **lease**           | `intelligence_worker_lease`                                                          | the worker owner, heartbeat and fence                                                                                  |
+| the **seed**            | `intelligence_seed_checkpoints`                                                      | each account's historical reconstruction progress                                                                      |
+| the **schedules**       | `intelligence_schedules`                                                             | durable due times and schedule state                                                                                   |
+| the **audit**           | `workflow_transitions` and `interaction_commands`                                    | workflow history and the idempotency ledger of operator commands                                                       |
+| the **messages**        | `intelligence_messages` and `workflow_conversations`                                 | conversation messages and their workflow links                                                                         |
 
 ## The worker
 
@@ -27,16 +35,22 @@ The worker is one process that holds a single lease (`intelligence_worker_lease`
 `journal-worker`). Only one worker may hold it, so a second launch is blocked rather than
 competing.
 
-| The worker status | What it means                                          | What to do                                                                     |
-| ----------------- | ------------------------------------------------------ | ------------------------------------------------------------------------------ |
-| `disabled`        | the worker was started with `JOURNAL_WORKER_ENABLED=0` | expected while you work by hand; start it when you want the backlog to move    |
-| `idle`            | it holds the lease and has no work                     | nothing; this is the healthy idle state                                        |
-| `working`         | it holds the lease and is running a job                | nothing; a job takes a moment                                                  |
-| `blocked`         | it cannot take the lease                               | another worker holds it, or the lease expired mid-run — see **lease recovery** |
-| `stopped`         | it was asked to stop, or its loop broke on a fault     | start it again to move the backlog                                             |
+| The worker status | What it means                                          | What to do                                                                       |
+| ----------------- | ------------------------------------------------------ | -------------------------------------------------------------------------------- |
+| `disabled`        | the worker was started with `JOURNAL_WORKER_ENABLED=0` | expected while you work by hand; start it when you want the backlog to move      |
+| `idle`            | it holds the lease and has no work                     | nothing; this is the healthy idle state                                          |
+| `working`         | it holds the lease and is running a job                | nothing; a job takes a moment                                                    |
+| `blocked`         | another owner holds a live worker lease                | wait for that holder; an expired lease can be reclaimed — see **lease recovery** |
+| `stopped`         | it was asked to stop, or its loop broke on a fault     | start it again to move the backlog                                               |
 
 The web process cannot observe the worker: it serves `worker: null`. The supervisor prints the
 worker's health record on its own standard output, and the journal itself shows the lease.
+
+Worker health's `lastErrorCode` is not the job's `last_error`. `journal_busy` means a transient
+SQLite lock: the loop returns to idle and retries on the next poll. An uncaught fault stops the
+loop with the error's `name`, or `worker_failed` for a non-Error value. Fenced claim refusals report
+`stale`, `expired` or `cancelled` in worker health without overwriting a job the worker no longer
+owns. Handler and job failure codes may also appear in health; inspect the job row separately.
 
 ### The backlog
 
@@ -180,10 +194,10 @@ by default.
 | raises opportunities for you to look at     | nothing                                             |
 | runs a background AI pass                   | a configured provider, a key and an explicit opt-in |
 
-A provider that is missing, unreachable or refuses the request leaves the journal intact: the
-run ends as `failed` or `unavailable`, with the reason in its diagnostics, and no partial result
-is stored. The daily allowance is reserved before the call, so a crashed attempt still consumes
-its slot.
+A missing provider ends a background run as `unavailable` before any attempt is reserved. A provider
+call that fails returns the run to `queued` for retry; an invalid answer ends it as `failed`.
+No partial question is stored. The daily allowance is reserved before the call, so a crashed or
+failed attempt still consumes its slot.
 
 ### The opt-in budgets
 
@@ -243,13 +257,33 @@ answer outside the bound is refused and stored nowhere.
 
 ### Turning it on
 
-Three things have to hold, and the journal checks all three:
+First set `JOURNAL_EVENT_CAPTURE=1` in the web process's environment (or `true` or `on`, ignoring
+case and surrounding whitespace). It is **off by default**. When off, new trade changes still
+write their projection revisions but silently produce no new trade events: there is no outbox
+row and no downstream observation or question from that change, and no error to diagnose.
+This gate does not stop an existing backlog or historical seed.
 
-| The requirement   | Where it lives                                              |
-| ----------------- | ----------------------------------------------------------- |
-| the policy is on  | `intelligence_policy`, the document with `enabled: true`    |
-| the account is in | the `accounts` list of that document                        |
-| a provider is set | the journal's AI settings: a key, or a base URL and a model |
+Run the worker against the **same absolute `JOURNAL_DATA_DIR` as the web process**. A standalone
+worker refuses a missing or relative path; `JOURNAL_WORKER_ENABLED=0` disables it, and unset enables
+it. The supervisor instead overrides that variable from `--worker enabled|disabled`: its default
+is enabled in production and disabled in dev. Set `--worker enabled` when running through the
+supervisor; changing only the inherited environment variable does not override that choice.
+
+Set the data directory explicitly to avoid opening a different journal. The bare DB connection
+defaults to `/data/trade-journal`; the supervisor defaults to an absolute `data` directory under
+its current working directory; Docker sets `/data` (the Compose mount is `./data:/data`).
+
+With capture and the worker enabled, all three background requirements must also hold:
+
+| The requirement   | Where it lives                                                                                   |
+| ----------------- | ------------------------------------------------------------------------------------------------ |
+| the policy is on  | `intelligence_policy`, the document with `enabled: true`                                         |
+| the account is in | the `accounts` list of that document                                                             |
+| a provider is set | AI settings or a hosted-provider environment key; compatible servers need a base URL and a model |
+
+For hosted providers, nonempty `OPENAI_API_KEY` and `ANTHROPIC_API_KEY` environment values take
+precedence over their saved encrypted keys. Updating a saved key does not replace an environment
+key; change the environment and restart the affected processes.
 
 The policy is edited on the **Background AI** card of the settings page and saved through
 `PATCH /api/settings`, under the `backgroundAi` key:
@@ -307,51 +341,69 @@ WHERE day = CAST(strftime('%s', 'now') AS INTEGER) / 86400;
 ### The refusal reasons
 
 Every refusal is a stable reason code, but a code does not always land in the same place. The tables
-below say where each one lands. A code reaches the job's `last_error` only while the worker still
-holds the claim: a claim that was lost in the meantime records nothing at all, because the
-transaction rolls back and the job belongs to whoever holds it now.
+below say where each one lands. Run writes require a valid fenced claim. Job failure writes require
+the same owner, fence and `running` status: if another worker reclaimed or cancelled the job, the
+old worker cannot overwrite its `last_error`.
 
 **The job's `last_error` only — no run reason, no run status.**
 
-| The reason             | When it happens                                                                       | What to do                                               |
-| ---------------------- | ------------------------------------------------------------------------------------- | -------------------------------------------------------- |
-| `unhandled_capability` | the worker found no async handler for the capability id and version the job names     | deploy the build that registers the capability           |
-| `lease_lost`           | the job lease or the worker lease could not be renewed while the provider was awaited | nothing; the answer was discarded and the job is retried |
-| `run_not_found`        | the job names a run row that no longer exists                                         | nothing; the run is gone                                 |
+| The reason             | When it happens                                                                   | What to do                                                                     |
+| ---------------------- | --------------------------------------------------------------------------------- | ------------------------------------------------------------------------------ |
+| `unhandled_capability` | the worker found no async handler for the capability id and version the job names | deploy the build that registers the capability                                 |
+| `lease_lost`           | the worker detects a failed job-lease or worker-lease renewal during preparation  | answer discarded; retry if the job's claim still permits recording the failure |
+| `run_not_found`        | the job names a run row that no longer exists                                     | terminal job failure; there is no run row to update                            |
 
 `unhandled_capability` is terminal: an unknown capability id or a version that is no longer
-registered never reaches a provider. `lease_lost` discards the answer, so no refusal reason and no
-question are written to the run. `run_not_found` has no run left to write to.
+registered never reaches a provider. `run_not_found` is also terminal: preparation returns a failed
+outcome, but commit finds no run to update.
 
-**The run and the job — a refusal decided before the provider call.** The run's `meta_json` holds
-the code as `refusalReason`, the run's status changes, and the job's `last_error` holds the same
-code.
+Cancellation depends on phase:
 
-| The reason                | Run status    | When it happens                                                                   | What to do                                                                       |
-| ------------------------- | ------------- | --------------------------------------------------------------------------------- | -------------------------------------------------------------------------------- |
-| `policy_missing`          | `unavailable` | no background policy has ever been saved                                          | save the policy once; the default document is off and lists no account           |
-| `policy_invalid`          | `unavailable` | a policy row exists but its document does not parse                               | save the policy again from the settings surface; an unknown field is refused     |
-| `policy_disabled`         | `unavailable` | the policy is off                                                                 | turn on **Allow background AI** and save                                         |
-| `policy_changed`          | `unavailable` | the run was queued under an older policy revision                                 | reschedule the run explicitly; a revision never applies retroactively            |
-| `account_not_opted_in`    | `unavailable` | the account is not in the policy's account list                                   | tick the account in the **Background AI** card and save                          |
-| `account_missing`         | `cancelled`   | the account no longer exists in the journal                                       | nothing — the account was deleted and the run is cancelled                       |
-| `configuration_changed`   | `unavailable` | the provider, the model or the endpoint changed after the run was queued          | nothing for that run — it is never rerouted; new runs pin the new configuration  |
-| `cancelled`               | `cancelled`   | the run was already cancelled, or the worker was stopping when it claimed the job | nothing; the run was cancelled                                                   |
-| `run_finished`            | `failed`      | the run had already ended when the worker claimed it                              | reschedule the run explicitly                                                    |
-| `provider_not_configured` | `unavailable` | no provider is configured, so nobody could answer                                 | configure the provider: a key, or a base URL and a model. It costs no allowance  |
-| `daily_budget_exhausted`  | `unavailable` | the day's ten attempts are spent                                                  | wait for the next UTC day; no provider request was made                          |
-| `target_stale`            | `cancelled`   | the observation is no longer current — a correction replaced it                   | nothing; the correction is the newer truth                                       |
-| `opportunity_not_live`    | `cancelled`   | the review opportunity was withdrawn or suppressed                                | nothing; the journal decided not to show that review                             |
-| `invalid_output`          | `failed`      | the provider's answer was not a bounded question                                  | check the provider and the model; the answer is not stored                       |
-| `provider_error`          | `queued`      | the provider call failed                                                          | the attempt stays spent and the job is retried — check key, endpoint and network |
+- At authorisation, an already-cancelled run or an aborted signal yields `cancelled`. If the claim
+  still authorises commit, the run becomes `cancelled` and the job fails with that reason.
+- During preparation, failed lease renewal sets a separate lease-loss flag and aborts the signal.
+  After preparation settles, the worker checks this flag **before** any returned outcome, including
+  `cancelled` or `provider_error`. It discards the result and attempts a retryable `lease_lost` job
+  failure; it does not commit a run reason or question. A run already reserved may remain `running`
+  until recovery or a later retry resolves it. Its reservation remains spent.
+- Worker stop aborts the signal without setting the lease-loss flag. If observed at authorisation
+  it yields `cancelled`; if it makes an awaited provider call reject, it yields `provider_error`.
+  There is no later blanket cancellation check: a provider that still returns a valid answer can
+  reach the fenced final transaction.
+- At final commit, `assertClaim` rejects a stale, expired or cancelled job claim before run writes.
+  The transaction rolls back and worker health reports that claim reason, not a run cancellation.
 
-`provider_error` is retried: the job goes back to `retry_wait` while it has attempts left and the run
-stays `queued`. `lease_lost` is retried too — the worker fails that claim as retryable, so a lost
-lease does not end the job and the next attempt can call the provider again — and so is the
-worker's own `handler_failed`, while `validation_failed` is not, because a schema violation never
-succeeds on a retry. Every other code ends the job: `unhandled_capability`, `run_not_found`, the
-policy, account, configuration, target, opportunity and allowance refusals, `invalid_output` and the
-worker's `unhandled_job`.
+**The run and the job — a refusal decided during preparation, before final commit.** The run's
+`meta_json` holds the code as `refusalReason`, the run's status changes, and the job's `last_error`
+holds the same code when its failure update is still permitted.
+
+| The reason                | Run status    | When it happens                                                                                                  | What to do                                                                       |
+| ------------------------- | ------------- | ---------------------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------- |
+| `policy_missing`          | `unavailable` | no background policy has ever been saved                                                                         | save the policy once; the default document is off and lists no account           |
+| `policy_invalid`          | `unavailable` | a policy row exists but its document does not parse                                                              | save the policy again from the settings surface; an unknown field is refused     |
+| `policy_disabled`         | `unavailable` | the policy is off                                                                                                | turn on **Allow background AI** and save                                         |
+| `policy_changed`          | `unavailable` | the run was queued under an older policy revision                                                                | reschedule the run explicitly; a revision never applies retroactively            |
+| `account_not_opted_in`    | `unavailable` | the account is not in the policy's account list                                                                  | tick the account in the **Background AI** card and save                          |
+| `account_missing`         | `cancelled`   | the account no longer exists in the journal                                                                      | nothing — the account was deleted and the run is cancelled                       |
+| `configuration_changed`   | `unavailable` | the provider, the model or the endpoint changed after the run was queued                                         | nothing for that run — it is never rerouted; new runs pin the new configuration  |
+| `cancelled`               | `cancelled`   | authorisation sees an already-cancelled run or an aborted signal; lease-loss handling can supersede this outcome | nothing; inspect worker health and the job claim too                             |
+| `run_finished`            | `failed`      | the run had already ended when the worker claimed it                                                             | reschedule the run explicitly                                                    |
+| `provider_not_configured` | `unavailable` | no provider is configured, so nobody could answer                                                                | configure the provider: a key, or a base URL and a model. It costs no allowance  |
+| `daily_budget_exhausted`  | `unavailable` | the day's ten attempts are spent                                                                                 | wait for the next UTC day; no provider request was made                          |
+| `target_stale`            | `cancelled`   | the observation is no longer current — a correction replaced it                                                  | nothing; the correction is the newer truth                                       |
+| `opportunity_not_live`    | `cancelled`   | the review opportunity was withdrawn or suppressed                                                               | nothing; the journal decided not to show that review                             |
+| `invalid_evidence`        | `failed`      | an injected evidence reader returns evidence the capability rejects                                              | fix the reader/schema mismatch; the current composition cannot reach this branch |
+| `invalid_output`          | `failed`      | the provider's answer was not a bounded question                                                                 | check the provider and the model; the answer is not stored                       |
+| `provider_error`          | `queued`      | the provider call failed                                                                                         | the attempt stays spent and the job is retried — check key, endpoint and network |
+
+`provider_error` is retried: the reservation first moved the run to `running`; the fenced refusal
+commit returns it to `queued`, while the job goes to `retry_wait` if attempts remain. The reservation
+is never refunded. `lease_lost` is retryable too, but its failure update can be refused if the claim
+was reclaimed or cancelled; expired running jobs can be reclaimed. The worker's `handler_failed`
+is retryable, while `validation_failed` is not: a schema violation never succeeds on a retry.
+Every other code ends the job: `unhandled_capability`, `run_not_found`, the policy, account,
+configuration, target, opportunity and allowance refusals, `invalid_evidence`, `invalid_output`
+and the worker's `unhandled_job`.
 
 **The run only — a refusal decided in the final transaction.** The run's `meta_json` holds the code
 as `refusalReason` and the run's status changes. The job is acknowledged `completed` and its
@@ -370,16 +422,17 @@ was refused.
 | `target_stale`          | `cancelled`   | the observation was corrected while the provider was answering                   |
 | `opportunity_not_live`  | `cancelled`   | the opportunity was withdrawn while the provider was answering                   |
 
-**Codes the feature cannot emit.** These codes exist in the policy decision and in the capability
-job, but the review question never reaches them.
+**Codes unreachable in the current review-question composition.** These defensive codes exist in
+the policy decision and capability job; they are not universally impossible for injected readers
+or a different capability.
 
-| The reason                      | Why it cannot happen here                                                                                           |
-| ------------------------------- | ------------------------------------------------------------------------------------------------------------------- |
-| `capacity_unknown`              | the policy schema demands a positive whole number, so a bad value is a policy that does not parse: `policy_invalid` |
-| `context_too_large`             | an over-budget change is dropped at the enqueue: no run, no job, no code                                            |
-| `tools_unsupported`             | the run's scope requires no model feature, so the policy's declared capabilities are never consulted                |
-| `structured_output_unsupported` | the same                                                                                                            |
-| `invalid_evidence`              | the evidence reader returns null for evidence that does not parse, so the run sees a stale target: `target_stale`   |
+| The reason                      | Why it cannot happen here                                                                                                                                                                                    |
+| ------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| `capacity_unknown`              | the policy schema demands a positive whole number, so a bad value is a policy that does not parse: `policy_invalid`                                                                                          |
+| `context_too_large`             | an over-budget change is dropped at the enqueue: no run, no job, no code                                                                                                                                     |
+| `tools_unsupported`             | the run's scope requires no model feature, so the policy's declared capabilities are never consulted                                                                                                         |
+| `structured_output_unsupported` | the same                                                                                                                                                                                                     |
+| `invalid_evidence`              | the current reader and capability share `reviewEvidenceSchema`; the reader returns null on parse failure, yielding `target_stale` first. A different injected reader can reach this defensive failure branch |
 
 **The worker's own codes.** A job the worker cannot run at all is recorded in the worker's
 vocabulary, not in this feature's: `unhandled_job` (an unknown job kind or an unknown handler
@@ -447,15 +500,18 @@ ORDER BY created_at DESC LIMIT 20;
 
 **No question appears.** Work down this list:
 
-1. The policy is on and lists the account — `GET /api/settings`, the `backgroundAi` field.
-2. A provider is configured — the provider, the model and the key (or the base URL and the model,
-   for a compatible server) are set.
-3. The day's allowance is not spent — the reservation count for today is under ten.
-4. The change was a live change — `historical` and `maintenance` changes never queue a question.
-5. The opportunity was not suppressed — the review opportunity of the observation is `pending` or
+1. Event capture is enabled (`JOURNAL_EVENT_CAPTURE=1`, `true` or `on`) for new live trade changes.
+   Off means no new event, not a failed run; existing backlog and seed work can still proceed.
+2. The worker is enabled and points to the same absolute data directory as the web process.
+3. The policy is on and lists the account — `GET /api/settings`, the `backgroundAi` field.
+4. A provider is configured — the provider, model and effective key (environment keys override saved
+   keys), or the base URL and model for a compatible server, are set.
+5. The day's allowance is not spent — the reservation count for today is under ten.
+6. The change was a live change — `historical` and `maintenance` changes never queue a question.
+7. The opportunity was not suppressed — the review opportunity of the observation is `pending` or
    `eligible`, not `dismissed`, `expired` or `suppressed`.
-6. The run's `meta_json` holds the reason — that is the refusal code, and the table above says what
-   to do about it.
+8. Inspect both the run's `meta_json` and the job's `last_error`; worker health has a separate
+   `lastErrorCode`. A missing run reason does not rule out a lost lease or fenced claim.
 
 **A question is stored but the card does not show it.** The row is in `intelligence_insights` and
 the card is empty. Three things can hide a stored question:
@@ -784,7 +840,7 @@ An older binary lacks the new version guards, so it must not write to a newer jo
 downgrade a journal by dropping tables: restore instead.
 
 See also: [Database migrations](./database-migrations.md) and
-[ADR 0007 — durable SQLite worker and migrations](../decisions/0007-durable-sqlite-worker-and-migrations.md).
+[ADR 0007 — durable SQLite worker and migrations](./decisions/0007-durable-sqlite-worker-and-migrations.md).
 
 ## Release
 
@@ -948,4 +1004,4 @@ ones.
 | `pnpm format:check`                                                                             | **FAILED (exit 1): the format check is red.** 71 files fail in the feature tree and 71 fail at the base commit `4ae868d` in a fresh checkout: of the 71 in the feature tree, 67 are tracked and inherited and 4 are the gitignored Tauri-generated schema files under `desktop/src-tauri/gen/`, which exist in a built tree and not in a fresh checkout. The 24-phase effort introduced none of them — the failing list cross-referenced against every path the effort changed returns zero. This is a pre-existing condition, not a regression. The gate is red and is recorded as red; it is not claimed as passed.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                |
 
 The phase report for this run is
-[docs/superpowers/reports/ai-native-journal-phase-21.md](../superpowers/reports/ai-native-journal-phase-21.md).
+[docs/superpowers/reports/ai-native-journal-phase-21.md](./superpowers/reports/ai-native-journal-phase-21.md).

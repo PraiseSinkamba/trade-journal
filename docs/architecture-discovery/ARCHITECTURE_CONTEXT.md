@@ -1,6 +1,10 @@
 # Architecture Context Package — Trade Journal
 
-> The synthesis deliverable. Independent of the individual section reports. Read this first; drill into per-section reports as needed.
+> **Historical snapshot — before the intelligence modernization.** This package describes the
+> system investigated before the current outbox, worker and intelligence runtime were built.
+> Start with [Intelligence onboarding](../intelligence.md) for the current flow and source map,
+> or the [operations runbook](../intelligence-operations.md) for setup and recovery.
+> The material below is preserved as evidence of the earlier architecture, not current guidance.
 
 ---
 

@@ -15,7 +15,7 @@ Trade Journal is a [LuxAlgo](https://luxalgo.com) open-source project.
 [![TypeScript](https://img.shields.io/badge/lang-TypeScript-white)](packages/core/src/types.ts)
 [![SQLite](https://img.shields.io/badge/db-SQLite-white)](#quickstart)
 
-[Homepage](https://www.luxalgo.com/trade-journal/) · [Quickstart](#quickstart) · [Features](#features) · [Screenshots](#screenshots) · [How it works](#how-it-works) · [Migrate](#migrating-from-tradezella-or-tradervue) · [Edge Score](docs/edge-score.md) · [Contributing](CONTRIBUTING.md)
+[Homepage](https://www.luxalgo.com/trade-journal/) · [Quickstart](#quickstart) · [Features](#features) · [Screenshots](#screenshots) · [How it works](#how-it-works) · [Migrate](#migrating-from-tradezella-or-tradervue) · [Edge Score](docs/edge-score.md) · [Intelligence](docs/intelligence.md) · [Contributing](CONTRIBUTING.md)
 
 </div>
 
@@ -67,15 +67,17 @@ docker compose up -d
 
 ### Configuration (all optional)
 
-| Env var              | Effect                                                                                                   |
-| -------------------- | -------------------------------------------------------------------------------------------------------- |
-| `JOURNAL_PASSWORD`   | Require a password; recommended when accessible beyond localhost                                         |
-| `JOURNAL_SECRET`     | Encryption key source for credentials at rest (default: generated key file in the data dir)              |
-| `JOURNAL_DATA_DIR`   | Database, attachments, and local encryption key directory (default `./data` relative to the app process) |
-| `ANTHROPIC_API_KEY`  | Anthropic AI key via env instead of the Settings page                                                    |
-| `OPENAI_API_KEY`     | OpenAI AI key via env instead of the Settings page                                                       |
-| `ANTHROPIC_BASE_URL` | Send Anthropic requests through a gateway or proxy (default `https://api.anthropic.com/v1`)              |
-| `OPENAI_BASE_URL`    | Send OpenAI requests through a gateway or proxy (default `https://api.openai.com/v1`)                    |
+| Env var                | Effect                                                                                                   |
+| ---------------------- | -------------------------------------------------------------------------------------------------------- |
+| `JOURNAL_PASSWORD`     | Require a password; recommended when accessible beyond localhost                                         |
+| `JOURNAL_SECRET`       | Encryption key source for credentials at rest (default: generated key file in the data dir)              |
+| `JOURNAL_DATA_DIR`     | Shared absolute journal directory. Bare DB default: `/data/trade-journal`; supervisor default: `data` under its working directory; Docker: `/data`. Set it explicitly when launching web and worker separately. |
+| `JOURNAL_EVENT_CAPTURE` | Append new trade-change events (`1`, `true` or `on`). **Off by default.** It does not stop existing jobs or seed work, or backfill changes made while off. See [Intelligence onboarding](docs/intelligence.md). |
+| `JOURNAL_WORKER_ENABLED` | Standalone worker: `0` disables, unset enables. The supervisor overrides this from `--worker enabled\|disabled` (production default enabled; dev default disabled). |
+| `ANTHROPIC_API_KEY`    | Anthropic AI key via env instead of the Settings page                                                    |
+| `OPENAI_API_KEY`       | OpenAI AI key via env instead of the Settings page                                                       |
+| `ANTHROPIC_BASE_URL`   | Send Anthropic requests through a gateway or proxy (default `https://api.anthropic.com/v1`)              |
+| `OPENAI_BASE_URL`      | Send OpenAI requests through a gateway or proxy (default `https://api.openai.com/v1`)                    |
 
 Set these in the process environment or in `apps/web/.env.local` for local Next.js runs; the root [`.env.example`](.env.example) documents the optional values. For Docker, configure the service environment in [`docker-compose.yml`](docker-compose.yml).
 
