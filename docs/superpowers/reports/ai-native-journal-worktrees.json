@@ -1,7 +1,7 @@
 {
   "schemaVersion": 1,
   "feature": "ai-native-journal",
-  "updatedAt": "2026-11-23T11:17:45Z",
+  "updatedAt": "2026-11-23T11:48:02Z",
   "owner": "parent OMP coordinator (exclusive owner of this record)",
   "repository": {
     "name": "trade-journal",
@@ -35,7 +35,7 @@
     },
     "featureBranch": "codex/ai-native-journal",
     "featureBootstrapSha": "0a278503fd67c0f9e82138dfecb744f4bfd307ad",
-    "featureHeadSha": "93ba720ddeaced9d0ce7693d068d4e04f649adc9",
+    "featureHeadSha": "b1e7e482442d05cf00cb825ed2719bc9f83c4f12",
     "featureHeadShaNote": "feature branch HEAD; the twenty-one phases are integrated and the optional-AI insight work continues from this tip on its own phase branches",
     "featureCheckpointCommits": [
       "0a278503fd67c0f9e82138dfecb744f4bfd307ad",
@@ -98,7 +98,8 @@
       "5b7b952ab037bb5e6248b7dd04e48a3f3c4cd7c6",
       "1e20ea0a129a0859cd2a3070260b816b3f85e68b",
       "5dbaa3113cf282749b10623f36637145a82836cd",
-      "93ba720ddeaced9d0ce7693d068d4e04f649adc9"
+      "93ba720ddeaced9d0ce7693d068d4e04f649adc9",
+      "b1e7e482442d05cf00cb825ed2719bc9f83c4f12"
     ],
     "featureBranchNote": "Orca slugified the requested name to codex-ai-native-journal at creation; the coordinator renamed the newly created, exclusively owned branch to the contract-required codex/ai-native-journal. Orca reads the renamed ref live (refs/heads/codex/ai-native-journal). No pre-existing branch was overwritten."
   },
@@ -1936,8 +1937,8 @@
     "verification": "every phase was reviewed, teeth-proved by the coordinator, merged with --no-ff and verified by a destination gate on the destination branch alone on the host",
     "openItems": [
       "the Docker scratch-volume smoke is blocked host evidence on this host and is carried to G-FINAL, where the CI docker job has a daemon",
-      "pnpm format:check exits 1. The repository format gate was already red at the base commit: 73 of the files tracked there fail prettier --check, and the tree this run leaves behind fails on 70 of them with no file entering the failing set - the three that left are the desktop files the Phase 21 repair formatted. The raw repository-wide count drifts with the generated Tauri schema files, so the stable statement is the base-commit set and that nothing entered it. The release acceptance record states the gate as red.",
-      "the persisted home for an AI-assisted insight is a next-milestone item: no phase in this run owns a migration for it and the Slice B chain AI leg is optional"
+      "pnpm format:check exits 1. MEASURED after the optional-AI feature: 71 files fail in the feature tree and 71 fail at the base commit 4ae868d in a fresh checkout. Of the 71 in the feature tree, 67 are tracked and inherited and 4 are the gitignored Tauri-generated schema files, which exist in a built tree and not in a fresh checkout; the tracked count fell by exactly four because the final release gate caught that no integration record had ever been prettier-checked and the four base-era ones (phases 15, 16, 19, 21) were formatted. The 24-phase effort introduced none of them: the failing list cross-referenced against every path the effort changed returns zero. The count depends on untracked files in the working tree, so it is stated with the tree it was measured in.",
+      "the persisted home for an AI-assisted insight: CLOSED by the optional-AI feature (Phases 22, 23 and 24). Migration 0008-ai-insights gives the leg its table, the fenced provider job gives it a bounded and authorised producer, and the scoped GET with the card gives it a surface."
     ],
     "whereTheEvidenceLives": [
       "docs/superpowers/reports/ai-native-journal-integration-NN.md - one per phase, with its gate table and its review verdict",
