@@ -186,6 +186,18 @@ function latencyDistribution(values) {
   };
 }
 
+/** Consume the first actual read as warmup; summarize every remaining read in place. */
+function summarizeReadLatency(loadDurations, restDurations) {
+  // Load reads happen first; only a run without them needs a rest-read warmup.
+  const warm = loadDurations.length > 0 ? loadDurations.shift() : restDurations.shift();
+  return {
+    ...latencyDistribution([...loadDurations, ...restDurations]),
+    warmupMs: rounded(warm),
+    loadSampleCount: loadDurations.length,
+    restSampleCount: restDurations.length,
+  };
+}
+
 /** Find an available loopback port, preferring the requested base when present. */
 async function findFreePort(base) {
   for (let attempt = 0; attempt < 1000; attempt += 1) {
@@ -658,15 +670,8 @@ async function runMode(volume, mode, options, scratchRoot) {
     for (let index = 0; index < options.samples; index += 1) {
       restDurations.push(await readOnce(baseUrl, accountId));
     }
-    // One excluded request warms the route, matching the repository's existing
-    // benchmark convention instead of measuring a cold first read.
-    const warm = restDurations.shift();
-    const readLatencyMs = {
-      ...latencyDistribution([...loadDurations, ...restDurations]),
-      warmupMs: rounded(warm),
-      loadSampleCount: loadDurations.length,
-      restSampleCount: restDurations.length,
-    };
+    // Exclude the first actual read, not an already-warm read after ingestion.
+    const readLatencyMs = summarizeReadLatency(loadDurations, restDurations);
     let queueDrained = null;
     if (modeSpec.hasQueue && !standalone) {
       // Queue latency is captured from committed rows after the worker consumes
@@ -853,6 +858,39 @@ function summarizeMode(runs, mode) {
 async function runSelfCheck(resultPath) {
   const checks = [];
   const check = (name, passed) => checks.push({ name, passed });
+  // Distinct durations prove exactly which reads survive the warmup exclusion.
+  const loadDurations = [1000, 2, 3];
+  const restDurations = [4, 5];
+  const reads = summarizeReadLatency(loadDurations, restDurations);
+  check(
+    "only the cold first load read is excluded; all later load and rest reads remain",
+    reads.warmupMs === 1000 &&
+      reads.sampleCount === 4 &&
+      reads.loadSampleCount === 2 &&
+      reads.restSampleCount === 2 &&
+      reads.p50 === 3.5 &&
+      reads.p95 === 4.85 &&
+      JSON.stringify(loadDurations) === "[2,3]" &&
+      JSON.stringify(restDurations) === "[4,5]",
+  );
+  const restOnly = summarizeReadLatency([], [1000, 2, 3]);
+  check(
+    "without load reads, only the first rest read warms the route",
+    restOnly.warmupMs === 1000 &&
+      restOnly.sampleCount === 2 &&
+      restOnly.loadSampleCount === 0 &&
+      restOnly.restSampleCount === 2 &&
+      restOnly.p50 === 2.5 &&
+      restOnly.p95 === 2.95,
+  );
+  const noReads = summarizeReadLatency([], []);
+  check(
+    "an empty read series invents no measurements",
+    noReads.sampleCount === 0 &&
+      noReads.warmupMs === null &&
+      noReads.p50 === null &&
+      noReads.p95 === null,
+  );
   const idle = summarizeMode([{ eventCapture: true, queueDrained: null }], "idle");
   const active = summarizeMode([{ eventCapture: true, queueDrained: true }], "active");
   const undrained = summarizeMode([{ eventCapture: true, queueDrained: false }], "active");
