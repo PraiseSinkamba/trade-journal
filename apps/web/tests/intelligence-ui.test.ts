@@ -107,6 +107,7 @@ beforeEach(() => {
   Object.assign(globalThis, { IS_REACT_ACT_ENVIRONMENT: true });
   routes.clear();
   calls.length = 0;
+  routes.set("GET /api/settings", { status: 200, body: { journalEventCapture: true } });
   window.localStorage.clear();
   vi.stubGlobal(
     "fetch",
@@ -212,6 +213,15 @@ const type = async (element: HTMLInputElement | HTMLTextAreaElement, value: stri
 /** The last request the client posted to one route. */
 const posted = (url: string) =>
   calls.filter((call) => call.method === "POST" && call.url === url).at(-1);
+
+/** Find capture by its accessible label, failing clearly when it is absent. */
+const captureToggle = (): HTMLButtonElement => {
+  const element = container.querySelector<HTMLButtonElement>(
+    '[aria-label="Journal event capture"]',
+  );
+  if (!element) throw new Error("Journal event capture toggle missing");
+  return element;
+};
 
 it("offers only native, focusable controls with an accessible name", async () => {
   routes.set("GET /api/intelligence/observations", {
@@ -537,7 +547,7 @@ it("writes the journal switches the operator changed", async () => {
   await render(createElement(IntelligenceControls));
 
   const switches = container.querySelectorAll<HTMLElement>('[role="checkbox"]');
-  expect(switches).toHaveLength(2);
+  expect(switches).toHaveLength(3);
   for (const element of switches) {
     expect(element.tagName).toBe("BUTTON");
     expect(accessibleName(element)).not.toBe("");
@@ -590,4 +600,76 @@ it("shows the served background policy, the worker state and the engagement defa
 
   expect(container.textContent).toContain("24 hours");
   expect(container.textContent).toContain("7 days");
+});
+
+it("saves journal event capture off and on without changing AI consent", async () => {
+  routes.set("PATCH /api/settings", { status: 200, body: { saved: true } });
+  await render(createElement(IntelligenceControls));
+  const toggle = captureToggle();
+  expect(toggle.getAttribute("aria-checked")).toBe("true");
+  expect(container.textContent).toContain("future changes");
+  expect(container.textContent).toContain("No backfill");
+  expect(container.textContent).toContain("queued work");
+  expect(container.textContent).toContain("not AI consent");
+
+  await activate(toggle);
+  expect(calls.filter((call) => call.method === "PATCH")).toEqual([
+    { url: "/api/settings", method: "PATCH", body: { journalEventCapture: false } },
+  ]);
+  expect(toggle.getAttribute("aria-checked")).toBe("false");
+  await activate(toggle);
+  expect(calls.filter((call) => call.method === "PATCH").at(-1)?.body).toEqual({
+    journalEventCapture: true,
+  });
+  expect(toggle.getAttribute("aria-checked")).toBe("true");
+});
+
+it("keeps the saved capture value when saving fails", async () => {
+  routes.set("GET /api/settings", { status: 200, body: { journalEventCapture: false } });
+  routes.set("PATCH /api/settings", { status: 500, body: { error: "Capture save failed" } });
+  await render(createElement(IntelligenceControls));
+  const toggle = captureToggle();
+  await activate(toggle);
+  expect(toggle.getAttribute("aria-checked")).toBe("false");
+  expect(container.querySelector('[role="alert"]')?.textContent).toContain("Capture save failed");
+});
+
+it("disables capture and reports settings read failures", async () => {
+  routes.set("GET /api/settings", { status: 500, body: { error: "Settings unavailable" } });
+  await render(createElement(IntelligenceControls));
+  const toggle = captureToggle();
+  expect(toggle.disabled).toBe(true);
+  expect(container.textContent).toContain("Settings unavailable");
+});
+
+it("disables capture and shows pending status until the save completes", async () => {
+  await render(createElement(IntelligenceControls));
+  const { promise, resolve } = Promise.withResolvers<Response>();
+  vi.mocked(globalThis.fetch).mockImplementationOnce(() => promise);
+  const toggle = captureToggle();
+  await activate(toggle);
+  expect(toggle.disabled).toBe(true);
+  expect(toggle.getAttribute("aria-checked")).toBe("true");
+  expect(container.textContent).toContain("Saving journal event capture");
+  await act(async () => resolve(jsonResponse(200, { saved: true })));
+  expect(toggle.disabled).toBe(false);
+  expect(toggle.getAttribute("aria-checked")).toBe("false");
+});
+
+it("shows loading and disables capture until settings arrive", async () => {
+  const { promise, resolve } = Promise.withResolvers<Response>();
+  const original = globalThis.fetch;
+  vi.stubGlobal(
+    "fetch",
+    vi.fn((input: RequestInfo | URL, init?: RequestInit) =>
+      String(input) === "/api/settings" ? promise : original(input, init),
+    ),
+  );
+  await render(createElement(IntelligenceControls));
+  expect(captureToggle().disabled).toBe(true);
+  expect(container.textContent).toContain("Loading journal event capture");
+  await act(async () => resolve(jsonResponse(200, { journalEventCapture: true })));
+  await settle();
+  expect(captureToggle().disabled).toBe(false);
+  expect(captureToggle().getAttribute("aria-checked")).toBe("true");
 });

@@ -274,7 +274,6 @@ describe("NinjaTrader imports through preview, storage and rebuild", () => {
   });
 
   it("commits the fills, the batch, the sources, the aliases and the events together", async () => {
-    process.env.JOURNAL_EVENT_CAPTURE = "1";
     db.$client.exec(
       "CREATE TRIGGER fail_event BEFORE INSERT ON domain_outbox BEGIN SELECT RAISE(FAIL, 'test event failure'); END",
     );
@@ -283,7 +282,6 @@ describe("NinjaTrader imports through preview, storage and rebuild", () => {
       expect(response.status).toBe(500);
     } finally {
       db.$client.exec("DROP TRIGGER fail_event");
-      delete process.env.JOURNAL_EVENT_CAPTURE;
     }
     // Nothing survives: the fills, the projections, the revisions, the events and
     // the import bookkeeping were one operation.
@@ -297,12 +295,7 @@ describe("NinjaTrader imports through preview, storage and rebuild", () => {
   });
 
   it("records the import as a historical change, never as a live opening", async () => {
-    process.env.JOURNAL_EVENT_CAPTURE = "1";
-    try {
-      expect((await commit()).status).toBe(200);
-    } finally {
-      delete process.env.JOURNAL_EVENT_CAPTURE;
-    }
+    expect((await commit()).status).toBe(200);
     const stored = db.select().from(domainOutbox).all();
     expect(stored.length).toBeGreaterThan(0);
     expect(stored.every((row) => row.origin === "import")).toBe(true);
@@ -320,18 +313,20 @@ describe("NinjaTrader imports through preview, storage and rebuild", () => {
       "AAPL,Sell,1,101,2026-09-15 09:31,A,broker,e2,0",
     ]);
     expect((await commit(original)).status).toBe(200);
-    process.env.JOURNAL_EVENT_CAPTURE = "1";
-    let response: Response;
-    try {
-      response = await commit(corrected, "test", { approveFeeCorrections: true });
-    } finally {
-      delete process.env.JOURNAL_EVENT_CAPTURE;
-    }
+    const initialEvents = db.select().from(domainOutbox).all();
+    expect(initialEvents.map((row) => JSON.parse(row.payloadJson).kind)).toEqual(["discovered"]);
+    const response = await commit(corrected, "test", { approveFeeCorrections: true });
     expect(response.status).toBe(200);
     expect(await response.json()).toMatchObject({ inserted: 0, duplicates: 1, corrected: 1 });
     expect(accountTrades()[0]).toMatchObject({ fees: 3, netPnl: -2 });
-    // A corrected fee is a revision of a known projection, not a new trade.
-    const revisions = db.select().from(domainOutbox).all();
+    // Keep the initial discovery intact; only the correction adds a revision.
+    const events = db.select().from(domainOutbox).all();
+    expect(events.filter((row) => initialEvents.some((initial) => initial.id === row.id))).toEqual(
+      initialEvents,
+    );
+    const revisions = events.filter(
+      (row) => !initialEvents.some((initial) => initial.id === row.id),
+    );
     expect(revisions.map((row) => JSON.parse(row.payloadJson).kind)).toEqual(["revised"]);
   });
 

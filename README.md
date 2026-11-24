@@ -72,7 +72,6 @@ docker compose up -d
 | `JOURNAL_PASSWORD`       | Require a password; recommended when accessible beyond localhost                                                                                                                                                |
 | `JOURNAL_SECRET`         | Encryption key source for credentials at rest (default: generated key file in the data dir)                                                                                                                     |
 | `JOURNAL_DATA_DIR`       | Shared absolute journal directory. Bare DB default: `/data/trade-journal`; supervisor default: `data` under its working directory; Docker: `/data`. Set it explicitly when launching web and worker separately. |
-| `JOURNAL_EVENT_CAPTURE`  | Append new trade-change events (`1`, `true` or `on`). **Off by default.** It does not stop existing jobs or seed work, or backfill changes made while off. See [Intelligence onboarding](docs/intelligence.md). |
 | `JOURNAL_WORKER_ENABLED` | Standalone worker: `0` disables, unset enables. The supervisor overrides this from `--worker enabled\|disabled` (production default enabled; dev default disabled).                                             |
 | `ANTHROPIC_API_KEY`      | Anthropic AI key via env instead of the Settings page                                                                                                                                                           |
 | `OPENAI_API_KEY`         | OpenAI AI key via env instead of the Settings page                                                                                                                                                              |
@@ -80,6 +79,8 @@ docker compose up -d
 | `OPENAI_BASE_URL`        | Send OpenAI requests through a gateway or proxy (default `https://api.openai.com/v1`)                                                                                                                           |
 
 Set these in the process environment or in `apps/web/.env.local` for local Next.js runs; the root [`.env.example`](.env.example) documents the optional values. For Docker, configure the service environment in [`docker-compose.yml`](docker-compose.yml).
+
+Journal event capture is **on by default** for new and existing journals. Change it in **Settings → Intelligence**; the persisted `journalEventCapture` boolean applies immediately to future trade changes/removals. Turning it on does not backfill missed changes; turning it off does not cancel queued work or historical seeding. Capture is separate from Background AI consent. See [Intelligence onboarding](docs/intelligence.md).
 
 For AI, open **Settings → AI**, select **Anthropic** or **OpenAI**, enter your API key, and choose **Save AI settings**. OpenAI defaults to `gpt-6-luna`; you can enter another text model ID available to your account. Each provider keeps its own encrypted key and model choice. Existing Anthropic settings continue to work. An OpenAI-only environment setup selects OpenAI automatically; with both keys present, Anthropic remains the default until you save a provider choice. Environment keys override saved keys and must be changed on the server. Saving settings does not make a model request or verify account access.
 

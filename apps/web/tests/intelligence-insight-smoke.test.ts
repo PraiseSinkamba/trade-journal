@@ -80,10 +80,6 @@ it("the shipped worker stores the question and the app serves it", async () => {
   // The journal the synthetic case writes into: the same directory the
   // worker is started against.
   process.env.JOURNAL_DATA_DIR = journalDir();
-  // The committed trade change must reach the worker's outbox. Production
-  // capture is off until the historical baseline exists, so the synthetic
-  // case turns it on for itself.
-  process.env.JOURNAL_EVENT_CAPTURE = "1";
 
   // The journal module opens the database when it is first evaluated, so it
   // can only be imported after the data directory is set.

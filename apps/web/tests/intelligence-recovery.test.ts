@@ -102,7 +102,7 @@ import { writeSync } from "node:fs";
 import { db, accounts, withConnectionTransaction } from "@/db";
 import { insertExecutionsInTx } from "@/server/executions";
 import { changeContext } from "@/server/trading/reconcile";
-import { resolveAiConfiguration } from "@/server/settings";
+import { resolveAiConfiguration, setSetting } from "@/server/settings";
 import { createIntelligenceServices } from "@/server/intelligence/composition";
 import { createJobStore, createEffectStore } from "@/server/intelligence/infrastructure/jobs";
 import { createWorkerService } from "@/server/intelligence/infrastructure/worker";
@@ -152,7 +152,7 @@ async function main() {
   db.insert(accounts).values({
     id: "recovery-account", name: "Recovery fixture", kind: "manual", createdAt: "2026-01-01",
   }).run();
-  process.env.JOURNAL_EVENT_CAPTURE = scenario === "seed" ? "0" : "1";
+  setSetting("journalEventCapture", JSON.stringify(scenario !== "seed"));
   const symbols = scenario === "seed" ? ["RECOVERY-A", "RECOVERY-B", "RECOVERY-C"] : ["RECOVERY-A"];
   const fills = symbols.flatMap((symbol) => [
     { symbol, side: "buy", quantity: 2, price: 100, fee: 0, executedAt: "2026-09-01T10:00:00Z" },

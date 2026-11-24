@@ -6,6 +6,7 @@ import {
   getCurrencyConversion,
   getTimeZone,
   getImportTimeZone,
+  getJournalEventCapture,
   aiKeyEnvironment,
   getAiProvider,
   getAiSettings,
@@ -27,6 +28,7 @@ export const GET = handler(() =>
     importTimeZone: getImportTimeZone(),
     multipliers: getMultipliers(),
     currencyConversion: getCurrencyConversion(),
+    journalEventCapture: getJournalEventCapture(),
     ...getAiSettings(),
     currentAccountId: getCurrentAccountId(),
     backgroundAi: getBackgroundPolicy(),
@@ -37,6 +39,8 @@ interface SettingsBody {
   timeZone?: string;
   importTimeZone?: string;
   multipliers?: Record<string, number>;
+  /** Future projection events only. Absent = unchanged; defaults on for unsaved journals. */
+  journalEventCapture?: boolean;
   /** Set to a key string to store (encrypted), or null to clear. Absent = unchanged. */
   anthropicKey?: string | null;
   openaiKey?: string | null;
@@ -55,6 +59,12 @@ interface SettingsBody {
 export const PATCH = handler(async (request: Request) => {
   const body = (await request.json()) as SettingsBody;
   requireValue(body && typeof body === "object" && !Array.isArray(body), "Enter valid settings.");
+  // Reject malformed capture choices before any service or database work.
+  if (body.journalEventCapture !== undefined)
+    requireValue(
+      typeof body.journalEventCapture === "boolean",
+      "Choose whether journal event capture is enabled.",
+    );
   let conversion: CurrencyConversion | undefined;
   if (body.currencyConversion !== undefined) {
     try {
@@ -138,6 +148,7 @@ export const PATCH = handler(async (request: Request) => {
   if (body.timeZone !== undefined) patch.timeZone = body.timeZone;
   if (body.importTimeZone !== undefined) patch.importTimeZone = body.importTimeZone;
   if (body.multipliers !== undefined) patch.multipliers = body.multipliers;
+  if (body.journalEventCapture !== undefined) patch.journalEventCapture = body.journalEventCapture;
   if (body.currentAccountId !== undefined) patch.currentAccountId = body.currentAccountId;
   if (body.aiProvider !== undefined) patch.aiProvider = body.aiProvider;
   if (body.aiModel !== undefined) {

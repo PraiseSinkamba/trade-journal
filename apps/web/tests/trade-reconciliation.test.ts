@@ -18,9 +18,6 @@ import type { ImportedExecution } from "@luxalgo/journal-importers";
 
 const scratch = mkdtempSync(join(tmpdir(), "journal-reconcile-"));
 process.env.JOURNAL_DATA_DIR = scratch;
-// Event capture is off in production; the reconciliation behaviour is proved
-// here with it on.
-process.env.JOURNAL_EVENT_CAPTURE = "1";
 
 // The journal module opens the database when it is first evaluated, so it can
 // only be imported after JOURNAL_DATA_DIR points at the scratch directory.
@@ -33,9 +30,10 @@ const {
   tradeProjectionRevisions,
   domainOutbox,
   withJournalTransaction,
+  settings,
 } = await import("../src/db");
 const { rebuildAccount } = await import("../src/server/rebuild");
-const { recordManualTrades, importGenericExecutions } =
+const { recordManualTrades, importGenericExecutions, updateSettings } =
   await import("../src/server/trading/commands");
 const { changeContext, reconcileAccountInTx } = await import("../src/server/trading/reconcile");
 
@@ -74,6 +72,7 @@ beforeEach(() => {
   db.delete(trades).run();
   db.delete(executions).run();
   db.delete(accounts).run();
+  db.delete(settings).run();
   db.insert(accounts)
     .values({ id: ACCOUNT, name: "Reconcile", kind: "manual", createdAt: "2026-01-01" })
     .run();
@@ -279,20 +278,47 @@ describe("the whole operation is one transaction", () => {
   });
 });
 
-describe("production event capture stays off", () => {
-  it("writes the projections but no event when capture is off", () => {
-    const previous = process.env.JOURNAL_EVENT_CAPTURE;
-    process.env.JOURNAL_EVENT_CAPTURE = "0";
-    try {
-      recordManualTrades(ACCOUNT, [entry, exit]);
-    } finally {
-      if (previous === undefined) delete process.env.JOURNAL_EVENT_CAPTURE;
-      else process.env.JOURNAL_EVENT_CAPTURE = previous;
-    }
+describe("persisted event capture controls future mutations", () => {
+  it("keeps projection evidence while off and captures only future changes after re-enabling", () => {
+    recordManualTrades(ACCOUNT, [entry, exit]);
+    const initialEvents = eventRows();
+    expect(initialEvents).toHaveLength(1);
+    updateSettings({ journalEventCapture: false });
+    db.update(executions).set({ fee: 1 }).where(eqSymbol()).run();
+    rebuildAccount(ACCOUNT);
 
-    expect(db.select().from(trades).all()).toHaveLength(1);
-    expect(db.select().from(executions).all()).toHaveLength(2);
-    expect(eventRows()).toHaveLength(0);
+    expect(db.select().from(trades).all()[0]?.netPnl).toBe(18);
+    expect(revisionRows()).toHaveLength(2);
+    expect(eventRows()).toEqual(initialEvents);
+
+    updateSettings({ journalEventCapture: true });
+    rebuildAccount(ACCOUNT);
+    expect(eventRows()).toEqual(initialEvents);
+    db.update(executions).set({ fee: 2 }).where(eqSymbol()).run();
+    rebuildAccount(ACCOUNT);
+    expect(revisionRows()).toHaveLength(3);
+    expect(eventRows()).toHaveLength(2);
+    expect(eventRows().at(-1)).toMatchObject({ kind: "revised" });
+  });
+
+  it("retires removed identities while off without deleting queued events or backfilling on enable", () => {
+    recordManualTrades(ACCOUNT, [entry, exit]);
+    const initialEvents = db.select().from(domainOutbox).all();
+    updateSettings({ journalEventCapture: false });
+    db.delete(executions).run();
+    rebuildAccount(ACCOUNT);
+
+    expect(db.select().from(trades).all()).toHaveLength(0);
+    expect(identityRows()[0]?.state).toBe("tombstoned");
+    expect(db.select().from(domainOutbox).all()).toEqual(initialEvents);
+    updateSettings({ journalEventCapture: true });
+    rebuildAccount(ACCOUNT);
+    expect(db.select().from(domainOutbox).all()).toEqual(initialEvents);
+    recordManualTrades(ACCOUNT, [entry, exit]);
+    db.delete(executions).run();
+    rebuildAccount(ACCOUNT);
+    expect(eventRows()).toHaveLength(initialEvents.length + 2);
+    expect(eventRows().at(-1)).toMatchObject({ kind: "removed" });
   });
 });
 

@@ -164,7 +164,6 @@ describe("IBKR Flex Query XML upload honours the statement timezone (#16)", () =
   });
 
   it("commits the fills, the projections and the events together or not at all", async () => {
-    process.env.JOURNAL_EVENT_CAPTURE = "1";
     db.$client.exec(
       "CREATE TRIGGER fail_event BEFORE INSERT ON domain_outbox BEGIN SELECT RAISE(FAIL, 'test event failure'); END",
     );
@@ -173,7 +172,6 @@ describe("IBKR Flex Query XML upload honours the statement timezone (#16)", () =
       expect(response.status).toBe(500);
     } finally {
       db.$client.exec("DROP TRIGGER fail_event");
-      delete process.env.JOURNAL_EVENT_CAPTURE;
     }
     expect(stored()).toHaveLength(0);
     expect(db.select().from(trades).all()).toHaveLength(0);

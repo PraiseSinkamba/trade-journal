@@ -8,8 +8,6 @@ import type { ImportedExecution } from "@luxalgo/journal-importers";
 const originalDir = process.env.JOURNAL_DATA_DIR;
 const scratch = mkdtempSync(join(tmpdir(), "journal-sync-test-"));
 process.env.JOURNAL_DATA_DIR = scratch;
-// Event capture is off in production; the event behaviour is proved here.
-process.env.JOURNAL_EVENT_CAPTURE = "1";
 
 interface FakeTrade {
   symbol: string;

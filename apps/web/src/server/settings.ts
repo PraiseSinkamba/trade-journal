@@ -44,6 +44,13 @@ export const getSetting = (key: string): string | null => getSettingInTx(journal
 export const getSettingInTx = (tx: JournalTx, key: string): string | null =>
   tx.select().from(settings).where(eq(settings.key, key)).get()?.value ?? null;
 
+/** Captures future projection events by default, including journals without a saved choice. */
+export const getJournalEventCapture = (): boolean => getJournalEventCaptureInTx(journal);
+
+/** Reads the capture choice through the caller's transaction so combined patches apply immediately. */
+export const getJournalEventCaptureInTx = (tx: JournalTx): boolean =>
+  getSettingInTx(tx, "journalEventCapture") !== "false";
+
 export const setSetting = (key: string, value: string): void => {
   setSettingInTx(journal, key, value);
 };

@@ -16,8 +16,6 @@ import type { ImportedExecution } from "@luxalgo/journal-importers";
 
 const scratch = mkdtempSync(join(tmpdir(), "journal-mutation-events-"));
 process.env.JOURNAL_DATA_DIR = scratch;
-// Event capture is off in production; the event behaviour is proved here.
-process.env.JOURNAL_EVENT_CAPTURE = "1";
 
 // The journal module opens the database when it is first evaluated, so it can
 // only be imported after JOURNAL_DATA_DIR points at the scratch directory.

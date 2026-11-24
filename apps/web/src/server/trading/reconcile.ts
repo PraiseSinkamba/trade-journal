@@ -17,7 +17,11 @@ import {
 import type { JournalTx } from "@/db/transaction";
 import { defaultRisk } from "@/lib/journal-defaults";
 import { newUuid } from "../ids";
-import { getJournalDefaultsInTx, getMultipliersInTx } from "../settings";
+import {
+  getJournalDefaultsInTx,
+  getJournalEventCaptureInTx,
+  getMultipliersInTx,
+} from "../settings";
 import { appendDomainEvent } from "../domain-event-store";
 import type { ChangeContext, TradeChanged, TradeChangedKind } from "../domain-events";
 import {
@@ -71,18 +75,6 @@ export interface ReconcileResult {
   unchanged: number;
   ambiguous: number;
 }
-
-/**
- * Whether production event capture is on.
- *
- * One global switch, never per path: the phase guide keeps production capture
- * off until the historical baseline exists, and a per-path switch would let the
- * event stream become partial. The tests turn it on explicitly.
- */
-export const isEventCaptureEnabled = (): boolean => {
-  const value = process.env.JOURNAL_EVENT_CAPTURE?.trim().toLowerCase();
-  return value === "1" || value === "true" || value === "on";
-};
 
 /**
  * How strong a quality is.
@@ -369,6 +361,7 @@ export const reconcileAccountInTx = (
   const result = emptyResult();
   const account = tx.select().from(accounts).where(eq(accounts.id, accountId)).get();
   if (!account) return result;
+  const captureEvents = getJournalEventCaptureInTx(tx);
 
   // The prior persisted projections, read before they are overwritten.
   const priorRows = tx.select().from(trades).where(eq(trades.accountId, accountId)).all();
@@ -493,7 +486,7 @@ export const reconcileAccountInTx = (
       ? "revised"
       : changeKind(priorRow?.status, trip.status, context.mode);
     result[kind]++;
-    if (!isEventCaptureEnabled()) continue;
+    if (!captureEvents) continue;
     const event: TradeChanged = {
       id: newUuid(),
       type: "trade.projection_changed",
@@ -539,7 +532,7 @@ export const reconcileAccountInTx = (
       )
       .get();
     retireIdentity(tx, { tradeId: identity.id });
-    if (!lastRevision || !isEventCaptureEnabled()) continue;
+    if (!lastRevision || !captureEvents) continue;
     const event: TradeChanged = {
       id: newUuid(),
       type: "trade.projection_changed",

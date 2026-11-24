@@ -36,6 +36,7 @@ const {
   intelligenceSeedCheckpoints,
 } = await import("../src/db");
 const { insertExecutionsInTx } = await import("../src/server/executions");
+const { setSetting } = await import("../src/server/settings");
 const { changeContext } = await import("../src/server/trading/reconcile");
 const { createBackfillService } =
   await import("../src/server/intelligence/infrastructure/backfill");
@@ -98,7 +99,7 @@ const drain = async (seedBatchSize = 1) => {
 };
 
 beforeEach(() => {
-  process.env.JOURNAL_EVENT_CAPTURE = "0";
+  setSetting("journalEventCapture", "false");
   db.delete(observationEvidence).run();
   db.delete(intelligenceObservations).run();
   db.delete(executionEvidence).run();
@@ -118,30 +119,34 @@ afterAll(() => {
 });
 
 describe("historical current-state seed", () => {
-  it("discovers closed and open historical trades without financial or annotation writes", async () => {
-    const accountId = createAccount();
-    insert(accountId, [...fills("CLOSED"), ...fills("OPEN", false)]);
-    forgetMappings();
-    db.update(trades).set({ notes: "keep notes", tagsJson: '["keep"]', stopLoss: 95 }).run();
-    const before = db.select().from(trades).all();
-    const services = createIntelligenceServices({ db, clock: () => NOW, seedBatchSize: 1 });
-    expect(services.seedAccount(accountId, "baseline").discovered).toBe(1);
-    await drain();
-    expect(events()).toHaveLength(2);
-    for (const event of events()) {
-      expect(JSON.parse(event.payloadJson)).toMatchObject({
-        kind: "discovered",
-        mode: "historical",
-      });
-      expect(event.correlationId).toBe("baseline");
-      expect(event.occurredAt).toBeNull();
-    }
-    expect(db.select().from(trades).all()).toEqual(before);
-    expect(db.select().from(intelligenceObservations).all()).toHaveLength(2);
-    expect(db.select().from(observationEvidence).all()).toHaveLength(2);
-    expect(checkpoint()?.status).toBe("completed");
-    expect(services.seedAccount(accountId, "again").discovered).toBe(0);
-  });
+  it.each([false, true])(
+    "seeds historical trades with capture set to %s without financial or annotation writes",
+    async (capture) => {
+      const accountId = createAccount();
+      insert(accountId, [...fills("CLOSED"), ...fills("OPEN", false)]);
+      forgetMappings();
+      db.update(trades).set({ notes: "keep notes", tagsJson: '["keep"]', stopLoss: 95 }).run();
+      setSetting("journalEventCapture", JSON.stringify(capture));
+      const before = db.select().from(trades).all();
+      const services = createIntelligenceServices({ db, clock: () => NOW, seedBatchSize: 1 });
+      expect(services.seedAccount(accountId, "baseline").discovered).toBe(1);
+      await drain();
+      expect(events()).toHaveLength(2);
+      for (const event of events()) {
+        expect(JSON.parse(event.payloadJson)).toMatchObject({
+          kind: "discovered",
+          mode: "historical",
+        });
+        expect(event.correlationId).toBe("baseline");
+        expect(event.occurredAt).toBeNull();
+      }
+      expect(db.select().from(trades).all()).toEqual(before);
+      expect(db.select().from(intelligenceObservations).all()).toHaveLength(2);
+      expect(db.select().from(observationEvidence).all()).toHaveLength(2);
+      expect(checkpoint()?.status).toBe("completed");
+      expect(services.seedAccount(accountId, "again").discovered).toBe(0);
+    },
+  );
 
   it("publishes capture-off current mapped revision without creating a revision", async () => {
     const accountId = createAccount();
@@ -183,7 +188,7 @@ describe("historical current-state seed", () => {
   it("keeps real mutation event and current revision unchanged when mutation arrives before seed", () => {
     const accountId = createAccount();
     insert(accountId, fills("MUTATED", false));
-    process.env.JOURNAL_EVENT_CAPTURE = "1";
+    setSetting("journalEventCapture", "true");
     insert(accountId, [fills("MUTATED")[1]!]);
     const beforeEvents = events();
     const beforeRevisions = revisions();
@@ -198,7 +203,7 @@ describe("historical current-state seed", () => {
 
   it("rejects replay addressed to a worker-only seed handler", () => {
     const accountId = createAccount();
-    process.env.JOURNAL_EVENT_CAPTURE = "1";
+    setSetting("journalEventCapture", "true");
     insert(accountId, fills("REPLAY"));
     const services = createIntelligenceServices({ db, clock: () => NOW });
     expect(() => services.requestReplay(events()[0]!.id, "seed-account", "1")).toThrow(

@@ -37,8 +37,6 @@ import type { IntelligenceWorker } from "../src/server/intelligence/composition"
 // a static import would run before the environment is in place.
 const scratch = mkdtempSync(join(tmpdir(), "journal-review-insight-"));
 process.env.JOURNAL_DATA_DIR = scratch;
-// Event capture is off in production; the running path is proved here.
-process.env.JOURNAL_EVENT_CAPTURE = "1";
 
 vi.mock("next/headers", () => ({ cookies: async () => ({ get: () => undefined }) }));
 

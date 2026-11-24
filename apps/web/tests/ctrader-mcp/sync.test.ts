@@ -7,10 +7,6 @@ import { newId } from "@/server/ids";
 import { syncCTraderMcpAccount } from "@/server/ctrader-mcp/sync";
 import type { InsertResult } from "@/server/executions";
 
-// Event capture is off in production; the event behaviour is proved here.
-// It is read per call, so setting it after the imports is enough.
-process.env.JOURNAL_EVENT_CAPTURE = "1";
-
 // Test seam: tests install a fake MCP via globalThis.__FAKE_MCP__ and use the
 // typed alias below for read/write. Defined once to avoid per-use inline casts.
 const testSlot = globalThis as unknown as { __FAKE_MCP__?: unknown };

@@ -150,7 +150,8 @@ describe("XTB .xlsx upload (#42)", () => {
   it("commits the close, its projections and its events together or not at all", async () => {
     await upload("commit", holdings);
     const before = state();
-    process.env.JOURNAL_EVENT_CAPTURE = "1";
+    const beforeEvents = db.select().from(domainOutbox).all();
+    expect(beforeEvents).toHaveLength(2);
     db.$client.exec(
       "CREATE TRIGGER fail_event BEFORE INSERT ON domain_outbox BEGIN SELECT RAISE(FAIL, 'test event failure'); END",
     );
@@ -159,11 +160,10 @@ describe("XTB .xlsx upload (#42)", () => {
       expect(response.status).toBe(500);
     } finally {
       db.$client.exec("DROP TRIGGER fail_event");
-      delete process.env.JOURNAL_EVENT_CAPTURE;
     }
-    // The matched holding, the close and the rebuilt cycle are gone together.
+    // Roll back the close without changing the holdings or their existing events.
     expect(state()).toEqual(before);
-    expect(db.select().from(domainOutbox).all()).toHaveLength(0);
+    expect(db.select().from(domainOutbox).all()).toEqual(beforeEvents);
   });
 
   it("refuses a changed holding inside the command that writes it", async () => {

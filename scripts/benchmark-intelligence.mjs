@@ -44,17 +44,6 @@ const WORKER_MODES = {
   active: { worker: "enabled", hasQueue: true },
 };
 
-/**
- * Whether the journal's capture switch is on for a configured value.
- *
- * The rule mirrors the journal's own check, so the benchmark reports what
- * the journal would do with the value the run was actually given.
- */
-function eventCaptureEnabled(value) {
-  const normalized = value?.trim().toLowerCase();
-  return normalized === "1" || normalized === "true" || normalized === "on";
-}
-
 /** Parse and validate the benchmark command line. */
 export function parseArguments(args = process.argv.slice(2)) {
   const options = {
@@ -383,6 +372,31 @@ async function requestJson(url, init = {}) {
   return { status: response.status, body, durationMs };
 }
 
+/** Enable persisted capture when supported; older builds use their launch configuration. */
+async function configureEventCapture(baseUrl, historicalCapture, request = requestJson) {
+  const url = `${baseUrl}/api/settings`;
+  let settings = await request(url);
+  if (settings.status !== 200) {
+    throw new Error(`Capture settings read failed (${settings.status})`);
+  }
+  if (typeof settings.body?.journalEventCapture !== "boolean") return historicalCapture;
+  if (!settings.body.journalEventCapture) {
+    const saved = await request(url, {
+      method: "PATCH",
+      body: JSON.stringify({ journalEventCapture: true }),
+    });
+    if (saved.status !== 200) {
+      throw new Error(`Capture settings update failed (${saved.status})`);
+    }
+    // PATCH acknowledges the write; GET proves which setting ingestion will use.
+    settings = await request(url);
+    if (settings.status !== 200 || settings.body?.journalEventCapture !== true) {
+      throw new Error("Capture settings did not persist");
+    }
+  }
+  return settings.body.journalEventCapture;
+}
+
 /** Create the one account used by a benchmark run. */
 async function createAccount(baseUrl, volume, mode) {
   const response = await requestJson(`${baseUrl}/api/accounts`, {
@@ -613,11 +627,11 @@ async function runMode(volume, mode, options, scratchRoot) {
   const port = await findFreePort(options.port);
   const environment = { ...process.env };
   delete environment.JOURNAL_PASSWORD;
-  // Both modes capture events, so both modes hold the same data and write the
-  // same WAL. The only difference between them is the worker: "idle" runs no
-  // consumer, "active" runs one. Without this, the comparison would measure
-  // the cost of capturing events rather than the cost of the worker.
-  environment.JOURNAL_EVENT_CAPTURE = "1";
+  // Only comparison builds may need the historical env switch. Candidate capture
+  // comes exclusively from persisted settings, never an inherited runtime guard.
+  delete environment.JOURNAL_EVENT_CAPTURE;
+  const historicalCapture = options.baseline === true && !standalone;
+  if (historicalCapture) environment.JOURNAL_EVENT_CAPTURE = "1";
   if (standalone) {
     environment.NODE_ENV = "production";
     environment.HOSTNAME = "127.0.0.1";
@@ -657,6 +671,7 @@ async function runMode(volume, mode, options, scratchRoot) {
       busyWatch,
       standalone ? baseUrl : undefined,
     );
+    const eventCapture = await configureEventCapture(baseUrl, historicalCapture);
     const accountId = await createAccount(baseUrl, volume, mode);
     // The read path is measured at every ingest batch boundary, so both worker
     // modes read the same sequence of journal sizes. A wall-clock sampler
@@ -690,8 +705,7 @@ async function runMode(volume, mode, options, scratchRoot) {
     );
     return {
       worker: standalone ? "unavailable" : worker,
-      // Old baseline builds predate event capture; the candidate always enables it.
-      eventCapture: !standalone && eventCaptureEnabled(environment.JOURNAL_EVENT_CAPTURE),
+      eventCapture,
       ingest: {
         requestedFills: volume,
         reportedInserted: ingest.reportedInserted,
@@ -806,10 +820,8 @@ function summarizeMode(runs, mode) {
         run.lostEffects?.missing === 0 &&
         run.lostEffects?.acceptedButNotStored === 0,
     ).length,
-    // The capture flag the runs actually ran with, not one inferred from the
-    // mode's name. Every run of a mode shares the mode's environment, so one
-    // observed flag settles the mode; a mode whose runs all failed before
-    // they could report one leaves it unknown.
+    // Report observed capture, not a flag inferred from the mode's name. Runs
+    // share one capture configuration; if all fail before reporting, it stays unknown.
     eventCapture: captureFlags.some((value) => value === false)
       ? false
       : captureFlags.some((value) => value === true)
@@ -900,8 +912,52 @@ async function runSelfCheck(resultPath) {
   check("an undrained active queue is false", undrained.queueDrained === false);
   check("the idle mode reports the capture flag of its run", idle.eventCapture === true);
   check("an uncaptured run is not reported as captured", uncaptured.eventCapture === false);
-  check("capture enabled by 1", eventCaptureEnabled("1") === true);
-  check("capture disabled by 0", eventCaptureEnabled("0") === false);
+  const legacy = summarizeMode(
+    [{ worker: "unavailable", eventCapture: false, queueDrained: null }],
+    "idle",
+  );
+  check("the active mode retains observed capture metadata", active.eventCapture === true);
+  check("a pre-intelligence baseline reports capture disabled", legacy.eventCapture === false);
+  const captureRequests = [];
+  let captureSetting = false;
+  const persistedCapture = await configureEventCapture("http://journal", false, async (_, init) => {
+    captureRequests.push(init?.method ?? "GET");
+    if (init?.method === "PATCH") {
+      captureSetting = JSON.parse(init.body).journalEventCapture;
+      return { status: 200, body: { saved: true } };
+    }
+    return { status: 200, body: { journalEventCapture: captureSetting } };
+  });
+  check(
+    "persisted capture is enabled and read back before ingestion",
+    persistedCapture === true && JSON.stringify(captureRequests) === '["GET","PATCH","GET"]',
+  );
+  const historicalSettings = async () => ({ status: 200, body: {} });
+  check(
+    "a supervised historical baseline reports its explicitly enabled capture",
+    (await configureEventCapture("http://baseline", true, historicalSettings)) === true,
+  );
+  check(
+    "a standalone historical baseline never infers capture from its launcher",
+    (await configureEventCapture("http://baseline", false, historicalSettings)) === false,
+  );
+  check(
+    "persisted settings override historical configuration",
+    (await configureEventCapture("http://journal", false, async () => ({
+      status: 200,
+      body: { journalEventCapture: true },
+    }))) === true,
+  );
+  let unpersistedCaptureRejected = false;
+  try {
+    await configureEventCapture("http://journal", true, async () => ({
+      status: 200,
+      body: { journalEventCapture: false },
+    }));
+  } catch {
+    unpersistedCaptureRejected = true;
+  }
+  check("a successful PATCH cannot conceal an unchanged setting", unpersistedCaptureRejected);
   const comparisonSupervisor = join(repositoryRoot, "baseline", "scripts", "run-journal.mjs");
   const comparisonServer = resolve(dirname(comparisonSupervisor), "..", "server.js");
   const legacyLaunch = resolveComparisonLaunch(
@@ -1154,7 +1210,7 @@ async function main() {
         // both face the same host conditions. Two builds measured hours apart
         // on a shared machine differ by the machine, not by the code.
         if (options.compareSupervisor) {
-          const compareOptions = { ...options, ...comparisonLaunch };
+          const compareOptions = { ...options, ...comparisonLaunch, baseline: true };
           try {
             baselineIdleRuns.push(await runMode(volume, "idle", compareOptions, scratchRoot));
           } catch (error) {
@@ -1167,7 +1223,7 @@ async function main() {
           idleRuns.push(failedMode(error));
         }
         if (options.compareSupervisor) {
-          const compareOptions = { ...options, ...comparisonLaunch };
+          const compareOptions = { ...options, ...comparisonLaunch, baseline: true };
           try {
             baselineActiveRuns.push(await runMode(volume, "active", compareOptions, scratchRoot));
           } catch (error) {

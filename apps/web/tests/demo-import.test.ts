@@ -77,12 +77,7 @@ describe("the demo journal loads through the import boundary", () => {
   });
 
   it("records the demo as a historical import, never as a live opening", () => {
-    process.env.JOURNAL_EVENT_CAPTURE = "1";
-    try {
-      loadDemoData();
-    } finally {
-      delete process.env.JOURNAL_EVENT_CAPTURE;
-    }
+    loadDemoData();
     const stored = events();
     expect(stored.length).toBeGreaterThan(0);
     expect(stored.every((event) => event.origin === "import")).toBe(true);

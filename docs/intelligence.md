@@ -52,11 +52,13 @@ File imports use **import / historical**; system rebuilds use **system / mainten
 Do not describe a newly imported old fill as a live broker event.
 Historical seeding is a separate current-state operation, not a replay of past live activity.
 
-`JOURNAL_EVENT_CAPTURE` is off by default.
-Only trimmed, case-insensitive `1`, `true` or `on` enable capture.
+Journal event capture is **on by default** for new and existing journals.
+Use **Settings → Intelligence** to change it. The journal stores `journalEventCapture` as JSON boolean text (`true` or `false`) in its settings table; an absent key means `true`.
+`GET /api/settings` returns the boolean; `PATCH /api/settings` accepts a strict boolean.
+The saved toggle applies immediately to future changed/removed trade projections, without a restart.
 With capture off, reconciliation still writes trade revisions but does not append their change events or outbox rows.
-Enabling capture does **not** manufacture events for revisions already committed.
-Create a new change after enabling it; restarting alone does not backfill missing events.
+Enabling capture does **not** backfill revisions already committed. Create a new change after enabling it.
+Disabling capture does not cancel queued work or historical seeding. It does not grant or revoke Background AI consent.
 
 ## Optional question contract
 
@@ -88,7 +90,6 @@ The direct packaged command below avoids ambiguity about forwarding arguments th
 
 ```powershell
 $env:JOURNAL_DATA_DIR = Join-Path $env:TEMP ('journal-onboarding-' + [guid]::NewGuid())
-$env:JOURNAL_EVENT_CAPTURE = '1'
 pnpm build
 node apps/web/.next/standalone/apps/web/scripts/run-journal.mjs --mode production --host 127.0.0.1 --port 3007 --worker enabled
 ```
@@ -118,7 +119,7 @@ Use the runbook before operating on an existing journal, launching workers separ
 
 ## First diagnosis
 
-- **No events:** check capture in the HTTP process, then make a new manual change. Capture enabled after the change is too late for that revision.
+- **No events:** check **Settings → Intelligence**, then make a new manual change. Capture enabled after the change is too late for that revision.
 - **Outbox/backlog not moving:** confirm a worker was launched against the same directory; inspect supervisor/worker output and lease state using the runbook.
 - **No AI question:** check saved Background AI consent/account opt-in, configured provider, pinned configuration and daily reservations. Provider errors need not remove the observation.
 - **Question stored but hidden:** start the observation review; confirm it is waiting for the user and still references the current revision. Check privacy mode before diagnosing missing text.

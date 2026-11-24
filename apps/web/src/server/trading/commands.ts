@@ -93,6 +93,8 @@ export interface SettingsPatch {
   timeZone?: string;
   importTimeZone?: string;
   multipliers?: Record<string, number>;
+  /** Captures future projection changes only; never starts a historical seed. */
+  journalEventCapture?: boolean;
   currencyConversion?: CurrencyConversion;
   /** `null` clears the persisted single-account default. */
   currentAccountId?: string | null;
@@ -428,6 +430,9 @@ export const transferAccount = (
  */
 export const updateSettings = (patch: SettingsPatch): void => {
   withJournalTransaction((tx) => {
+    if (patch.journalEventCapture !== undefined) {
+      setSettingInTx(tx, "journalEventCapture", JSON.stringify(patch.journalEventCapture));
+    }
     if (patch.multipliers !== undefined) {
       setSettingInTx(tx, "multipliers", JSON.stringify(patch.multipliers));
     }

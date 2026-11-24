@@ -257,11 +257,15 @@ answer outside the bound is refused and stored nowhere.
 
 ### Turning it on
 
-First set `JOURNAL_EVENT_CAPTURE=1` in the web process's environment (or `true` or `on`, ignoring
-case and surrounding whitespace). It is **off by default**. When off, new trade changes still
-write their projection revisions but silently produce no new trade events: there is no outbox
-row and no downstream observation or question from that change, and no error to diagnose.
-This gate does not stop an existing backlog or historical seed.
+Journal event capture is **on by default** for new and existing journals. Control it in
+**Settings → Intelligence**. The settings table stores `journalEventCapture` as JSON boolean
+text (`true` or `false`); an absent key means `true`. `GET /api/settings` returns the boolean,
+and `PATCH /api/settings` accepts a strict boolean. Saving applies immediately to future
+changed/removed trade projections; no restart is needed.
+When off, reconciliation still writes projection revisions but produces no new trade-change
+events or outbox rows. Enabling it does not automatically backfill missed changes.
+Disabling it does not cancel queued jobs, an existing backlog or historical seeding.
+Capture is separate from Background AI consent and does not enable provider calls.
 
 Run the worker against the **same absolute `JOURNAL_DATA_DIR` as the web process**. A standalone
 worker refuses a missing or relative path; `JOURNAL_WORKER_ENABLED=0` disables it, and unset enables
@@ -500,8 +504,9 @@ ORDER BY created_at DESC LIMIT 20;
 
 **No question appears.** Work down this list:
 
-1. Event capture is enabled (`JOURNAL_EVENT_CAPTURE=1`, `true` or `on`) for new live trade changes.
-   Off means no new event, not a failed run; existing backlog and seed work can still proceed.
+1. Event capture is enabled in **Settings → Intelligence** (`journalEventCapture`, default `true`)
+   for new live trade changes. Off means no new event, not a failed run; queued work and historical
+   seeding continue. Enabling capture does not backfill changes made while off.
 2. The worker is enabled and points to the same absolute data directory as the web process.
 3. The policy is on and lists the account — `GET /api/settings`, the `backgroundAi` field.
 4. A provider is configured — the provider, model and effective key (environment keys override saved

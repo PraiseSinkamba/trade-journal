@@ -10,15 +10,18 @@ import { postJson, useApi } from "@/lib/use-api";
 /**
  * The journal controls.
  *
- * The two switches the operator owns — the proactive opt-in and the pause —
- * and the state the journal serves about itself: the background AI policy
- * (read-only here: the AI section stays its one editor), the worker status
- * and the engagement defaults.
+ * Event capture is independent of proactive insights, pause and AI consent.
+ * The background AI policy stays read-only here; the AI section owns its editor.
+ * Worker status and engagement defaults reflect the journal's served state.
  */
 
 export function IntelligenceControls() {
   const controls = useApi<ControlsResponse>("/api/intelligence/controls");
   const status = useApi<IntelligenceStatusResponse>("/api/intelligence/status");
+  const settings = useApi<{ journalEventCapture: boolean }>("/api/settings");
+  const [savedCapture, setSavedCapture] = useState<boolean | null>(null);
+  const [captureBusy, setCaptureBusy] = useState(false);
+  const [captureFailure, setCaptureFailure] = useState("");
   const [busy, setBusy] = useState(false);
   const [failure, setFailure] = useState("");
 
@@ -35,6 +38,22 @@ export function IntelligenceControls() {
       setFailure(cause instanceof Error ? cause.message : "Could not save the controls.");
     } finally {
       setBusy(false);
+    }
+  };
+
+  /** Keep the confirmed value visible until persistence succeeds. */
+  const writeCapture = async (journalEventCapture: boolean) => {
+    setCaptureBusy(true);
+    setCaptureFailure("");
+    try {
+      await postJson("/api/settings", { journalEventCapture }, "PATCH");
+      setSavedCapture(journalEventCapture);
+    } catch (cause) {
+      setCaptureFailure(
+        cause instanceof Error ? cause.message : "Could not save journal event capture.",
+      );
+    } finally {
+      setCaptureBusy(false);
     }
   };
 
@@ -82,6 +101,36 @@ export function IntelligenceControls() {
               </span>
             </Label>
           </div>
+          <div className="flex items-center gap-2">
+            <Checkbox
+              id="journal-event-capture"
+              aria-label="Journal event capture"
+              aria-describedby="journal-event-capture-description"
+              checked={savedCapture ?? settings.data?.journalEventCapture ?? false}
+              disabled={captureBusy || settings.loading || !settings.data}
+              onCheckedChange={(checked) => void writeCapture(checked === true)}
+            />
+            <Label htmlFor="journal-event-capture">
+              Journal event capture
+              <span
+                id="journal-event-capture-description"
+                className="block text-xs font-normal text-muted-foreground"
+              >
+                Capture future changes and removals for journal insights. No backfill; queued work
+                is unaffected. This is not AI consent.
+              </span>
+            </Label>
+          </div>
+          {(settings.loading || captureBusy) && (
+            <p role="status" className="text-xs text-muted-foreground">
+              {captureBusy ? "Saving journal event capture…" : "Loading journal event capture…"}
+            </p>
+          )}
+          {(captureFailure || settings.error) && (
+            <p role="alert" className="text-xs text-destructive">
+              {captureFailure || settings.error}
+            </p>
+          )}
           {failure && (
             <p role="alert" className="text-xs text-destructive">
               {failure}
