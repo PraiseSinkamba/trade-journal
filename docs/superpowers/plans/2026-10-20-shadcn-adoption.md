@@ -12,41 +12,41 @@
 
 ## File Structure
 
-| File | Responsibility | Status |
-| --- | --- | --- |
-| `.gitignore` | Add `.worktrees/` so the new worktree isn't tracked | Modify |
-| `docs/decisions/0003-adopt-shadcn-ui.md` | ADR for the shadcn adoption | Create |
-| `docs/decisions/0004-introduce-tw-animate-css.md` | ADR for the animation utility | Create |
-| `docs/decisions/0005-introduce-radix-primitives-list.md` | ADR for the Radix primitive packages | Create |
-| `apps/web/components.json` | shadcn registry manifest (aliases, theme, base) | Create (via `shadcn init`) |
-| `apps/web/package.json` | Adds Radix + `tw-animate-css` as direct deps | Modify |
-| `apps/web/src/lib/utils.ts` | Existing `cn` helper, no change expected | Verify |
-| `apps/web/src/app/globals.css` | shadcn tokens merged with project tokens; `card-sheen`, `journal-calendar-*` | Modify |
-| `apps/web/src/components/ui/skeleton.tsx` | Plain wrapper, restore as-is | Restore |
-| `apps/web/src/components/ui/label.tsx` | Radix passthrough | Restore |
-| `apps/web/src/components/ui/input.tsx` | Plain input | Restore |
-| `apps/web/src/components/ui/textarea.tsx` | Plain textarea | Restore |
-| `apps/web/src/components/ui/badge.tsx` | `Badge` + `badgeVariants` incl. `profit`/`loss` variants | Restore |
-| `apps/web/src/components/ui/checkbox.tsx` | Radix checkbox with indeterminate + group/state | Restore |
-| `apps/web/src/components/ui/table.tsx` | Wrapped in `overflow-x-auto` + tabular-nums | Restore |
-| `apps/web/src/components/ui/dropdown-menu.tsx` | Minimal API; export extended pieces | Restore |
-| `apps/web/src/components/ui/select.tsx` | Custom trigger styling on Radix Select | Restore |
-| `apps/web/src/components/ui/card.tsx` | `card-sheen`, `data-slot="card-header"`, small uppercase title | Restore |
-| `apps/web/src/components/ui/tabs.tsx` | Triggers in overflow-x scroll | Restore |
-| `apps/web/src/components/ui/dialog.tsx` | Existing API + `DialogFooter`/`DialogClose` | Restore |
-| `apps/web/src/components/ui/tooltip.tsx` | `Tooltip*` + `HoverHint` + `HelpHint` | Restore |
-| `apps/web/src/components/ui/button.tsx` | `HoverHint` auto-wrap for icon-only/title-only | Restore |
-| `apps/web/src/components/ui/sidebar.tsx` | shadcn `Sidebar` family (added) | Restore |
-| `apps/web/src/components/ui/calendar.tsx` | `journal-calendar-*` mapping; shadcn Calendar body | Restore |
-| `apps/web/src/components/ui/date-picker.tsx` | min/max validation, Clear/Today; on new `Popover`/`Input`/`Calendar` | Restore |
-| `apps/web/src/components/option-select.tsx` | `option:<value>` encoding on shadcn `Select*` | Restore |
-| `apps/web/src/components/privacy.tsx` | `MonetaryValue`/`MonetaryField` against new `HoverHint` | Restore |
-| `apps/web/src/components/shell.tsx` | Rewritten on shadcn `Sidebar` family | Rewrite |
-| `apps/web/src/app/layout.tsx` | Wraps in `SidebarProvider` via `AppSidebar` | Modify (≤ 5 lines) |
-| `apps/web/tests/e2e/shadcn-adoption.spec.ts` | Playwright spec (5 tests) | Create |
-| (worktree) `.backup/components-ui/*` | Snapshot of originals before `shadcn add` | Create |
-| (worktree) `.backup/components/shell.tsx` | Snapshot of original shell | Create |
-| (worktree) `.backup/BACKUP_MANIFEST.md` | Per-file customizations manifest | Create |
+| File                                                     | Responsibility                                                               | Status                     |
+| -------------------------------------------------------- | ---------------------------------------------------------------------------- | -------------------------- |
+| `.gitignore`                                             | Add `.worktrees/` so the new worktree isn't tracked                          | Modify                     |
+| `docs/decisions/0003-adopt-shadcn-ui.md`                 | ADR for the shadcn adoption                                                  | Create                     |
+| `docs/decisions/0004-introduce-tw-animate-css.md`        | ADR for the animation utility                                                | Create                     |
+| `docs/decisions/0005-introduce-radix-primitives-list.md` | ADR for the Radix primitive packages                                         | Create                     |
+| `apps/web/components.json`                               | shadcn registry manifest (aliases, theme, base)                              | Create (via `shadcn init`) |
+| `apps/web/package.json`                                  | Adds Radix + `tw-animate-css` as direct deps                                 | Modify                     |
+| `apps/web/src/lib/utils.ts`                              | Existing `cn` helper, no change expected                                     | Verify                     |
+| `apps/web/src/app/globals.css`                           | shadcn tokens merged with project tokens; `card-sheen`, `journal-calendar-*` | Modify                     |
+| `apps/web/src/components/ui/skeleton.tsx`                | Plain wrapper, restore as-is                                                 | Restore                    |
+| `apps/web/src/components/ui/label.tsx`                   | Radix passthrough                                                            | Restore                    |
+| `apps/web/src/components/ui/input.tsx`                   | Plain input                                                                  | Restore                    |
+| `apps/web/src/components/ui/textarea.tsx`                | Plain textarea                                                               | Restore                    |
+| `apps/web/src/components/ui/badge.tsx`                   | `Badge` + `badgeVariants` incl. `profit`/`loss` variants                     | Restore                    |
+| `apps/web/src/components/ui/checkbox.tsx`                | Radix checkbox with indeterminate + group/state                              | Restore                    |
+| `apps/web/src/components/ui/table.tsx`                   | Wrapped in `overflow-x-auto` + tabular-nums                                  | Restore                    |
+| `apps/web/src/components/ui/dropdown-menu.tsx`           | Minimal API; export extended pieces                                          | Restore                    |
+| `apps/web/src/components/ui/select.tsx`                  | Custom trigger styling on Radix Select                                       | Restore                    |
+| `apps/web/src/components/ui/card.tsx`                    | `card-sheen`, `data-slot="card-header"`, small uppercase title               | Restore                    |
+| `apps/web/src/components/ui/tabs.tsx`                    | Triggers in overflow-x scroll                                                | Restore                    |
+| `apps/web/src/components/ui/dialog.tsx`                  | Existing API + `DialogFooter`/`DialogClose`                                  | Restore                    |
+| `apps/web/src/components/ui/tooltip.tsx`                 | `Tooltip*` + `HoverHint` + `HelpHint`                                        | Restore                    |
+| `apps/web/src/components/ui/button.tsx`                  | `HoverHint` auto-wrap for icon-only/title-only                               | Restore                    |
+| `apps/web/src/components/ui/sidebar.tsx`                 | shadcn `Sidebar` family (added)                                              | Restore                    |
+| `apps/web/src/components/ui/calendar.tsx`                | `journal-calendar-*` mapping; shadcn Calendar body                           | Restore                    |
+| `apps/web/src/components/ui/date-picker.tsx`             | min/max validation, Clear/Today; on new `Popover`/`Input`/`Calendar`         | Restore                    |
+| `apps/web/src/components/option-select.tsx`              | `option:<value>` encoding on shadcn `Select*`                                | Restore                    |
+| `apps/web/src/components/privacy.tsx`                    | `MonetaryValue`/`MonetaryField` against new `HoverHint`                      | Restore                    |
+| `apps/web/src/components/shell.tsx`                      | Rewritten on shadcn `Sidebar` family                                         | Rewrite                    |
+| `apps/web/src/app/layout.tsx`                            | Wraps in `SidebarProvider` via `AppSidebar`                                  | Modify (≤ 5 lines)         |
+| `apps/web/tests/e2e/shadcn-adoption.spec.ts`             | Playwright spec (5 tests)                                                    | Create                     |
+| (worktree) `.backup/components-ui/*`                     | Snapshot of originals before `shadcn add`                                    | Create                     |
+| (worktree) `.backup/components/shell.tsx`                | Snapshot of original shell                                                   | Create                     |
+| (worktree) `.backup/BACKUP_MANIFEST.md`                  | Per-file customizations manifest                                             | Create                     |
 
 No changes to `packages/core`, `packages/importers`, `apps/web/src/db/`, `apps/web/src/server/`, or the Tauri desktop build.
 
@@ -57,7 +57,7 @@ No changes to `packages/core`, `packages/importers`, `apps/web/src/db/`, `apps/w
 From the project's `.omp/AGENTS.md`, `.omp/hooks/`, and the spec:
 
 - TypeScript strict, ESM, no `any`. Aliases: `@/…`. Helpers at top of files.
-- One commit per task; commit messages lead with the *what*, not the file path.
+- One commit per task; commit messages lead with the _what_, not the file path.
 - Run `pnpm --filter web typecheck` after each per-file restore.
 - Hard rule #1 — every new dep lands only after its ADR is committed.
 - Hard rule #4 — `Badge` profit/loss carries both color **and** label/icon; never color-only.
@@ -73,6 +73,7 @@ From the project's `.omp/AGENTS.md`, `.omp/hooks/`, and the spec:
 ### Task 1: Add `.worktrees/` to `.gitignore` and commit
 
 **Files:**
+
 - Modify: `.gitignore` (append a new section).
 
 **Why:** Per the `using-git-worktrees` skill, project-local worktree directories must be gitignored before `git worktree add`. Currently `.gitignore` does not list `.worktrees/`.
@@ -106,6 +107,7 @@ git commit -m "Ignore project-local worktree directory"
 **Files:** none (Orca state change only).
 
 **Produces:**
+
 - A new Orca worktree at `.worktrees/shadcn-adoption/` on branch `feat/shadcn-adoption`.
 - A `.omp/reviewer-report.md` with `## Verdict: PASS` is **not** required yet (no code change in this task). The next task (backups) is the first that produces real artifacts and is the first to gate on the reviewer.
 
@@ -160,6 +162,7 @@ Expected: lockfile resolves without modifications; `node_modules/` populated.
 ### Task 3: Back up current primitives + manifest
 
 **Files (created inside the worktree):**
+
 - `.worktrees/shadcn-adoption/.backup/components-ui/*.tsx`
 - `.worktrees/shadcn-adoption/.backup/components/shell.tsx`
 - `.worktrees/shadcn-adoption/.backup/BACKUP_MANIFEST.md`
@@ -230,6 +233,7 @@ git commit -m "Snapshot current primitives before shadcn adoption"
 ### Task 4: ADR 0003 — Adopt shadcn/ui
 
 **Files:**
+
 - Create: `docs/decisions/0003-adopt-shadcn-ui.md`
 
 **Why:** Hard block #1 forbids new deps without an ADR. This ADR covers the shadcn adoption as the umbrella decision.
@@ -275,6 +279,7 @@ git commit -m "Adopt shadcn/ui as the source of shared primitives"
 ### Task 5: ADR 0004 — Introduce `tw-animate-css`
 
 **Files:**
+
 - Create: `docs/decisions/0004-introduce-tw-animate-css.md`
 
 - [ ] **Step 1: Write the ADR**
@@ -316,6 +321,7 @@ git commit -m "Pin tw-animate-css as the animation utility"
 ### Task 6: ADR 0005 — Radix primitives list
 
 **Files:**
+
 - Create: `docs/decisions/0005-introduce-radix-primitives-list.md`
 
 - [ ] **Step 1: Determine the exact Radix set**
@@ -383,6 +389,7 @@ git commit -m "List the Radix primitives that ship with shadcn"
 ### Task 7: `shadcn init`
 
 **Files:**
+
 - Create: `apps/web/components.json`
 - Modify: `apps/web/src/app/globals.css` (merged tokens)
 - Modify: `apps/web/package.json` (new deps)
@@ -413,6 +420,7 @@ Expected: a list of `@radix-ui/react-*` packages now appears in `apps/web/packag
 - [ ] **Step 4: Verify globals.css contains both sets of tokens**
 
 Read `apps/web/src/app/globals.css`. Confirm:
+
 - The shadcn semantic tokens (`--background`, `--foreground`, `--primary`, `--card`, `--popover`, `--secondary`, `--muted`, `--accent`, `--destructive`, `--border`, `--input`, `--ring`, `--radius`) appear in `:root` and `.dark`.
 - The project's tokens (`--brand`, `--profit`, `--loss`, `--series-1..8`, `--viz-*`) are still present.
 - The `@theme inline` block lists both project utilities and shadcn utilities.
@@ -441,6 +449,7 @@ git commit -m "Initialise shadcn in apps/web and merge theme tokens"
 ### Task 8: Add `skeleton` and restore
 
 **Files:**
+
 - Modify: `apps/web/src/components/ui/skeleton.tsx`
 
 **Why:** Lowest-risk primitive. Restore is a no-op.
@@ -478,6 +487,7 @@ git commit -m "Restore skeleton primitive on shadcn registry"
 ### Task 9: Add `label` and restore
 
 **Files:**
+
 - Modify: `apps/web/src/components/ui/label.tsx`
 
 - [ ] **Step 1: Add**
@@ -511,6 +521,7 @@ git commit -m "Restore label primitive on shadcn registry"
 ### Task 10: Add `input` and restore
 
 **Files:**
+
 - Modify: `apps/web/src/components/ui/input.tsx`
 
 - [ ] **Step 1: Add**
@@ -544,6 +555,7 @@ git commit -m "Restore input primitive on shadcn registry"
 ### Task 11: Add `textarea` and restore
 
 **Files:**
+
 - Modify: `apps/web/src/components/ui/textarea.tsx`
 
 - [ ] **Step 1: Add**
@@ -577,6 +589,7 @@ git commit -m "Restore textarea primitive on shadcn registry"
 ### Task 12: Add `badge` and restore (profit/loss variants)
 
 **Files:**
+
 - Modify: `apps/web/src/components/ui/badge.tsx`
 
 **Why:** `Badge` carries the P&L color signal. Hard rule #4 forbids color-only; the `profit`/`loss` variants must remain visible alongside any label/icon. The restore step adds the missing variants on top of the registry.
@@ -593,22 +606,19 @@ pnpm dlx shadcn@latest add badge --yes --overwrite
 Open `.backup/components-ui/badge.tsx`. The original exported `Badge` and `badgeVariants` with `default`, `secondary`, `outline`, `profit`, `loss` variants. After the `shadcn add`, merge the `profit` and `loss` variants into `badgeVariants`:
 
 ```ts
-const badgeVariants = cva(
-  "...base classes...",
-  {
-    variants: {
-      variant: {
-        default: "...",
-        secondary: "...",
-        destructive: "...",
-        outline: "...",
-        profit: "border-transparent bg-profit/15 text-profit",
-        loss: "border-transparent bg-loss/15 text-loss",
-      },
+const badgeVariants = cva("...base classes...", {
+  variants: {
+    variant: {
+      default: "...",
+      secondary: "...",
+      destructive: "...",
+      outline: "...",
+      profit: "border-transparent bg-profit/15 text-profit",
+      loss: "border-transparent bg-loss/15 text-loss",
     },
-    defaultVariants: { variant: "default" },
-  }
-);
+  },
+  defaultVariants: { variant: "default" },
+});
 ```
 
 `bg-profit/15 text-profit` uses the project's `--profit` token (mapped via `@theme inline` in `globals.css`). Verify the token mapping exists; if not, the Theme Merge task will add it.
@@ -633,6 +643,7 @@ git commit -m "Restore badge primitive with profit and loss variants"
 ### Task 13: Add `checkbox` and restore
 
 **Files:**
+
 - Modify: `apps/web/src/components/ui/checkbox.tsx`
 
 - [ ] **Step 1: Add**
@@ -670,6 +681,7 @@ git commit -m "Restore checkbox primitive on shadcn registry"
 ### Task 14: Add `table` and restore
 
 **Files:**
+
 - Modify: `apps/web/src/components/ui/table.tsx`
 
 - [ ] **Step 1: Add**
@@ -703,6 +715,7 @@ git commit -m "Restore table primitive on shadcn registry"
 ### Task 15: Add `dropdown-menu` and restore
 
 **Files:**
+
 - Modify: `apps/web/src/components/ui/dropdown-menu.tsx`
 
 - [ ] **Step 1: Add**
@@ -736,6 +749,7 @@ git commit -m "Restore dropdown-menu primitive with extended exports"
 ### Task 16: Add `select` and restore
 
 **Files:**
+
 - Modify: `apps/web/src/components/ui/select.tsx`
 
 - [ ] **Step 1: Add**
@@ -769,6 +783,7 @@ git commit -m "Restore select primitive with original trigger styling"
 ### Task 17: Add `card` and restore
 
 **Files:**
+
 - Modify: `apps/web/src/components/ui/card.tsx`
 - Modify: `apps/web/src/app/globals.css` (add `card-sheen` if missing)
 
@@ -782,12 +797,14 @@ pnpm dlx shadcn@latest add card --yes --overwrite
 - [ ] **Step 2: Restore**
 
 Original:
+
 - Added `card-sheen` utility class.
 - `CardHeader` carries `data-slot="card-header"` marker.
 - `CardTitle` was small/uppercase, not an `<h3>`.
 - Lacked `CardFooter`, `CardDescription`, `CardAction`.
 
 After add, merge in:
+
 1. The `card-sheen` utility (define in `globals.css` next to other Sidebar theme utilities if not already there).
 2. The `data-slot="card-header"` marker on `CardHeader`.
 3. The small/uppercase `CardTitle` styling.
@@ -813,6 +830,7 @@ git commit -m "Restore card primitive with sheen, data-slot marker, and new expo
 ### Task 18: Add `tabs` and restore
 
 **Files:**
+
 - Modify: `apps/web/src/components/ui/tabs.tsx`
 
 - [ ] **Step 1: Add**
@@ -846,6 +864,7 @@ git commit -m "Restore tabs primitive with overflow scrolling"
 ### Task 19: Add `dialog` and restore
 
 **Files:**
+
 - Modify: `apps/web/src/components/ui/dialog.tsx`
 
 - [ ] **Step 1: Add**
@@ -858,6 +877,7 @@ pnpm dlx shadcn@latest add dialog --yes --overwrite
 - [ ] **Step 2: Restore**
 
 Original had a small/uppercase title (matching `CardTitle`). Lacked `DialogClose` and `DialogFooter`. After add:
+
 1. Keep the small/uppercase `DialogTitle` (or expose a `titleSize` variant if the registry supports it).
 2. Add `DialogClose` and `DialogFooter` exports from the registry.
 
@@ -883,6 +903,7 @@ git commit -m "Restore dialog primitive with title styling and footer exports"
 ### Task 20: Add `tooltip` and restore (HoverHint + HelpHint)
 
 **Files:**
+
 - Modify: `apps/web/src/components/ui/tooltip.tsx`
 
 **Why:** `HoverHint` is the most-reused custom export. Used in 9+ places. Must keep its public API identical.
@@ -950,6 +971,7 @@ git commit -m "Restore tooltip primitive with HoverHint and HelpHint exports"
 ### Task 21: Add `button` and restore (HoverHint auto-wrap)
 
 **Files:**
+
 - Modify: `apps/web/src/components/ui/button.tsx`
 
 **Why:** The `HoverHint` auto-wrap on title-only or icon-only buttons is the most fragile customisation. Replacing `button.tsx` without preserving this regresses accessibility of every icon-only Button in the app.
@@ -967,11 +989,11 @@ Open `.backup/components-ui/button.tsx`. The `Button` component wraps its body i
 
 ```tsx
 const needsTooltip = Boolean(title) || (iconOnly && !ariaLabel);
-const inner = <Comp className={cn(buttonVariants({ variant, size, className }))} ref={ref} {...props} />;
+const inner = (
+  <Comp className={cn(buttonVariants({ variant, size, className }))} ref={ref} {...props} />
+);
 
-return needsTooltip ? (
-  <HoverHint content={title ?? ariaLabel ?? null}>{inner}</HoverHint>
-) : inner;
+return needsTooltip ? <HoverHint content={title ?? ariaLabel ?? null}>{inner}</HoverHint> : inner;
 ```
 
 `iconOnly` is `!children || (Array.isArray(children) && children.every(c => !c || (typeof c === "object" && (c as any).type?.displayName !== "VisuallyHidden")))`. Simpler: check `!children || Children.count(children) === 0` plus the absence of `aria-label`. The exact heuristic is in the backup file — copy it across.
@@ -996,6 +1018,7 @@ git commit -m "Restore button primitive with HoverHint auto-wrap on icon-only"
 ### Task 22: Add `sidebar` and rewrite `shell.tsx`
 
 **Files:**
+
 - Modify: `apps/web/src/components/ui/sidebar.tsx` (added by CLI)
 - Modify: `apps/web/src/components/shell.tsx` (rewritten)
 - Modify: `apps/web/src/app/layout.tsx` (wrap in `SidebarProvider`)
@@ -1118,6 +1141,7 @@ git commit -m "Rewrite shell on shadcn Sidebar with all custom slots preserved"
 ### Task 23: Add `calendar` and restore
 
 **Files:**
+
 - Modify: `apps/web/src/components/ui/calendar.tsx`
 - Modify: `apps/web/src/app/globals.css` (add `journal-calendar-*` classes)
 
@@ -1133,9 +1157,15 @@ pnpm dlx shadcn@latest add calendar --yes --overwrite
 The original `calendar.tsx` mapped `react-day-picker` classNames to `journal-calendar-*` utilities. Add those utilities to `globals.css` (read the backup or `git show main:apps/web/src/app/globals.css | grep journal-calendar` to extract):
 
 ```css
-.journal-calendar { @apply ...; }
-.journal-calendar-day { @apply ...; }
-.journal-calendar-day_selected { @apply ...; }
+.journal-calendar {
+  @apply ...;
+}
+.journal-calendar-day {
+  @apply ...;
+}
+.journal-calendar-day_selected {
+  @apply ...;
+}
 /* etc. */
 ```
 
@@ -1161,6 +1191,7 @@ git commit -m "Restore calendar primitive on shadcn registry"
 ### Task 24: Refit `DatePicker` on shadcn primitives
 
 **Files:**
+
 - Modify: `apps/web/src/components/ui/date-picker.tsx`
 
 **Why:** `DatePicker` is heavily customised (validation, Clear/Today, ARIA states). Refit on shadcn's `Popover` + `Input` + `Calendar` while keeping every behavior.
@@ -1168,6 +1199,7 @@ git commit -m "Restore calendar primitive on shadcn registry"
 - [ ] **Step 1: Refit**
 
 Open `.backup/components-ui/date-picker.tsx`. Replace internal Radix imports with shadcn equivalents:
+
 - `Popover`, `PopoverTrigger`, `PopoverContent` from `@/components/ui/popover` (add `popover` via `pnpm dlx shadcn@latest add popover --yes --overwrite` if not already present).
 - `Input` from `@/components/ui/input`.
 - `Calendar` from `@/components/ui/calendar`.
@@ -1200,6 +1232,7 @@ git commit -m "Refit date-picker on shadcn Popover, Input, and Calendar"
 ### Task 25: Refit `OptionSelect` on shadcn `Select*`
 
 **Files:**
+
 - Modify: `apps/web/src/components/ui/option-select.tsx`
 
 **Why:** Six+ consumer pages depend on the `option:<value>` encoding. Public API stays identical.
@@ -1207,6 +1240,7 @@ git commit -m "Refit date-picker on shadcn Popover, Input, and Calendar"
 - [ ] **Step 1: Refit**
 
 Open `.backup/components-ui/option-select.tsx`. The original wrapped Radix `Select` to support declarative `<option>` lists and the `"All"` empty-string choice encoded as `option:<value>`. Rewrite internals on shadcn's `Select` / `SelectTrigger` / `SelectContent` / `SelectItem` / `SelectValue`. Keep:
+
 - The export name `OptionSelect`.
 - The prop shape (default `value`, `onChange`, `options`, `placeholder`, `aria-label`, etc.).
 - The `option:<value>` encoding for empty-string values.
@@ -1232,11 +1266,13 @@ git commit -m "Refit option-select on shadcn Select with option:<value> encoding
 ### Task 26: Refit `MonetaryValue` / `MonetaryField` on new `HoverHint`
 
 **Files:**
+
 - Modify: `apps/web/src/components/privacy.tsx`
 
 - [ ] **Step 1: Refit**
 
 Open `components/privacy.tsx`. Replace any internal tooltip references with the new `HoverHint`. Keep:
+
 - The masked span `<span aria-label="Monetary value hidden">••••</span>`.
 - The `HoverHint` overlay when the field is masked.
 - The `MonetaryValue` and `MonetaryField` exports.
@@ -1261,6 +1297,7 @@ git commit -m "Refit MonetaryValue and MonetaryField on new HoverHint"
 ### Task 27: Theme merge finalization
 
 **Files:**
+
 - Modify: `apps/web/src/app/globals.css`
 
 **Why:** Confirm both project and shadcn tokens coexist, Sidebar theme variables are present, and `@theme inline` maps all utilities.
@@ -1268,6 +1305,7 @@ git commit -m "Refit MonetaryValue and MonetaryField on new HoverHint"
 - [ ] **Step 1: Audit `globals.css`**
 
 Read `apps/web/src/app/globals.css` and confirm:
+
 1. `:root` and `.dark` both contain shadcn semantic tokens (`--background`, `--foreground`, `--primary`, `--primary-foreground`, `--card`, `--card-foreground`, `--popover`, `--popover-foreground`, `--secondary`, `--secondary-foreground`, `--muted`, `--muted-foreground`, `--accent`, `--accent-foreground`, `--destructive`, `--destructive-foreground`, `--border`, `--input`, `--ring`, `--radius`).
 2. `:root` and `.dark` both contain project tokens (`--brand`, `--profit`, `--loss`, `--series-1..8`, `--viz-*`).
 3. `:root` and `.dark` both contain Sidebar tokens (`--sidebar-background`, `--sidebar-foreground`, `--sidebar-primary`, `--sidebar-primary-foreground`, `--sidebar-accent`, `--sidebar-accent-foreground`, `--sidebar-border`, `--sidebar-ring`).
@@ -1318,6 +1356,7 @@ If `@playwright/test` is installed and `playwright.config.*` exists, continue to
 ### Task 29: Write the Playwright E2E spec
 
 **Files:**
+
 - Create: `apps/web/tests/e2e/shadcn-adoption.spec.ts`
 
 - [ ] **Step 1: Write the spec**
@@ -1471,6 +1510,7 @@ pnpm --filter web dev
 ```
 
 Navigate `127.0.0.1:3000` and confirm:
+
 - Sidebar collapse/expand.
 - Privacy toggle masks monetary values.
 - Theme toggle (light/dark) — no FOUC, `prefers-color-scheme` respected.
@@ -1488,6 +1528,7 @@ This task produces no commit. The next task commits the final reviewer report.
 ### Task 31: Reviewer gate + final commit
 
 **Files:**
+
 - Create: `.omp/reviewer-report.md`
 
 - [ ] **Step 1: Run the reviewer**

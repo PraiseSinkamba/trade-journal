@@ -7,18 +7,20 @@ import {
   type ImportedExecution,
 } from "@luxalgo/journal-importers";
 import { bad, handler, ok, requireValue } from "@/server/api";
-import { insertExecutions } from "@/server/executions";
+import { importGenericExecutions } from "@/server/trading/commands";
+import type { InsertResult } from "@/server/executions";
 import { getImportTimeZone } from "@/server/settings";
 import { isTimeZone } from "@/lib/timezone";
 import type { ImportReviewOptions } from "@/lib/import-review";
 import { previewNinjaTraderImport, commitNinjaTraderImport } from "@/server/ninjatrader-import";
 import {
   IBKR_FLEX_XML,
+  commitIbkrFlexImport,
   flexUploadSyncProblem,
   looksLikeFlexXml,
   parseFlexXmlImport,
 } from "@/server/ibkr-flex-xml-import";
-import { reconcileXtbHoldings, xlsxStatement } from "@/server/xtb-import";
+import { commitXtbImport, reconcileXtbHoldings, xlsxStatement } from "@/server/xtb-import";
 import {
   createAiImportPreview,
   parseStatementWithAi,
@@ -45,6 +47,9 @@ interface ImportBody {
   aiPreviewToken?: string;
   aiReviewed?: boolean;
 }
+
+/** What one import committed. The XTB command also reports the holdings it matched. */
+type ImportOutcome = InsertResult & { matched?: number };
 
 /**
  * One endpoint, two steps. Preview parses and reports what WOULD be imported;
@@ -107,22 +112,21 @@ export const POST = handler(async (request: Request) => {
     });
   }
 
+  // The preview reports the source-specific problems read-only. The commit path
+  // does not decide from these: it decides inside the transaction that writes,
+  // so the check and the write are taken under one lock.
+  const previewing = body.mode === "preview";
   const syncProblem =
-    parsed.format === IBKR_FLEX_XML.id && body.accountId
+    previewing && parsed.format === IBKR_FLEX_XML.id && body.accountId
       ? flexUploadSyncProblem(body.accountId, timeZone)
       : null;
   const xtb =
-    parsed.format === "xtb" && body.accountId
+    previewing && parsed.format === "xtb" && body.accountId
       ? reconcileXtbHoldings(body.accountId, parsed.executions as ImportedExecution[])
       : null;
   const problems = [syncProblem, xtb?.problem].filter((problem): problem is string => !!problem);
   const errors = [...(parsed.errors ?? []), ...problems];
-  const warnings = [
-    ...(parsed.warnings ?? []),
-    ...(xtb?.matched
-      ? [`${xtb.matched} open holding(s) imported earlier are closed by this file.`]
-      : []),
-  ];
+  const warnings = [...(parsed.warnings ?? [])];
 
   if (body.mode === "preview") {
     const symbols = [...new Set(parsed.executions.map((e) => e.symbol))];
@@ -153,7 +157,12 @@ export const POST = handler(async (request: Request) => {
           null,
         ),
       },
-      warnings,
+      warnings: [
+        ...warnings,
+        ...(xtb?.matched
+          ? [`${xtb.matched} open holding(s) imported earlier are closed by this file.`]
+          : []),
+      ],
       errors: problems.length ? errors : parsed.errors,
       needsSymbol: parsed.needsSymbol,
       reconciliation:
@@ -166,20 +175,32 @@ export const POST = handler(async (request: Request) => {
   if (!body.accountId) return bad("accountId is required to commit");
   if (errors.length) return bad(errors.join(" "));
   if (parsed.executions.length === 0) return bad("No executions to import");
-  const result =
+  const imported: ImportOutcome =
     parsed.format === "ninjatrader"
       ? commitNinjaTraderImport(body.accountId, parsed, body.content, timeZone, body.review)
-      : insertExecutions(
-          body.accountId,
-          xtb?.executions ?? (parsed.executions as ImportedExecution[]),
-          "import",
-          undefined,
-          { preserveFees: Boolean(body.ai) },
-        );
-  if (xtb?.matched) result.duplicates += xtb.matched;
+      : parsed.format === "xtb"
+        ? commitXtbImport(body.accountId, parsed.executions as ImportedExecution[], {
+            preserveFees: Boolean(body.ai),
+          })
+        : parsed.format === IBKR_FLEX_XML.id
+          ? commitIbkrFlexImport(
+              body.accountId,
+              parsed.executions as ImportedExecution[],
+              timeZone,
+              { preserveFees: Boolean(body.ai) },
+            )
+          : importGenericExecutions(body.accountId, parsed.executions as ImportedExecution[], {
+              preserveFees: Boolean(body.ai),
+            });
+  // The XTB command reconciles the holdings inside its own transaction, so the
+  // matched entries it counts are the ones it decided on. The count is reported
+  // as duplicates; it is not part of the import response contract.
+  const { matched = 0, ...outcome } = imported;
+  const result = { ...outcome, duplicates: outcome.duplicates + matched };
   // Invalid rows are skipped with a warning rather than failing the whole file.
   const commitWarnings = [
     ...warnings,
+    ...(matched ? [`${matched} open holding(s) imported earlier are closed by this file.`] : []),
     ...(result.skipped > 0
       ? [
           `${result.skipped} row(s) were skipped because they could not be journaled: ${result.skippedReasons.join(" ")}`,

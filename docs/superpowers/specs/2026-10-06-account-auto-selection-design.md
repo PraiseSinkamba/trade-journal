@@ -143,15 +143,15 @@ initialising `accountId` from empty; they pass an explicit `defaultId` from
 
 ## Files to change
 
-| File | Change |
-|---|---|
-| `apps/web/src/server/settings.ts` | add `getCurrentAccountId`, `setCurrentAccountId` |
-| `apps/web/src/app/api/settings/route.ts` | GET returns `currentAccountId`; PATCH accepts `currentAccountId?: string \| null` |
-| `apps/web/src/lib/use-account-default.ts` | **new** hook |
-| `apps/web/src/components/account-picker.tsx` | accept `defaultId`; auto-fill + persist on change |
-| `apps/web/src/components/manual-trade-entry.tsx` | replace empty initial state with `useAccountDefault()` |
-| `apps/web/src/app/import/page.tsx` | same; persist after successful commit/connect |
-| `apps/web/src/components/account-selector.tsx` | URL auto-fill from persisted; persist on every select |
+| File                                             | Change                                                                            |
+| ------------------------------------------------ | --------------------------------------------------------------------------------- |
+| `apps/web/src/server/settings.ts`                | add `getCurrentAccountId`, `setCurrentAccountId`                                  |
+| `apps/web/src/app/api/settings/route.ts`         | GET returns `currentAccountId`; PATCH accepts `currentAccountId?: string \| null` |
+| `apps/web/src/lib/use-account-default.ts`        | **new** hook                                                                      |
+| `apps/web/src/components/account-picker.tsx`     | accept `defaultId`; auto-fill + persist on change                                 |
+| `apps/web/src/components/manual-trade-entry.tsx` | replace empty initial state with `useAccountDefault()`                            |
+| `apps/web/src/app/import/page.tsx`               | same; persist after successful commit/connect                                     |
+| `apps/web/src/components/account-selector.tsx`   | URL auto-fill from persisted; persist on every select                             |
 
 No schema migration; no new endpoint; no new dependencies.
 
@@ -165,11 +165,11 @@ No schema migration; no new endpoint; no new dependencies.
    `/import` → picker is pre-selected; commit succeeds with that account.
 3. **Multi-account path** — open `/import`, select Account A, commit; reopen
    `/import` → picker is pre-selected to A.
-5. **Header dropdown** — visit `/trades` with no `?accounts=` and one persisted
+4. **Header dropdown** — visit `/trades` with no `?accounts=` and one persisted
    account → URL becomes `?accounts=<id>` automatically.
-6. **Stale id** — set `currentAccountId` to a non-existent id, restart dev
+5. **Stale id** — set `currentAccountId` to a non-existent id, restart dev
    server; header dropdown stays "All accounts", picker is empty (no error).
-7. **Demo** — load demo data via header; persisted account id becomes the demo.
+6. **Demo** — load demo data via header; persisted account id becomes the demo.
 
 ## Out of scope / future
 

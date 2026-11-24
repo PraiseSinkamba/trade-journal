@@ -1,5 +1,9 @@
 # Self-hosted trade journal — single container, SQLite on a volume.
 FROM node:22-slim AS builder
+ENV NEXT_TELEMETRY_DISABLED=1
+# A build that imports the routes initializes storage, so the build gets its
+# own disposable journal directory instead of the image's volume.
+ENV JOURNAL_DATA_DIR=/tmp/journal-build
 RUN corepack enable
 WORKDIR /repo
 COPY pnpm-workspace.yaml package.json pnpm-lock.yaml ./
@@ -12,15 +16,19 @@ RUN pnpm --filter web build
 
 FROM node:22-slim AS runner
 ENV NODE_ENV=production
+ENV NEXT_TELEMETRY_DISABLED=1
 ENV JOURNAL_DATA_DIR=/data
 WORKDIR /app
 # Next standalone output bundles the server and pruned node_modules.
 COPY --from=builder /repo/apps/web/.next/standalone ./
 COPY --from=builder /repo/apps/web/.next/static ./apps/web/.next/static
 COPY --from=builder /repo/apps/web/public ./apps/web/public
+# Worker native dependencies are independent of Next's traced node_modules.
+COPY --from=builder /repo/apps/web/.next/worker-dist ./apps/web/worker
+COPY --from=builder /repo/apps/web/scripts/run-journal.mjs /repo/apps/web/scripts/http-child.mjs ./apps/web/scripts/
 RUN mkdir -p /data && chown -R node:node /data /app
 USER node
 VOLUME /data
 EXPOSE 3000
 ENV PORT=3000 HOSTNAME=0.0.0.0
-CMD ["node", "apps/web/server.js"]
+CMD ["node", "apps/web/scripts/run-journal.mjs", "--mode", "production", "--worker", "enabled", "--host", "0.0.0.0"]

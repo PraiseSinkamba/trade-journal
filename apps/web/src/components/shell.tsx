@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { useEffect } from "react";
+import { useEffect, useState } from "react";
 import { usePathname, useSearchParams } from "next/navigation";
 import {
   BarChart3,
@@ -15,6 +15,7 @@ import {
   Settings,
   ListChecks,
   BookmarkPlus,
+  Inbox,
   Wallet,
   Landmark,
   Menu,
@@ -41,6 +42,14 @@ import {
 import { Button } from "@/components/ui/button";
 import { FILTER_KEYS } from "@luxalgo/journal-core";
 import { HoverHint } from "@/components/ui/tooltip";
+import {
+  Sheet,
+  SheetContent,
+  SheetDescription,
+  SheetHeader,
+  SheetTitle,
+} from "@/components/ui/sheet";
+import { IntelligenceInbox } from "@/components/intelligence/inbox";
 
 const NAV = [
   { href: "/", label: "Dashboard", icon: LayoutDashboard },
@@ -93,6 +102,35 @@ function NavLink({
         </Link>
       </HoverHint>
     </SidebarMenuItem>
+  );
+}
+
+/** The inbox sheet: what the journal noticed, within the sidebar's reach. */
+function InboxSheet() {
+  const [open, setOpen] = useState(false);
+  return (
+    <>
+      <Button
+        variant="outline"
+        className="w-full justify-start gap-2"
+        onClick={() => setOpen(true)}
+        aria-haspopup="dialog"
+      >
+        <Inbox aria-hidden="true" />
+        Inbox
+      </Button>
+      <Sheet open={open} onOpenChange={setOpen}>
+        <SheetContent side="right" className="w-full max-w-md">
+          <SheetHeader>
+            <SheetTitle>Inbox</SheetTitle>
+            <SheetDescription>What the journal noticed and what it offers you.</SheetDescription>
+          </SheetHeader>
+          <div className="overflow-y-auto px-4 pb-4">
+            <IntelligenceInbox />
+          </div>
+        </SheetContent>
+      </Sheet>
+    </>
   );
 }
 
@@ -199,6 +237,9 @@ export function AppSidebar() {
         </nav>
       </SidebarContent>
       <SidebarFooter className="journal-shell-controls gap-0 p-0">
+        <div className="border-t p-3">
+          <InboxSheet />
+        </div>
         {isMobile ? (
           <div className="border-t p-3">
             <PrivacyToggle />

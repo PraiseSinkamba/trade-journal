@@ -23,24 +23,26 @@ From the project's `.omp/AGENTS.md` and the spec:
 
 ## File Structure
 
-| File | Responsibility | Status |
-| --- | --- | --- |
-| `packages/importers/src/formats/pepperstone.ts` | The new format: detection, parse loop, asset class table, `KNOWN_DEAL_KINDS` | Create |
-| `packages/importers/src/detect.ts` | Register `pepperstone` in `LEGACY_FORMATS` | Modify (one line addition) |
-| `packages/importers/tests/pepperstone.test.ts` | Vitest suite covering all 8 spec tests | Create |
-| `packages/importers/tests/fixtures/pepperstone-ctrader.csv` | 5-10 row scrubbed fixture preserving partial-close + stop-out + forex | Create |
-| `docs/MISTAKES.md` | Remove the Pepperstone/TradeZella misdetection entry | Modify (delete one bullet) |
-| `docs/import-formats.md` | Pointer catalogue of every registered format | Create |
+| File                                                        | Responsibility                                                               | Status                     |
+| ----------------------------------------------------------- | ---------------------------------------------------------------------------- | -------------------------- |
+| `packages/importers/src/formats/pepperstone.ts`             | The new format: detection, parse loop, asset class table, `KNOWN_DEAL_KINDS` | Create                     |
+| `packages/importers/src/detect.ts`                          | Register `pepperstone` in `LEGACY_FORMATS`                                   | Modify (one line addition) |
+| `packages/importers/tests/pepperstone.test.ts`              | Vitest suite covering all 8 spec tests                                       | Create                     |
+| `packages/importers/tests/fixtures/pepperstone-ctrader.csv` | 5-10 row scrubbed fixture preserving partial-close + stop-out + forex        | Create                     |
+| `docs/MISTAKES.md`                                          | Remove the Pepperstone/TradeZella misdetection entry                         | Modify (delete one bullet) |
+| `docs/import-formats.md`                                    | Pointer catalogue of every registered format                                 | Create                     |
 
 ---
 
 ### Task 1: Add the Pepperstone parser module
 
 **Files:**
+
 - Create: `packages/importers/src/formats/pepperstone.ts`
 - Test: `packages/importers/tests/pepperstone.test.ts` (this task creates the test file with one failing test; subsequent tasks add more)
 
 **Interfaces:**
+
 - Consumes: `parseCsv`, `hasHeaders`, `toRecords` from `../csv`; `parseTimestamp` from `../dates`; `parseMoney`, `parseQuantity` from `../numbers`; `parseSide` from `./fills`; `ImportFormat`, `ImportOptions`, `ImportedExecution`, `ParsedImport`, `SkippedReason` from `../types`; `AssetClass` from `@luxalgo/journal-core`.
 - Produces: `export const pepperstone: ImportFormat`, `export const SYMBOL_CLASSES: Record<string, AssetClass>`, `export const KNOWN_DEAL_KINDS: ReadonlySet<string>`. Each emitted `ImportedExecution` shape: `{ symbol, side, quantity, price, fee, executedAt, assetClass, importMetadata: { id, group, order, reportedGrossPnl, preserveFee } }`.
 
@@ -143,12 +145,7 @@ export const pepperstone: ImportFormat = {
   id: "pepperstone",
   label: "Pepperstone (cTrader order history export)",
   detect: (headers) =>
-    hasHeaders(headers, [
-      ["position_id"],
-      ["deal_kind"],
-      ["execution_price"],
-      ["broker"],
-    ]),
+    hasHeaders(headers, [["position_id"], ["deal_kind"], ["execution_price"], ["broker"]]),
   parse: (content, options: ImportOptions): ParsedImport => {
     const records = toRecords(parseCsv(content));
     const executions: ImportedExecution[] = [];
@@ -256,9 +253,11 @@ git commit -m "Add Pepperstone cTrader order history import format"
 ### Task 2: Register the format in `detect.ts`
 
 **Files:**
+
 - Modify: `packages/importers/src/detect.ts` (one import + one array entry)
 
 **Interfaces:**
+
 - Consumes: `pepperstone` from `./formats/pepperstone` (added in Task 1).
 - Produces: `FORMATS` and `parseAuto` routes Pepperstone CSVs to the new parser.
 
@@ -270,7 +269,7 @@ The current import block is:
 import { parseCsv } from "./csv";
 import { ibkr } from "./formats/ibkr";
 import { metatrader } from "./formats/metatrader";
-import { /* simple.ts formats */ } from "./formats/simple";
+import {} from /* simple.ts formats */ "./formats/simple";
 import { thinkorswim } from "./formats/thinkorswim";
 import { tradezella } from "./formats/tradezella";
 import { historyFormat, parseHistory } from "./formats/history";
@@ -348,9 +347,11 @@ git commit -m "Register Pepperstone format in auto-detect"
 ### Task 3: Add the multi-row fixture
 
 **Files:**
+
 - Create: `packages/importers/tests/fixtures/pepperstone-ctrader.csv`
 
 **Interfaces:**
+
 - Consumes: a real-shape Pepperstone CSV with at least: a forex row (AUDUSD), a metal CFD row (XAUUSD), an index CFD row (NAS100), a `close_partial` + `close_final` pair on the same `position_id`, and a `stop_out` + `manual_after_stop` sequence.
 - Produces: a fixture that subsequent tests can read via `readFileSync(new URL("./fixtures/pepperstone-ctrader.csv", import.meta.url), "utf8")`.
 
@@ -373,6 +374,7 @@ BADROW,Buy,1,100,2026-01-05T11:00:00.000Z,,900000002,800000002,close_full,Market
 ```
 
 Notes on the synthetic rows:
+
 - Row 9 (`TEST100`) exercises the asset class fallback (`cfd` for symbols with digits).
 - Row 10 (`BADROW`) has a non-numeric `commission` value `invalid`; `parseMoney` returns `NaN`, treated as 0 — exercises the non-numeric-fee path.
 - Rows 5-6 are the same `position_id` (597339209) so the group-linkage test has a pair.
@@ -383,17 +385,14 @@ Notes on the synthetic rows:
 Append a temporary test to `pepperstone.test.ts` to confirm the fixture is well-formed:
 
 ```ts
-  it("fixture parses to ten executions with no skipped rows", () => {
-    const { readFileSync } = require("node:fs") as typeof import("node:fs");
-    const csv = readFileSync(
-      new URL("./fixtures/pepperstone-ctrader.csv", import.meta.url),
-      "utf8",
-    );
-    const result = parseAuto(csv, { timeZone: "UTC" })!;
-    expect(result.format).toBe("pepperstone");
-    expect(result.executions).toHaveLength(10);
-    expect(result.skippedRows).toBe(0);
-  });
+it("fixture parses to ten executions with no skipped rows", () => {
+  const { readFileSync } = require("node:fs") as typeof import("node:fs");
+  const csv = readFileSync(new URL("./fixtures/pepperstone-ctrader.csv", import.meta.url), "utf8");
+  const result = parseAuto(csv, { timeZone: "UTC" })!;
+  expect(result.format).toBe("pepperstone");
+  expect(result.executions).toHaveLength(10);
+  expect(result.skippedRows).toBe(0);
+});
 ```
 
 Run: `pnpm test -- pepperstone`.
@@ -416,9 +415,11 @@ git commit -m "Add Pepperstone cTrader test fixture"
 ### Task 4: Full behaviour test suite
 
 **Files:**
+
 - Modify: `packages/importers/tests/pepperstone.test.ts` (extend with the seven remaining spec tests)
 
 **Interfaces:**
+
 - Consumes: `parseAuto`, `parseTimestamp`, `pepperstone`, `SYMBOL_CLASSES`, `KNOWN_DEAL_KINDS` from `../src/*`.
 - Produces: a vitest suite that covers every acceptance criterion in the spec.
 
@@ -567,6 +568,7 @@ git commit -m "Cover Pepperstone import: detection, fills, fees, asset class, gr
 ### Task 5: Update `docs/MISTAKES.md`
 
 **Files:**
+
 - Modify: `docs/MISTAKES.md` (delete one bullet under the "Imports / CSV" section)
 
 - [ ] **Step 1: Locate the entry**
@@ -600,6 +602,7 @@ git commit -m "Drop obsolete Pepperstone misdetection entry from mistakes log"
 ### Task 6: Add `docs/import-formats.md`
 
 **Files:**
+
 - Create: `docs/import-formats.md`
 
 - [ ] **Step 1: Create the file with the catalogue**
@@ -614,22 +617,22 @@ The auto-detect list returned by `/api/import` is built from
 format has a parser module under `packages/importers/src/formats/`
 and at least one test under `packages/importers/tests/`.
 
-| Format ID | Parser | Notes |
-| --- | --- | --- |
-| `metatrader` | `formats/metatrader.ts` | MT4/MT5 HTML statements. |
-| `ibkr` | `formats/ibkr.ts` | Activity statement, multi-section. |
-| `ibkrFlex` | `formats/simple.ts` | Flex Query, distinct from `ibkr`. |
-| `thinkorswim` | `formats/thinkorswim.ts` | Charles Schwab account statement. |
-| `tradezella` | `formats/tradezella.ts` | TradeZella export. |
-| `tradervue` | `formats/simple.ts` | Tradervue executions export. |
-| `topstepx` | `formats/simple.ts` | TopstepX fills (Bid/Ask → buy/sell). |
-| `tradingview` | `formats/simple.ts` | Paper-trading history. |
+| Format ID     | Parser                   | Notes                                |
+| ------------- | ------------------------ | ------------------------------------ |
+| `metatrader`  | `formats/metatrader.ts`  | MT4/MT5 HTML statements.             |
+| `ibkr`        | `formats/ibkr.ts`        | Activity statement, multi-section.   |
+| `ibkrFlex`    | `formats/simple.ts`      | Flex Query, distinct from `ibkr`.    |
+| `thinkorswim` | `formats/thinkorswim.ts` | Charles Schwab account statement.    |
+| `tradezella`  | `formats/tradezella.ts`  | TradeZella export.                   |
+| `tradervue`   | `formats/simple.ts`      | Tradervue executions export.         |
+| `topstepx`    | `formats/simple.ts`      | TopstepX fills (Bid/Ask → buy/sell). |
+| `tradingview` | `formats/simple.ts`      | Paper-trading history.               |
 | `ninjatrader` | `formats/ninjatrader.ts` | Executions export with execution ID. |
-| `pepperstone` | `formats/pepperstone.ts` | Pepperstone cTrader order history. |
-| `tradovate` | `formats/simple.ts` | Tradovate orders (filled rows only). |
-| `webull` | `formats/simple.ts` | Webull orders (filled rows only). |
-| `dastrader` | `formats/simple.ts` | DAS Trader Pro executions. |
-| `history-*` | `formats/history.ts` | Adapter-driven generic-CSV family. |
+| `pepperstone` | `formats/pepperstone.ts` | Pepperstone cTrader order history.   |
+| `tradovate`   | `formats/simple.ts`      | Tradovate orders (filled rows only). |
+| `webull`      | `formats/simple.ts`      | Webull orders (filled rows only).    |
+| `dastrader`   | `formats/simple.ts`      | DAS Trader Pro executions.           |
+| `history-*`   | `formats/history.ts`     | Adapter-driven generic-CSV family.   |
 
 When a file doesn't match any signature, the import page offers the
 generic column mapper; the AI assist path can be used as a last resort.
@@ -669,6 +672,7 @@ history export)" appears in the formats list (via the same `GET
 
 Upload `E:/4004/orca/projects/achilles/research/exports/order_history_live_1062789_2026-09-30.csv`
 via the import UI. Expected:
+
 - Format auto-selects to `pepperstone`.
 - Preview shows 113 executions (the full sample file's row count).
 - 0 skipped rows.

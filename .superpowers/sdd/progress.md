@@ -10,6 +10,7 @@ Task 4: complete (commits 71d3d81..8039199, review clean)
 Task 5: complete (commits 8039199..05cae7b, review clean with minor clarity findings recorded below)
 
 Findings recorded (Task 5 reviewer, doc-only):
+
 - M1: checklist placement in design spec could tag "(verification contract)"
 - M2: ai-scope.md future-work section could enumerate items instead of cross-referencing
 - M3: ai-integration.md intro could split foundation vs. future into two sentences

@@ -29,18 +29,18 @@ No other `setInterval` calls exist. `ARCH-201`
 
 #### `setTimeout` — debounce and retries
 
-| File | Purpose | ARCH |
-|------|---------|------|
-| `apps/web/src/lib/use-autosave.ts:65` | 500 ms debounce (`setTimeout(() => void flush(), 500)`) before flushing autosave | `ARCH-202` |
+| File                                              | Purpose                                                                                                                     | ARCH       |
+| ------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------- | ---------- |
+| `apps/web/src/lib/use-autosave.ts:65`             | 500 ms debounce (`setTimeout(() => void flush(), 500)`) before flushing autosave                                            | `ARCH-202` |
 | `apps/web/src/server/market-data/transport.ts:39` | The **only** `setTimeout` call in the transport — re-arms the queue pump when a job is still waiting on a per-host cooldown | `ARCH-203` |
 
 Market-data queue limits (`server/market-data/transport.ts`):
 
-| Limit | Value | Line |
-|-------|-------|------|
-| Max concurrent jobs (global) | 6 | `:27` (`running < 6`) |
-| Max concurrent jobs (per host) | 2 | `:27` (`(active.get(job.host) ?? 0) < 2`) |
-| Queue depth before rejecting | 64 | `:44` (`queue.length >= 64`) |
+| Limit                                     | Value  | Line                                           |
+| ----------------------------------------- | ------ | ---------------------------------------------- |
+| Max concurrent jobs (global)              | 6      | `:27` (`running < 6`)                          |
+| Max concurrent jobs (per host)            | 2      | `:27` (`(active.get(job.host) ?? 0) < 2`)      |
+| Queue depth before rejecting              | 64     | `:44` (`queue.length >= 64`)                   |
 | Minimum interval between starts, per host | 350 ms | `:9` (`minIntervalMs = 350`), applied at `:34` |
 
 The transport also keeps a **process-local response cache** — the only quasi-persistent state in the app: a `Map` of cached entries with a TTL (15 s for current windows, 300 s for historical ones — `:143`) and a 4 MiB per-entry / 16 MiB total byte budget (`:144`, `:150`). Credentials are never part of the cache key — it is a SHA-256 of `host + sorted headers` (`:79`, `:82`).
@@ -87,12 +87,12 @@ Note: `keepalive` is set on **every** autosave POST, not only during `beforeunlo
 
 `VERIFIED` — Write paths re-checked line by line:
 
-| Write path | Transaction? | Evidence |
-|------------|--------------|----------|
-| Bulk execution import (`insertExecutions`) | **Yes** — `db.transaction((tx) => { … })` | `apps/web/src/server/executions.ts:124` |
-| Trade annotation update (`PATCH /api/trades/[key]`) | **No** — a single `db.update(trades).set(patch).where(...).run()` | `apps/web/src/app/api/trades/[key]/route.ts:93` |
-| Trade delete (`DELETE /api/trades/[key]`) | **No** — `db.delete(executions)…run()` then `rebuildAccount(accountId)` as two separate statements | `apps/web/src/server/executions.ts:223-229` |
-| `GET /api/trades` | N/A — read-only | `apps/web/src/app/api/trades/route.ts` exports `GET` only |
+| Write path                                          | Transaction?                                                                                       | Evidence                                                  |
+| --------------------------------------------------- | -------------------------------------------------------------------------------------------------- | --------------------------------------------------------- |
+| Bulk execution import (`insertExecutions`)          | **Yes** — `db.transaction((tx) => { … })`                                                          | `apps/web/src/server/executions.ts:124`                   |
+| Trade annotation update (`PATCH /api/trades/[key]`) | **No** — a single `db.update(trades).set(patch).where(...).run()`                                  | `apps/web/src/app/api/trades/[key]/route.ts:93`           |
+| Trade delete (`DELETE /api/trades/[key]`)           | **No** — `db.delete(executions)…run()` then `rebuildAccount(accountId)` as two separate statements | `apps/web/src/server/executions.ts:223-229`               |
+| `GET /api/trades`                                   | N/A — read-only                                                                                    | `apps/web/src/app/api/trades/route.ts` exports `GET` only |
 
 `ARCH-206`
 
@@ -118,13 +118,13 @@ No background workers, no cron, no domain event bus, no SSE/WebSocket
 
 ## Evidence Register
 
-| ID | Source | Status |
-|----|--------|--------|
-| ARCH-200 | Grep `EventEmitter\|addListener\|dispatch\|process\.on\|cron\|worker_threads\|pg-boss\|bullmq` across `apps/web/src`, `packages/*/src`, `scripts/` | VERIFIED — no domain-event matches; `subscribe` **does** match `components/charts/tokens.ts:50` (design-token listener registry, not a domain bus) |
-| ARCH-201 | `apps/web/src/components/trade-market-data.tsx:369` | VERIFIED — `setInterval` only for animation |
-| ARCH-202 | `apps/web/src/lib/use-autosave.ts:65` (debounce), `:24` (keepalive), `:53-56` (beforeunload flush) | VERIFIED — 500 ms debounce flush; keepalive on every POST |
-| ARCH-203 | `apps/web/src/server/market-data/transport.ts:39` (`setTimeout`), `:27` (6 global / 2 per host), `:44` (64 queue depth), `:9`+`:34` (`minIntervalMs = 350`) | VERIFIED — rate-limit queue |
-| ARCH-204 | Grep `streamText\|ReadableStream\|WebSocket\|EventSource` | VERIFIED — no matches |
-| ARCH-205 | `apps/web/src/server/ai-runtime.ts:130-160` | VERIFIED — `runTextAi` non-streaming |
-| ARCH-206 | `apps/web/src/server/executions.ts:124`, `:223-229`; `apps/web/src/app/api/trades/[key]/route.ts:93`; `apps/web/src/app/api/trades/route.ts` | VERIFIED — bulk inserts transactional; annotation update and delete are not explicitly wrapped |
-| ARCH-207 | Grep `cron\|worker_threads\|pg-boss\|bullmq\|setInterval` | VERIFIED — no background schedulers |
+| ID       | Source                                                                                                                                                      | Status                                                                                                                                             |
+| -------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------- |
+| ARCH-200 | Grep `EventEmitter\|addListener\|dispatch\|process\.on\|cron\|worker_threads\|pg-boss\|bullmq` across `apps/web/src`, `packages/*/src`, `scripts/`          | VERIFIED — no domain-event matches; `subscribe` **does** match `components/charts/tokens.ts:50` (design-token listener registry, not a domain bus) |
+| ARCH-201 | `apps/web/src/components/trade-market-data.tsx:369`                                                                                                         | VERIFIED — `setInterval` only for animation                                                                                                        |
+| ARCH-202 | `apps/web/src/lib/use-autosave.ts:65` (debounce), `:24` (keepalive), `:53-56` (beforeunload flush)                                                          | VERIFIED — 500 ms debounce flush; keepalive on every POST                                                                                          |
+| ARCH-203 | `apps/web/src/server/market-data/transport.ts:39` (`setTimeout`), `:27` (6 global / 2 per host), `:44` (64 queue depth), `:9`+`:34` (`minIntervalMs = 350`) | VERIFIED — rate-limit queue                                                                                                                        |
+| ARCH-204 | Grep `streamText\|ReadableStream\|WebSocket\|EventSource`                                                                                                   | VERIFIED — no matches                                                                                                                              |
+| ARCH-205 | `apps/web/src/server/ai-runtime.ts:130-160`                                                                                                                 | VERIFIED — `runTextAi` non-streaming                                                                                                               |
+| ARCH-206 | `apps/web/src/server/executions.ts:124`, `:223-229`; `apps/web/src/app/api/trades/[key]/route.ts:93`; `apps/web/src/app/api/trades/route.ts`                | VERIFIED — bulk inserts transactional; annotation update and delete are not explicitly wrapped                                                     |
+| ARCH-207 | Grep `cron\|worker_threads\|pg-boss\|bullmq\|setInterval`                                                                                                   | VERIFIED — no background schedulers                                                                                                                |

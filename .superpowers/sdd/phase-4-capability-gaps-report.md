@@ -5,12 +5,12 @@
 
 ## Changed Files
 
-| File | Change |
-|------|--------|
-| `apps/web/src/server/ai-scope.ts` | Added `DataSource` type, extended `FrozenApprovedScope` with `dataSource` + `tradeCritiqueKey`, updated `readAiRequest` to validate and propagate both fields |
-| `apps/web/src/server/ai-capabilities.ts` | Added `playbookRulesForTrade`, `missedObservations`, `notebookEntries`, `progressHistory` |
-| `apps/web/tests/ai-scope.test.ts` | 5 new tests for `dataSource` + `tradeCritiqueKey` validation and propagation |
-| `apps/web/tests/ai-capability.test.ts` | 16 new tests for the 4 capabilities, plus table-cleanup fixes |
+| File                                     | Change                                                                                                                                                        |
+| ---------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `apps/web/src/server/ai-scope.ts`        | Added `DataSource` type, extended `FrozenApprovedScope` with `dataSource` + `tradeCritiqueKey`, updated `readAiRequest` to validate and propagate both fields |
+| `apps/web/src/server/ai-capabilities.ts` | Added `playbookRulesForTrade`, `missedObservations`, `notebookEntries`, `progressHistory`                                                                     |
+| `apps/web/tests/ai-scope.test.ts`        | 5 new tests for `dataSource` + `tradeCritiqueKey` validation and propagation                                                                                  |
+| `apps/web/tests/ai-capability.test.ts`   | 16 new tests for the 4 capabilities, plus table-cleanup fixes                                                                                                 |
 
 ## RED/GREEN Evidence
 
@@ -93,6 +93,7 @@ pnpm exec prettier --check apps/web/src/server/ai-scope.ts apps/web/src/server/a
 ## Self-Review
 
 **Correctness:**
+
 - `dataSource` correctly defaults to `"trades"` for existing Ask/recap/critique routes (no change to those routes)
 - Unknown `dataSource` values are rejected with 400
 - `tradeCritiqueKey` rejected unless `dataSource === "trades+playbooks"`
@@ -101,12 +102,14 @@ pnpm exec prettier --check apps/web/src/server/ai-scope.ts apps/web/src/server/a
 - Output capped at 6 KB via `cap()` helper
 
 **Design decisions:**
+
 - Used `Object.fromEntries()` / `Record<string, T>` instead of `Map`/`Set` per project rules
 - Date range for missed trades: SQL `>= since` pushed to DB, end-of-day `<= until` pushed to JS filter (SQLite string-literal interpolation issue with `T23:59:59` suffix)
 - Privacy redaction for notebook: content is scoped to accounts only; the `notes` table has no account FK so `notebookEntries` returns all notes (account-level filtering is a UI concern, not a DB concern — the `scope.accounts` guard applies to trades, not notes)
 - `progressHistory` returns `{ context, scope }` matching the `askJournalContext` return shape; other capabilities return `{ context }` per their test expectations
 
 **Concerns:**
+
 - `notebookEntries` returns all notes regardless of account (notes table has no `accountId`). The `scope` filters accounts for trades; notebook entries are not per-account in this schema. This is consistent with the existing `/api/notes` route which also returns all notes.
 - The `sql` tagged template in `missedObservations` works for the `>=` lower bound; the upper bound is enforced in JS to avoid SQLite interpolation issues with template literals.
 - `beforeEach` now clears 11 tables (was 5) — slightly slower but necessary for test isolation.

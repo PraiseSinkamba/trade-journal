@@ -1,6 +1,7 @@
 import { eq } from "drizzle-orm";
 import { positionFillProblem, type ImportedExecution } from "@luxalgo/journal-importers";
-import { db, executions } from "@/db";
+import { executions } from "@/db";
+import type { JournalTx } from "@/db/transaction";
 import { executionHash } from "./ids";
 
 /** Facts which a repeat import may not silently correct or reinterpret. */
@@ -23,10 +24,14 @@ const facts = (fill: ImportedExecution) =>
   ]);
 
 /** Validate the combined, deduplicated history inside the insertion transaction. */
-export function positionImportErrors(accountId: string, incoming: ImportedExecution[]): string[] {
+export function positionImportErrors(
+  tx: JournalTx,
+  accountId: string,
+  incoming: ImportedExecution[],
+): string[] {
   if (!incoming.length) return [];
   const symbols = new Set(incoming.map((fill) => fill.symbol));
-  const existing: ImportedExecution[] = db
+  const existing: ImportedExecution[] = tx
     .select()
     .from(executions)
     .where(eq(executions.accountId, accountId))

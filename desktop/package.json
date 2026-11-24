@@ -6,15 +6,15 @@
   "scripts": {
     "tauri": "tauri",
     "dev": "tauri dev",
-    "build": "pnpm build:web && pnpm build:app",
-    "build:app": "tauri build",
+    "build": "pnpm build:app",
+    "build:app": "pnpm run icons && pnpm build:web && tauri build",
     "build:web": "pnpm --filter web build",
-    "build:debug": "tauri build --debug",
+    "build:debug": "pnpm run icons && pnpm build:web && tauri build --debug",
     "icons": "cd src-tauri && cargo run --manifest-path scripts/gen_icons/Cargo.toml",
     "setup:sidecar": "node scripts/run-sidecar-setup.js",
     "setup:icons": "cd src-tauri && cargo run --manifest-path scripts/gen_icons/Cargo.toml",
     "clean": "cd src-tauri && cargo clean && echo cleaned",
-    "typecheck": "cd src-tauri && cargo check"
+    "typecheck": "pnpm run icons && cd src-tauri && cargo check"
   },
   "devDependencies": {
     "@tauri-apps/cli": "^2"

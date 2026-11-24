@@ -8,13 +8,13 @@
 
 Five AI routes exist:
 
-| Route | Handler | Pattern | Tool loop |
-|---|---|---|---|
-| Ask Journal | `POST /api/ai/ask` | aggregate + bounded agent | yes — `runAskJournalAi` |
-| Reports | `POST /api/ai/reports` | aggregate + bounded agent | yes — `runReportsAgentAi` |
-| Daily Recap | `POST /api/ai/recap` | aggregate → direct reflection | no |
-| Trade Critique | `POST /api/ai/critique` | single trade → direct reflection | no |
-| Statement Import | `POST /api/import` (mode=preview) | schema-constrained extraction | no |
+| Route            | Handler                           | Pattern                          | Tool loop                 |
+| ---------------- | --------------------------------- | -------------------------------- | ------------------------- |
+| Ask Journal      | `POST /api/ai/ask`                | aggregate + bounded agent        | yes — `runAskJournalAi`   |
+| Reports          | `POST /api/ai/reports`            | aggregate + bounded agent        | yes — `runReportsAgentAi` |
+| Daily Recap      | `POST /api/ai/recap`              | aggregate → direct reflection    | no                        |
+| Trade Critique   | `POST /api/ai/critique`           | single trade → direct reflection | no                        |
+| Statement Import | `POST /api/import` (mode=preview) | schema-constrained extraction    | no                        |
 
 All AI runs server-side only. The client supplies a validated scope snapshot; the server resolves the provider key from the encrypted settings store and calls the model directly. No AI request, response, or key passes through a third-party relay.
 
@@ -60,11 +60,11 @@ The system is self-hosted (BYO-key). No shared API gateway, no analytics endpoin
 
 Three runtime modules participate in every AI call:
 
-| Module | Responsibility |
-|---|---|
-| `apps/web/src/server/ai-contracts.ts` | Feature policy table, error class, execution metadata types |
-| `apps/web/src/server/ai-runtime.ts` | `runReportsAgentAiRuntime`; provider-neutral execution: model construction, `generateText` calls, error mapping |
-| `apps/web/src/server/ai.ts` | Public `runAi`, `runAskJournalAi`, `runReportsAgentAi` wrappers; tool factory |
+| Module                                | Responsibility                                                                                                  |
+| ------------------------------------- | --------------------------------------------------------------------------------------------------------------- |
+| `apps/web/src/server/ai-contracts.ts` | Feature policy table, error class, execution metadata types                                                     |
+| `apps/web/src/server/ai-runtime.ts`   | `runReportsAgentAiRuntime`; provider-neutral execution: model construction, `generateText` calls, error mapping |
+| `apps/web/src/server/ai.ts`           | Public `runAi`, `runAskJournalAi`, `runReportsAgentAi` wrappers; tool factory                                   |
 
 **Evidence:** `apps/web/src/server/ai-contracts.ts:1-57`; `apps/web/src/server/ai-runtime.ts:1-313`; `apps/web/src/server/ai.ts:1-336`
 
@@ -105,11 +105,11 @@ provider          → "AI request failed. Check your provider settings…"
 
 ```typescript
 AI_PROMPT_VERSIONS = {
-  reflection:         "reflection-v1",
-  askJournalAgent:    "ask-journal-agent-v1",
-  reportsAgent:       "reports-agent-v1",
-  statementImport:    "statement-import-v1",
-}
+  reflection: "reflection-v1",
+  askJournalAgent: "ask-journal-agent-v1",
+  reportsAgent: "reports-agent-v1",
+  statementImport: "statement-import-v1",
+};
 ```
 
 **VERIFIED** — `apps/web/src/server/ai-contracts.ts:53-57`
@@ -122,13 +122,13 @@ AI_PROMPT_VERSIONS = {
 
 All prompt construction lives in `apps/web/src/server/ai-prompts.ts`. Prompt text is validated as a string — no variable interpolation at the callsite. **Evidence:** `apps/web/src/server/ai-prompts.ts:1-61`
 
-| Builder | Used by | Pattern |
-|---|---|---|
-| `REFLECTION_SYSTEM_PROMPT` | `runAi` | static system instruction |
-| `buildAskJournalPrompt` | `runAskJournalAi` | question + aggregate context + tool instruction |
-| `buildReportsAgentPrompt` | `runReportsAgentAi` | question + aggregate context + switch_report_mode instruction |
-| `buildDailyRecapPrompt` | `runAi` (recap) | structured daily data → prose recap |
-| `buildTradeCritiquePrompt` | `runAi` (critique) | single trade + fills → prose critique |
+| Builder                    | Used by             | Pattern                                                       |
+| -------------------------- | ------------------- | ------------------------------------------------------------- |
+| `REFLECTION_SYSTEM_PROMPT` | `runAi`             | static system instruction                                     |
+| `buildAskJournalPrompt`    | `runAskJournalAi`   | question + aggregate context + tool instruction               |
+| `buildReportsAgentPrompt`  | `runReportsAgentAi` | question + aggregate context + switch_report_mode instruction |
+| `buildDailyRecapPrompt`    | `runAi` (recap)     | structured daily data → prose recap                           |
+| `buildTradeCritiquePrompt` | `runAi` (critique)  | single trade + fills → prose critique                         |
 
 ### 4.2 Import system prompt
 
@@ -142,12 +142,12 @@ Lives in `ai-import.ts:69-72` (inline `const SYSTEM`). Explicitly instructs the 
 
 `createAskJournalTools(scope, context, reserveToolCall?, feature?)` in `ai.ts:93-249` produces exactly these tools:
 
-| Tool | Input | Effect |
-|---|---|---|
-| `get_journal_summary` | `{}` | returns `context` string (prebuilt aggregate) |
-| `find_trades` | `{symbol?, outcome?, dateOrder?}` | returns ≤5 summarized trades |
-| `get_trade_detail` | `{key: string}` | returns one trade + ≤50 fills |
-| `switch_report_mode` | `{mode, primary?, secondary?}` | returns bounded report-mode context; only registered when `feature="reports"` |
+| Tool                  | Input                             | Effect                                                                        |
+| --------------------- | --------------------------------- | ----------------------------------------------------------------------------- |
+| `get_journal_summary` | `{}`                              | returns `context` string (prebuilt aggregate)                                 |
+| `find_trades`         | `{symbol?, outcome?, dateOrder?}` | returns ≤5 summarized trades                                                  |
+| `get_trade_detail`    | `{key: string}`                   | returns one trade + ≤50 fills                                                 |
+| `switch_report_mode`  | `{mode, primary?, secondary?}`    | returns bounded report-mode context; only registered when `feature="reports"` |
 
 Tool inputs are validated with `jsonSchema` + manual `hasOnlyKeys` guard. Inputs must have **no fields outside the allowlist** — a provider-bypassing field causes rejection. **VERIFIED** — `apps/web/src/server/ai.ts:26-45`
 
@@ -177,16 +177,16 @@ Three conditions trigger `AiRuntimeError("provider", …)`:
 
 `ai-capabilities.ts` defines these functions that are **NOT wired into `createAskJournalTools`** and **NOT available to the Ask/Reports agent**:
 
-| Capability | Location | Data source | Status |
-|---|---|---|---|
-| `askJournalContext` | `ai-capabilities.ts:36` | trades (computed metrics + buckets) | **IN USE** — pre-tool aggregate for Ask + Reports |
-| `dailyRecapContext` | `ai-capabilities.ts:94` | trades filtered by date | **IN USE** — feeds recap route |
-| `tradeCritiqueContext` | `ai-capabilities.ts:150` | single trade + fills | **IN USE** — feeds critique route |
-| `playbookRulesForTrade` | `ai-capabilities.ts:179` | trades+playbooks | **NOT REGISTERED** — ARCH-006 |
-| `missedObservations` | `ai-capabilities.ts:211` | trades+missed | **NOT REGISTERED** — ARCH-007 |
-| `notebookEntries` | `ai-capabilities.ts:247` | trades+notes | **NOT REGISTERED** — ARCH-008 |
-| `progressHistory` | `ai-capabilities.ts:277` | trades+progress | **NOT REGISTERED** — ARCH-009 |
-| `reportContext` | `ai-report-context.ts` | same trades | **INDIRECT USE** — called by `switch_report_mode` tool only |
+| Capability              | Location                 | Data source                         | Status                                                      |
+| ----------------------- | ------------------------ | ----------------------------------- | ----------------------------------------------------------- |
+| `askJournalContext`     | `ai-capabilities.ts:36`  | trades (computed metrics + buckets) | **IN USE** — pre-tool aggregate for Ask + Reports           |
+| `dailyRecapContext`     | `ai-capabilities.ts:94`  | trades filtered by date             | **IN USE** — feeds recap route                              |
+| `tradeCritiqueContext`  | `ai-capabilities.ts:150` | single trade + fills                | **IN USE** — feeds critique route                           |
+| `playbookRulesForTrade` | `ai-capabilities.ts:179` | trades+playbooks                    | **NOT REGISTERED** — ARCH-006                               |
+| `missedObservations`    | `ai-capabilities.ts:211` | trades+missed                       | **NOT REGISTERED** — ARCH-007                               |
+| `notebookEntries`       | `ai-capabilities.ts:247` | trades+notes                        | **NOT REGISTERED** — ARCH-008                               |
+| `progressHistory`       | `ai-capabilities.ts:277` | trades+progress                     | **NOT REGISTERED** — ARCH-009                               |
+| `reportContext`         | `ai-report-context.ts`   | same trades                         | **INDIRECT USE** — called by `switch_report_mode` tool only |
 
 ### 6.3 Data source types and their scope
 
@@ -194,12 +194,12 @@ Three conditions trigger `AiRuntimeError("provider", …)`:
 
 ### 6.4 Explicit gap documentation
 
-| Gap | Implication | ARCH-ID |
-|---|---|---|
-| `playbookRulesForTrade` | Agent cannot answer "which playbook rules did I break on this trade?" | ARCH-006 |
-| `missedObservations` | Agent cannot answer "what missed opportunities did I archive?" | ARCH-007 |
-| `notebookEntries` | Agent cannot answer "what notes do I have about trades?" | ARCH-008 |
-| `progressHistory` | Agent cannot answer "what's my routine adherence over N weeks?" | ARCH-009 |
+| Gap                           | Implication                                                                                                           | ARCH-ID  |
+| ----------------------------- | --------------------------------------------------------------------------------------------------------------------- | -------- |
+| `playbookRulesForTrade`       | Agent cannot answer "which playbook rules did I break on this trade?"                                                 | ARCH-006 |
+| `missedObservations`          | Agent cannot answer "what missed opportunities did I archive?"                                                        | ARCH-007 |
+| `notebookEntries`             | Agent cannot answer "what notes do I have about trades?"                                                              | ARCH-008 |
+| `progressHistory`             | Agent cannot answer "what's my routine adherence over N weeks?"                                                       | ARCH-009 |
 | `reportContext` direct access | Reports agent can only call `switch_report_mode` tool; cannot call `reportContext` directly for multi-mode comparison | ARCH-010 |
 
 ---
@@ -357,12 +357,12 @@ POST /api/import (mode: "preview", ai: true)
 
 ### 10.6 Summary of exported AI functions
 
-| Function | Defined | Calls |
-|---|---|---|
-| `runAi(prompt)` | `ai.ts:240` | `runTextAi` (reflection) |
-| `runAskJournalAi(scope, context)` | `ai.ts:259` | `runAskAgentAi` |
-| `runReportsAgentAi(scope, context)` | `ai.ts:280` | `runReportsAgentAi` (runtime) |
-| `parseStatementWithAi(statement, signal?)` | `ai-import.ts:173` | `runObjectAi` |
+| Function                                   | Defined            | Calls                         |
+| ------------------------------------------ | ------------------ | ----------------------------- |
+| `runAi(prompt)`                            | `ai.ts:240`        | `runTextAi` (reflection)      |
+| `runAskJournalAi(scope, context)`          | `ai.ts:259`        | `runAskAgentAi`               |
+| `runReportsAgentAi(scope, context)`        | `ai.ts:280`        | `runReportsAgentAi` (runtime) |
+| `parseStatementWithAi(statement, signal?)` | `ai-import.ts:173` | `runObjectAi`                 |
 
 **Evidence:** `apps/web/src/server/ai.ts:240,259,280`; `apps/web/src/server/ai-import.ts:173`
 
@@ -479,12 +479,12 @@ reportContext            | switch_report_mode tool | INDIRECT (via tool only)
 
 The plan dated 2026-10-08 describes a **target architecture** with status `not-started`. The current codebase implements **more than the plan anticipated**:
 
-| Plan says | Current state |
-|---|---|
-| "Exactly two generateText modules" | Three: `runTextAi`, `runAskAgentAi`, `runReportsAgentAi`, `runObjectAi` in `ai-runtime.ts` |
-| "Ask Journal is a direct call" | Ask Journal is already a bounded tool-loop agent (`maxSteps=4`, `maxToolCalls=4`) |
-| "Reports is a direct call" | Reports is already a bounded tool-loop agent |
-| "4 unregistered capabilities" | Same 4 remain unregistered; they are `playbookRulesForTrade`, `missedObservations`, `notebookEntries`, `progressHistory` |
+| Plan says                          | Current state                                                                                                            |
+| ---------------------------------- | ------------------------------------------------------------------------------------------------------------------------ |
+| "Exactly two generateText modules" | Three: `runTextAi`, `runAskAgentAi`, `runReportsAgentAi`, `runObjectAi` in `ai-runtime.ts`                               |
+| "Ask Journal is a direct call"     | Ask Journal is already a bounded tool-loop agent (`maxSteps=4`, `maxToolCalls=4`)                                        |
+| "Reports is a direct call"         | Reports is already a bounded tool-loop agent                                                                             |
+| "4 unregistered capabilities"      | Same 4 remain unregistered; they are `playbookRulesForTrade`, `missedObservations`, `notebookEntries`, `progressHistory` |
 
 The plan's target architecture (bounded Ask Journal agent) has been **partially implemented** but the 4 additional capabilities it recommends as candidates for Phase 2 are still unregistered. The plan's plan/policy distinction (ask-journal-agent vs. reflection) is now embodied in `AI_FEATURE_POLICIES` and `AI_PROMPT_VERSIONS` in `ai-contracts.ts`.
 
@@ -492,30 +492,30 @@ The plan's target architecture (bounded Ask Journal agent) has been **partially 
 
 ## 14. Evidence Index
 
-| ID | Claim | Evidence |
-|---|---|---|
-| ARCH-001 | 4 AI routes + 1 import route | `apps/web/src/app/api/ai/ask/route.ts`, `reports`, `recap`, `critique`; `import/route.ts` |
-| ARCH-002 | `aiConfigured()` key resolution | `apps/web/src/server/ai.ts:253-257` |
-| ARCH-003 | Provider adapter construction | `apps/web/src/server/ai-runtime.ts:134-140,169-177,236-243` |
-| ARCH-004 | `AI_FEATURE_POLICIES` table | `apps/web/src/server/ai-contracts.ts:36-51` |
-| ARCH-005 | `AiExecutionMeta` buildMeta | `apps/web/src/server/ai-runtime.ts:104-117` |
-| ARCH-006 | `playbookRulesForTrade` not registered | `apps/web/src/server/ai-capabilities.ts:179-207`; `createAskJournalTools` only 4 tools (`ai.ts:93-249`) |
-| ARCH-007 | `missedObservations` not registered | `apps/web/src/server/ai-capabilities.ts:211-244` |
-| ARCH-008 | `notebookEntries` not registered | `apps/web/src/server/ai-capabilities.ts:247-275` |
-| ARCH-009 | `progressHistory` not registered | `apps/web/src/server/ai-capabilities.ts:277-329` |
-| ARCH-010 | `reportContext` only via tool | `apps/web/src/server/ai.ts:196-249` (switch_report_mode execute calls reportContext) |
-| ARCH-011 | No chat persistence tables | grep `apps/web/src/db` for `conversations\|messages\|chat_history` |
-| ARCH-012 | Stale-response protection via active ref | `apps/web/src/lib/use-ai-request.ts:9-28` |
-| ARCH-013 | `streamText` not used | grep `apps/web/src/server` for `streamText` |
-| ARCH-014 | `@ai-sdk/mcp` for CTrader, not AI agent | `apps/web/src/server/ctrader-mcp/client.ts:2` |
-| ARCH-015 | `createAskJournalTools` validates inputs | `apps/web/src/server/ai.ts:26-92` (hasOnlyKeys + is*Input validators) |
-| ARCH-016 | Tool budget via closure counter | `apps/web/src/server/ai-runtime.ts:160-168,222-229` |
-| ARCH-017 | Per-step output token allocation | `apps/web/src/server/ai-runtime.ts:172-173,232-233` |
-| ARCH-018 | Ask route → askJournalContext → runAskJournalAi | `apps/web/src/app/api/ai/ask/route.ts:14-16`; `apps/web/src/server/ai.ts:259-278` |
-| ARCH-019 | Reports route → runReportsAgentAi | `apps/web/src/app/api/ai/reports/route.ts:14-16`; `apps/web/src/server/ai.ts:280-298` |
-| ARCH-020 | Import → `parseStatementWithAi` → `runObjectAi` | `apps/web/src/app/api/import/route.ts:80`; `apps/web/src/server/ai-import.ts:173-228` |
-| ARCH-021 | AskJournal component uses useAiRequest | `apps/web/src/components/ask-journal.tsx:38-48` |
-| ARCH-022 | No streaming in routes | All routes return `ok({ ... })` (regular JSON), no SSE |
-| ARCH-023 | Import system prompt untrusted data instruction | `apps/web/src/server/ai-import.ts:69-72` |
-| ARCH-024 | `deepFreeze` on scope | `apps/web/src/server/ai-scope.ts:17-23` |
-| ARCH-025 | `readAiRequest` whitelist validation | `apps/web/src/server/ai-scope.ts:47-163` |
+| ID       | Claim                                           | Evidence                                                                                                |
+| -------- | ----------------------------------------------- | ------------------------------------------------------------------------------------------------------- |
+| ARCH-001 | 4 AI routes + 1 import route                    | `apps/web/src/app/api/ai/ask/route.ts`, `reports`, `recap`, `critique`; `import/route.ts`               |
+| ARCH-002 | `aiConfigured()` key resolution                 | `apps/web/src/server/ai.ts:253-257`                                                                     |
+| ARCH-003 | Provider adapter construction                   | `apps/web/src/server/ai-runtime.ts:134-140,169-177,236-243`                                             |
+| ARCH-004 | `AI_FEATURE_POLICIES` table                     | `apps/web/src/server/ai-contracts.ts:36-51`                                                             |
+| ARCH-005 | `AiExecutionMeta` buildMeta                     | `apps/web/src/server/ai-runtime.ts:104-117`                                                             |
+| ARCH-006 | `playbookRulesForTrade` not registered          | `apps/web/src/server/ai-capabilities.ts:179-207`; `createAskJournalTools` only 4 tools (`ai.ts:93-249`) |
+| ARCH-007 | `missedObservations` not registered             | `apps/web/src/server/ai-capabilities.ts:211-244`                                                        |
+| ARCH-008 | `notebookEntries` not registered                | `apps/web/src/server/ai-capabilities.ts:247-275`                                                        |
+| ARCH-009 | `progressHistory` not registered                | `apps/web/src/server/ai-capabilities.ts:277-329`                                                        |
+| ARCH-010 | `reportContext` only via tool                   | `apps/web/src/server/ai.ts:196-249` (switch_report_mode execute calls reportContext)                    |
+| ARCH-011 | No chat persistence tables                      | grep `apps/web/src/db` for `conversations\|messages\|chat_history`                                      |
+| ARCH-012 | Stale-response protection via active ref        | `apps/web/src/lib/use-ai-request.ts:9-28`                                                               |
+| ARCH-013 | `streamText` not used                           | grep `apps/web/src/server` for `streamText`                                                             |
+| ARCH-014 | `@ai-sdk/mcp` for CTrader, not AI agent         | `apps/web/src/server/ctrader-mcp/client.ts:2`                                                           |
+| ARCH-015 | `createAskJournalTools` validates inputs        | `apps/web/src/server/ai.ts:26-92` (hasOnlyKeys + is*Input validators)                                   |
+| ARCH-016 | Tool budget via closure counter                 | `apps/web/src/server/ai-runtime.ts:160-168,222-229`                                                     |
+| ARCH-017 | Per-step output token allocation                | `apps/web/src/server/ai-runtime.ts:172-173,232-233`                                                     |
+| ARCH-018 | Ask route → askJournalContext → runAskJournalAi | `apps/web/src/app/api/ai/ask/route.ts:14-16`; `apps/web/src/server/ai.ts:259-278`                       |
+| ARCH-019 | Reports route → runReportsAgentAi               | `apps/web/src/app/api/ai/reports/route.ts:14-16`; `apps/web/src/server/ai.ts:280-298`                   |
+| ARCH-020 | Import → `parseStatementWithAi` → `runObjectAi` | `apps/web/src/app/api/import/route.ts:80`; `apps/web/src/server/ai-import.ts:173-228`                   |
+| ARCH-021 | AskJournal component uses useAiRequest          | `apps/web/src/components/ask-journal.tsx:38-48`                                                         |
+| ARCH-022 | No streaming in routes                          | All routes return `ok({ ... })` (regular JSON), no SSE                                                  |
+| ARCH-023 | Import system prompt untrusted data instruction | `apps/web/src/server/ai-import.ts:69-72`                                                                |
+| ARCH-024 | `deepFreeze` on scope                           | `apps/web/src/server/ai-scope.ts:17-23`                                                                 |
+| ARCH-025 | `readAiRequest` whitelist validation            | `apps/web/src/server/ai-scope.ts:47-163`                                                                |

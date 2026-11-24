@@ -7,7 +7,7 @@ import {
 } from "@luxalgo/journal-importers";
 import { AI_IMPORT_MAX_BYTES, AI_IMPORT_MAX_EXECUTIONS, AI_IMPORT_MAX_TEXT } from "@/lib/ai-import";
 import { AI_PROVIDER_NAMES } from "@/lib/ai-settings";
-import { requireValue } from "./api";
+import { requireValue } from "./request-error";
 import { resolveAiImportConfiguration } from "./settings";
 import { AiRuntimeError, AI_PROMPT_VERSIONS } from "./ai-contracts";
 import { runObjectAi } from "./ai-runtime";

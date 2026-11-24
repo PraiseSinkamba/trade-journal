@@ -3,6 +3,8 @@ import { readFileSync } from "node:fs";
 import { parseAuto, detectFormat } from "../src/detect";
 import { SYMBOL_CLASSES, KNOWN_DEAL_KINDS } from "../src/formats/pepperstone";
 import { parseTimestamp } from "../src/dates";
+import { parseCsv, toRecords } from "../src/csv";
+import { parseMoney } from "../src/numbers";
 import { buildRoundTrips, type Execution } from "@luxalgo/journal-core";
 
 const SINGLE_ROW = `symbol,side,quantity,price,data,trade_id,position_id,order_id,deal_kind,deal_type,volume_units,volume_lots,direction,pips,gross_profit,net_profit,swap,commission,close_price,open_time,close_time,execution_price,label,comment,account_login,account_id,broker,currency
@@ -76,7 +78,7 @@ describe("pepperstone cTrader order history", () => {
       const key = exec.importMetadata?.group ?? "";
       byGroup.set(key, (byGroup.get(key) ?? 0) + 1);
     }
-    // The fixture has 10 positions, two of which are multi-row (4 executions each).
+    // The fixture has 8 positions, two of which are multi-row (4 executions each).
     expect(byGroup.get("597339209")).toBe(4); // close_partial + close_final
     expect(byGroup.get("577851478")).toBe(4); // stop_out + manual_after_stop
   });
@@ -129,15 +131,11 @@ describe("pepperstone end-to-end through the round-trip engine", () => {
   // Regression test for the bug where every row's status was OPEN with $0 P&L
   // and no exit/duration. The fix is to emit a synthetic entry + real close
   // per row, with the close carrying reportedGrossPnl = net_profit.
-  it("real cTrader export: every position closes, net P&L matches the source's net_profit total", () => {
-    const csv = readFileSync(
-      "E:/4004/orca/projects/achilles/research/exports/order_history_live_1062789_2026-09-30.csv",
-      "utf8",
-    );
-    const parsed = parseAuto(csv, { timeZone: "UTC" })!;
+  it("checked-in cTrader fixture: every position closes and net P&L reconciles to source", () => {
+    const parsed = parseAuto(fixture, { timeZone: "UTC" })!;
     expect(parsed.format).toBe("pepperstone");
     expect(parsed.skippedRows).toBe(0);
-
+    expect(parsed.executions).toHaveLength(20);
     const executions: Execution[] = parsed.executions.map((e, i) => ({
       id: e.importMetadata?.id ?? `exec-${i}`,
       accountId: "test-account",
@@ -153,18 +151,42 @@ describe("pepperstone end-to-end through the round-trip engine", () => {
     }));
     const trips = buildRoundTrips(executions);
 
-    // 103 distinct position_ids in the source → 103 round trips.
-    expect(trips).toHaveLength(103);
-    // Every trip must be closed, never open.
-    const openCount = trips.filter((t) => t.status === "open").length;
-    expect(openCount).toBe(0);
-    // Cycle net P&L must match the broker's net_profit column sum.
-    const engineTotal = trips.reduce((sum, t) => sum + t.netPnl, 0);
-    const lines = csv.split("\n").filter(Boolean);
-    let sourceTotal = 0;
-    for (let i = 1; i < lines.length; i++) {
-      sourceTotal += parseFloat(lines[i]!.split(",")[15]!); // net_profit
+    // Ten closing deals represent eight positions, including two partial-exit groups.
+    expect(trips).toHaveLength(8);
+    for (const trip of trips) {
+      expect(trip.status).not.toBe("open");
+      expect(trip.openQuantity).toBe(0);
+      expect(trip.closedAt).toBeDefined();
+      expect(trip.avgExit).toBeDefined();
+      expect(trip.durationMs).toBeGreaterThan(0);
+      // Source net_profit already includes swap/commission; never deduct them twice.
+      expect(trip.fees).toBe(0);
+      expect(trip.grossPnl).toBeCloseTo(trip.netPnl, 6);
     }
+
+    const sourceRows = toRecords(parseCsv(fixture));
+    const sourceTotal = sourceRows.reduce((sum, row) => sum + parseMoney(row.netprofit), 0);
+    const sourceGrossWithCosts = sourceRows.reduce(
+      (sum, row) =>
+        sum + parseMoney(row.grossprofit) + parseMoney(row.swap) + parseMoney(row.commission),
+      0,
+    );
+    // Independently summed fixture net cents:
+    // -3 + 43 + 205 - 1126 + 14 + 98 - 885 - 1018 + 100 + 100 = -2472.
+    expect(sourceTotal).toBeCloseTo(-24.72, 6);
+    expect(sourceGrossWithCosts).toBeCloseTo(sourceTotal, 6);
+    const engineTotal = trips.reduce((sum, trip) => sum + trip.netPnl, 0);
     expect(engineTotal).toBeCloseTo(sourceTotal, 6);
+
+    // Each pair of closing rows must stay one cycle, not two closed trades.
+    for (const [closeId, expectedNet] of [
+      ["388017898", 1.12], // 0.14 + 0.98
+      ["383257528", -19.03], // -8.85 - 10.18
+    ] as const) {
+      const trip = trips.find((candidate) => candidate.executionIds.includes(closeId));
+      expect(trip).toMatchObject({ executionCount: 4, quantity: 0.2 });
+      expect(trip?.exits).toHaveLength(2);
+      expect(trip?.netPnl).toBeCloseTo(expectedNet, 6);
+    }
   });
 });

@@ -1,7 +1,8 @@
 import { asc, desc, eq, isNull } from "drizzle-orm";
 import { db, folders, notes } from "@/db";
 import { bad, handler, ok } from "@/server/api";
-import { newId, nowIso } from "@/server/ids";
+import { newId, newUuid, nowIso } from "@/server/ids";
+import { recordSourceChanges } from "@/server/intelligence/composition";
 
 export const GET = handler(async (request: Request) => {
   const url = new URL(request.url);
@@ -63,18 +64,31 @@ export const POST = handler(async (request: Request) => {
   if (!folder || folder.deletedAt || folderId === "all") return bad("Folder not found", 404);
   const id = newId();
   const now = nowIso();
-  db.insert(notes)
-    .values({
-      id,
-      folderId,
-      title: body.title ?? "",
-      content: body.content ?? "",
-      tagsJson: body.tags ? JSON.stringify(body.tags) : null,
-      tradeKey: body.tradeKey ?? null,
-      dayDate: body.dayDate ?? null,
-      createdAt: now,
-      updatedAt: now,
-    })
-    .run();
+  // The note and the source revision that describes it commit together: a
+  // rolled-back write leaves no revision and invalidates no knowledge.
+  recordSourceChanges((tx) => {
+    tx.insert(notes)
+      .values({
+        id,
+        folderId,
+        title: body.title ?? "",
+        content: body.content ?? "",
+        tagsJson: body.tags ? JSON.stringify(body.tags) : null,
+        tradeKey: body.tradeKey ?? null,
+        dayDate: body.dayDate ?? null,
+        createdAt: now,
+        updatedAt: now,
+      })
+      .run();
+    return [
+      {
+        kind: "note",
+        action: "revised",
+        sourceId: id,
+        accountId: null,
+        correlationId: newUuid(),
+      },
+    ];
+  });
   return ok({ id });
 });

@@ -1,5 +1,7 @@
 # Code Navigation Map
 
+> **HISTORICAL PRE-MODERNIZATION:** This map preserves the architecture observed before the intelligence modernization. Categories described as absent may now exist. Use [Intelligence onboarding](../intelligence.md) for the current source map and the [operations runbook](../intelligence-operations.md) for runtime guidance.
+
 > A focused reference to the most architecturally important sources. If a section is blank, the category genuinely does not exist (and that absence is itself a finding).
 
 | Component                          | File / Directory                                                                                                            | Key Symbols                                                                                                                                                                                                                                                                                                         | Responsibility                                                                                                                                                               |

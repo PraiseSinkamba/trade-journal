@@ -18,9 +18,14 @@ permissions:
   contents: read
   id-token: write # npm provenance (OIDC)
 
+concurrency:
+  group: release-${{ github.ref }}
+  cancel-in-progress: false
+
 jobs:
   publish:
     runs-on: ubuntu-latest
+    timeout-minutes: 30
     steps:
       - uses: actions/checkout@v6
       # pnpm version comes from the packageManager field in package.json
@@ -31,9 +36,57 @@ jobs:
           cache: pnpm
           registry-url: https://registry.npmjs.org
       - run: pnpm install --frozen-lockfile
-      - run: pnpm typecheck
+      # The root typecheck script recurses into every workspace, and the
+      # desktop workspace's typecheck script generates the bundle icons and
+      # then runs `cargo check`: it cannot run on ubuntu-latest (no webview
+      # system libraries, no Linux sidecar binary),
+      # and the Rust gate belongs to the desktop job of the CI workflow.
+      - run: pnpm -r --filter "!desktop" typecheck
       - run: pnpm test
       - run: pnpm -r --filter "./packages/*" build
+      - name: Pack the published packages without publishing
+        run: |
+          mkdir -p "$RUNNER_TEMP/tarballs"
+          pnpm -r --filter "./packages/*" pack --pack-destination "$RUNNER_TEMP/tarballs"
+      - name: Assert each tarball carries only its dist output and metadata
+        run: |
+          set -euo pipefail
+          tarballs=("$RUNNER_TEMP"/tarballs/*.tgz)
+          if [ "${#tarballs[@]}" -ne 2 ]; then
+            echo "expected 2 tarballs, found ${#tarballs[@]}"
+            exit 1
+          fi
+          for tarball in "${tarballs[@]}"; do
+            name="$(basename "$tarball")"
+            echo "== $name"
+            entries="$(tar -tzf "$tarball")"
+            printf '%s\n' "$entries"
+            # No src directory, no database, no credential, no runtime asset.
+            forbidden="$(printf '%s\n' "$entries" | grep -Ei '^package/src/|\.(db|sqlite|sqlite3|db-journal|db-wal|db-shm)$|(^|/)\.env|credential|secret|\.(pem|key|p12|pfx|node|so|dylib|dll|exe|wasm|png|jpe?g|gif|svg|ico|woff2?|ttf|otf)$' || true)"
+            if [ -n "$forbidden" ]; then
+              echo "forbidden content in $name:"
+              printf '%s\n' "$forbidden"
+              exit 1
+            fi
+            # Nothing but the dist output and the package metadata.
+            extra="$(printf '%s\n' "$entries" | grep -vE '^package/dist/|^package/(package\.json|README\.md|LICENSE)$' || true)"
+            if [ -n "$extra" ]; then
+              echo "unexpected entries in $name:"
+              printf '%s\n' "$extra"
+              exit 1
+            fi
+            if ! printf '%s\n' "$entries" | grep -qE '^package/dist/'; then
+              echo "$name carries no dist output"
+              exit 1
+            fi
+          done
+          for expected in luxalgo-journal-core- luxalgo-journal-importers-; do
+            if ! printf '%s\n' "${tarballs[@]##*/}" | grep -q "^${expected}"; then
+              echo "missing the tarball of ${expected}"
+              exit 1
+            fi
+          done
+          echo "the published tarballs carry only their dist output and metadata"
       # pnpm rewrites workspace:* to the real version in the published tarball
       # and applies each package's publishConfig (dist entry points). Auth and
       # provenance come from the OIDC exchange (id-token: write above); no

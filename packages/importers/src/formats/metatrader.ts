@@ -64,7 +64,10 @@ export const metatrader: ImportFormat = {
         !Number.isFinite(entryPrice)
       ) {
         skippedRows++;
-        skippedReasons.push({ row: null, reason: "missing symbol, quantity, entry price, or open/close timestamps" });
+        skippedReasons.push({
+          row: null,
+          reason: "missing symbol, quantity, entry price, or open/close timestamps",
+        });
         continue;
       }
       const closedAt = parseTimestamp(cells[closeIndex], options.timeZone)!;

@@ -149,6 +149,13 @@ export const ninjatrader: ImportFormat = {
       warnings.push(
         `Futures P&L requires the correct contract multiplier in Settings for each imported symbol: ${[...futures].join(", ")}.`,
       );
-    return { format: "ninjatrader", executions, skippedRows, skippedReasons, warnings, errors: [...errors] };
+    return {
+      format: "ninjatrader",
+      executions,
+      skippedRows,
+      skippedReasons,
+      warnings,
+      errors: [...errors],
+    };
   },
 };

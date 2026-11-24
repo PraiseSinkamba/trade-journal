@@ -130,7 +130,10 @@ export const mt5DealsAdapter: SourceAdapter = {
       const effect = (cells[columns.direction] ?? "").trim().toLowerCase();
       if (NON_TRADE_TYPES.test(type)) {
         skippedRows++;
-        skippedReasons.push({ row: record.line, reason: `"${type}" is a non-trade row (balance/deposit/withdrawal); ignored.` });
+        skippedReasons.push({
+          row: record.line,
+          reason: `"${type}" is a non-trade row (balance/deposit/withdrawal); ignored.`,
+        });
         continue;
       }
       const direction = parseDirectionValue(type);
@@ -188,6 +191,15 @@ export const mt5DealsAdapter: SourceAdapter = {
     };
     // The journal already handles partial exits and reversals. Keep each deal
     // intact instead of collapsing it into simulator-only round trips.
-    return { closed: [], open: [], executions, issues, mapping, skippedRows, skippedReasons, dedupeSafe: false };
+    return {
+      closed: [],
+      open: [],
+      executions,
+      issues,
+      mapping,
+      skippedRows,
+      skippedReasons,
+      dedupeSafe: false,
+    };
   },
 };

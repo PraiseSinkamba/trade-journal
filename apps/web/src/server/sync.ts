@@ -2,12 +2,14 @@ import { connect, listBrokers, type BrokerId } from "@luxalgo/broker-sdk";
 import { syncCTraderMcpAccount } from "./ctrader-mcp/sync";
 import { eq } from "drizzle-orm";
 import { accounts, db } from "@/db";
+import { withJournalTransaction } from "@/db/transaction";
 import { decryptJson, encryptJson } from "./crypto";
 import { nowIso } from "./ids";
 import { brokerTradesToExecutions, untimedFillsReason } from "./broker-trades";
-import { insertExecutions, type InsertResult } from "./executions";
+import { insertExecutionsInTx, type InsertResult } from "./executions";
+import { changeContext } from "./trading/reconcile";
 import { getImportTimeZone } from "./settings";
-import { requireValue } from "./api";
+import { requireValue } from "./request-error";
 import {
   assertIbkrSyncTimeZone,
   canonicalImportTimeZone,
@@ -64,34 +66,42 @@ export const syncAccount = async (accountId: string): Promise<SyncOutcome> => {
 
   const equity = snapshot.accounts.reduce((total, a) => total + a.equity, 0);
   const positions = snapshot.accounts.flatMap((a) => a.positions);
-  const result = db.transaction(
-    () => {
-      if (statementTimeZone !== undefined) {
-        const current = db.select().from(accounts).where(eq(accounts.id, accountId)).get();
-        requireValue(
-          current &&
-            isIbkrSyncAccount(current) &&
-            current.credentialsEnc === account.credentialsEnc,
-          "The IBKR connection changed during sync. Try again.",
-        );
-        assertIbkrSyncTimeZone(current, statementTimeZone);
-      }
-      // Validation, history provenance, deduplication and sync status commit together.
-      const inserted = insertExecutions(accountId, timed, "sync");
-      db.update(accounts)
-        .set({
-          lastSyncAt: syncedAt,
-          snapshotJson: JSON.stringify({ equity, positions, fetchedAt: snapshot.fetchedAt }),
-          ...(statementTimeZone !== undefined && inserted.inserted > 0
-            ? { ibkrSyncTimeZone: statementTimeZone }
-            : {}),
-        })
+  // The fills, the rebuilt projections, the projection revisions, the domain
+  // events and the broker snapshot commit together or not at all.
+  const result = withJournalTransaction((tx) => {
+    if (statementTimeZone !== undefined) {
+      const current = tx.select().from(accounts).where(eq(accounts.id, accountId)).get();
+      requireValue(
+        current && isIbkrSyncAccount(current) && current.credentialsEnc === account.credentialsEnc,
+        "The IBKR connection changed during sync. Try again.",
+      );
+      assertIbkrSyncTimeZone(current, statementTimeZone);
+    }
+    // The broker bookkeeping is written first: a failure in the fill write
+    // below must roll the snapshot back with it.
+    tx.update(accounts)
+      .set({
+        lastSyncAt: syncedAt,
+        snapshotJson: JSON.stringify({ equity, positions, fetchedAt: snapshot.fetchedAt }),
+      })
+      .where(eq(accounts.id, accountId))
+      .run();
+    // Validation, history provenance, deduplication and sync status commit together.
+    const inserted = insertExecutionsInTx(
+      tx,
+      accountId,
+      timed,
+      "sync",
+      changeContext("broker_sync", "live"),
+    );
+    if (statementTimeZone !== undefined && inserted.inserted > 0) {
+      tx.update(accounts)
+        .set({ ibkrSyncTimeZone: statementTimeZone })
         .where(eq(accounts.id, accountId))
         .run();
-      return inserted;
-    },
-    { behavior: "immediate" },
-  );
+    }
+    return inserted;
+  });
   if (untimed > 0) {
     result.skipped += untimed;
     if (result.skippedReasons.length < 5)

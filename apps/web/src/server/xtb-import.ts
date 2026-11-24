@@ -1,9 +1,12 @@
 import { and, eq } from "drizzle-orm";
 import { xtbWorkbookToStatement, type ImportedExecution } from "@luxalgo/journal-importers";
 import { db, executions } from "@/db";
-import { requireValue } from "./api";
+import { withJournalTransaction, type JournalTx } from "@/db/transaction";
+import { requireValue } from "./request-error";
 import { XLSX_MAX_BYTES } from "@/lib/xlsx-import";
 import { executionHash } from "./ids";
+import { insertExecutionsInTx, type InsertResult } from "./executions";
+import { changeContext } from "./trading/reconcile";
 
 /** Decode an uploaded base64 .xlsx on the server; the browser never parses the workbook. */
 export const xlsxStatement = async (base64: string): Promise<string> => {
@@ -36,26 +39,13 @@ const sameLot = (stored: ImportedExecution, incoming: ImportedExecution): boolea
 const describe = (fill: ImportedExecution) =>
   `${fill.side} ${fill.quantity} ${fill.symbol} at ${fill.price} on ${fill.executedAt}`;
 
-/**
- * An XTB holding is stored as an entry fill keyed by its position id. When a
- * later workbook closes that position, its entry must be the stored one, or the
- * journal would keep a second, phantom open lot. A lot whose time or price
- * differ only by rounding is the same fill and is not inserted again; a lot
- * whose size or side changed (for example a partial close) is refused, because
- * which part was closed cannot be known. Nothing is saved in that case.
- */
-export const reconcileXtbHoldings = (
-  accountId: string,
-  incoming: ImportedExecution[],
-): { executions: ImportedExecution[]; matched: number; problem: string | null } => {
-  const entries = incoming.filter(isXtbEntry);
-  if (!entries.length) return { executions: incoming, matched: 0, problem: null };
-  const stored = new Map<string, { fill: ImportedExecution; hash: string }>();
-  for (const row of db
-    .select()
-    .from(executions)
-    .where(and(eq(executions.accountId, accountId), eq(executions.source, "import")))
-    .all()) {
+/** A holding the journal already stored, keyed by its XTB position group. */
+type StoredEntry = { fill: ImportedExecution; hash: string };
+
+/** The stored holdings of one account, read from the executions table. */
+const storedEntries = (rows: (typeof executions.$inferSelect)[]): Map<string, StoredEntry> => {
+  const stored = new Map<string, StoredEntry>();
+  for (const row of rows) {
     const importMetadata = row.importMetadataJson ? JSON.parse(row.importMetadataJson) : undefined;
     const fill: ImportedExecution = {
       symbol: row.symbol,
@@ -68,6 +58,23 @@ export const reconcileXtbHoldings = (
     };
     if (isXtbEntry(fill)) stored.set(importMetadata.group, { fill, hash: row.contentHash });
   }
+  return stored;
+};
+
+/**
+ * An XTB holding is stored as an entry fill keyed by its position id. When a
+ * later workbook closes that position, its entry must be the stored one, or the
+ * journal would keep a second, phantom open lot. A lot whose time or price
+ * differ only by rounding is the same fill and is not inserted again; a lot
+ * whose size or side changed (for example a partial close) is refused, because
+ * which part was closed cannot be known. Nothing is saved in that case.
+ */
+const compareEntries = (
+  stored: Map<string, StoredEntry>,
+  incoming: ImportedExecution[],
+): { executions: ImportedExecution[]; matched: number; problem: string | null } => {
+  const entries = incoming.filter(isXtbEntry);
+  if (!entries.length) return { executions: incoming, matched: 0, problem: null };
 
   const dropped = new Set<ImportedExecution>();
   for (const entry of entries) {
@@ -89,3 +96,61 @@ export const reconcileXtbHoldings = (
     problem: null,
   };
 };
+
+/**
+ * The same reconciliation, read inside the caller's transaction.
+ *
+ * The commit path uses this form, so the holding that is matched or refused is
+ * the one the write transaction sees — the decision and the write are taken
+ * under one lock.
+ */
+export const reconcileXtbHoldingsInTx = (
+  tx: JournalTx,
+  accountId: string,
+  incoming: ImportedExecution[],
+): { executions: ImportedExecution[]; matched: number; problem: string | null } =>
+  compareEntries(
+    storedEntries(
+      tx
+        .select()
+        .from(executions)
+        .where(and(eq(executions.accountId, accountId), eq(executions.source, "import")))
+        .all(),
+    ),
+    incoming,
+  );
+
+/** The read-only reconciliation the preview uses. */
+export const reconcileXtbHoldings = (
+  accountId: string,
+  incoming: ImportedExecution[],
+): { executions: ImportedExecution[]; matched: number; problem: string | null } =>
+  db.transaction((tx) => reconcileXtbHoldingsInTx(tx, accountId, incoming));
+
+/**
+ * Commits an XTB workbook.
+ *
+ * The matched holding is revalidated inside the transaction that writes the
+ * fills, so a position that changed is refused before anything is saved, and
+ * the fills, the rebuilt projections, the projection revisions and the domain
+ * events commit together with it.
+ */
+export const commitXtbImport = (
+  accountId: string,
+  incoming: ImportedExecution[],
+  options: { preserveFees?: boolean } = {},
+): InsertResult & { matched: number } =>
+  withJournalTransaction((tx) => {
+    const reconciled = reconcileXtbHoldingsInTx(tx, accountId, incoming);
+    requireValue(!reconciled.problem, reconciled.problem ?? "");
+    const result = insertExecutionsInTx(
+      tx,
+      accountId,
+      reconciled.executions,
+      "import",
+      changeContext("import", "historical"),
+      undefined,
+      options,
+    );
+    return { ...result, matched: reconciled.matched };
+  });

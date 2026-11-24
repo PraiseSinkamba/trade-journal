@@ -1,6 +1,12 @@
-import { createHash, randomBytes } from "node:crypto";
+import { createHash, randomBytes, randomUUID } from "node:crypto";
 
 export const newId = (): string => randomBytes(9).toString("base64url");
+
+/**
+ * Identifier for a durable new entity — an identity, a revision, a link.
+ * UUIDs, so identifiers never collide across journals or imports.
+ */
+export const newUuid = (): string => randomUUID();
 
 export const nowIso = (): string => new Date().toISOString();
 

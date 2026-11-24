@@ -5,9 +5,11 @@
 ---
 
 ## Branch
+
 `shadcn-adoption` — confirmed.
 
 ## Commit
+
 ```
 SHA: ac54aef8cce4d9339ce9097b805adaf600094ba3
 Message: "Rewrite shell on shadcn Sidebar with all custom slots preserved"
@@ -17,19 +19,22 @@ Files: 3 changed (sidebar.tsx added, shell.tsx rewritten, layout.tsx, globals.cs
 ## Typecheck Result
 
 ### Scope-specific files (PASS)
+
 The four files in this task's commit — `sidebar.tsx`, `shell.tsx`, `layout.tsx`, `globals.css` — typecheck **cleanly** with no errors.
 
 ### Full typecheck (FAILS — pre-existing, not caused by this task)
+
 `pnpm --filter web typecheck` fails with **16 errors**, all pre-existing in the worktree and unrelated to task-22:
 
-| Error | Root cause |
-|---|---|
+| Error                                                    | Root cause                                                                                                                                                                                                                                                                                                             |
+| -------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | `HelpHint` / `HoverHint` not exported from `tooltip.tsx` | shadcn `add --overwrite` replaced the old tooltip (which had `HoverHint`/`HelpHint` helpers) with the base-nova version that only exports `Tooltip`, `TooltipTrigger`, `TooltipContent`, `TooltipProvider`. Callers throughout the codebase import `HoverHint`/`HelpHint` from `./ui/tooltip` — these no longer exist. |
-| `asChild` not a valid Button prop | base-nova `Button` is built on `@base-ui/react/button` which does not expose `asChild`. Callers in `settings/page.tsx`, `currency-notice.tsx`, `review-export.tsx`, `trade-navigation.tsx` pass `asChild` to Button. |
+| `asChild` not a valid Button prop                        | base-nova `Button` is built on `@base-ui/react/button` which does not expose `asChild`. Callers in `settings/page.tsx`, `currency-notice.tsx`, `review-export.tsx`, `trade-navigation.tsx` pass `asChild` to Button.                                                                                                   |
 
 These are pre-existing issues introduced by the shadcn `add --overwrite` scaffold itself, not by the shell rewrite. They must be resolved before merging.
 
 ## Files Changed (count: 4)
+
 1. `apps/web/src/components/ui/sidebar.tsx` — **added** by `pnpm dlx shadcn@latest add sidebar`; shadcn base-nova Sidebar family (SidebarProvider, Sidebar, SidebarHeader, SidebarFooter, SidebarGroup, SidebarMenu, SidebarMenuButton, etc.)
 2. `apps/web/src/components/shell.tsx` — **rewritten**; exports `AppSidebar` (SidebarProvider-rooted, renders brand/logo in Header, NAV + NAV_SETUP in SidebarContent groups, toggles in Footer) and backward-compatible `Shell` wrapper
 3. `apps/web/src/app/layout.tsx` — **updated** to use `<Shell>` (which internally uses AppSidebar + SidebarInset + SidebarProvider); no other structural changes
@@ -39,18 +44,18 @@ These are pre-existing issues introduced by the shadcn `add --overwrite` scaffol
 
 ## Custom Slots — Preservation Status
 
-| Slot | Status | Note |
-|---|---|---|
-| Brand/Logo | ✅ Preserved | `LuxAlgoMark` + "Trade Journal" text in `SidebarHeader` via `<Link href="/">` |
-| NAV_GROUPS (NAV + NAV_SETUP) | ✅ Preserved | Two `SidebarGroup`s with `SidebarMenu` / `SidebarMenuItem` / `SidebarMenuButton` |
-| Custom nav entries (filter query passthrough) | ✅ Preserved | `filterQuery` built from `FILTER_KEYS` and appended to nav hrefs; `prop-firms` excluded from filter passthrough |
-| PrivacyToggle | ✅ Preserved | `PrivacyToggle` from `./privacy` rendered in `SidebarFooter` via `SidebarFooterToggles`; collapses to icon-only when sidebar collapsed |
-| ThemeToggle | ✅ Preserved | `ThemeToggle` from `./theme` rendered alongside PrivacyToggle in `SidebarFooter` |
-| DictationMenuItem | ⚠️ Placeholder | No `DictationMenuItem` component exists in the codebase. `VoiceNote` is a page-level component with no sidebar-menu-item variant. A placeholder ghost button (`Mic` icon + "Dictate" label) is rendered in `SidebarFooter`. See CONCERN below. |
-| VoiceNotesMenuItem | ⚠️ Placeholder | Same as DictationMenuItem — no standalone component. Placeholder rendered. |
-| DashboardCustomizerMenuItem | ⚠️ Placeholder | `DashboardCustomizer` is a popover trigger used in `dashboard-layout.tsx`. No sidebar-menu-item variant exists. A placeholder ghost button (`Settings2` icon + "Customize" label) is rendered in `SidebarFooter`. |
-| PageTransition | ✅ Preserved | `PageTransition` from `./page-transition` wraps children inside `SidebarInset` |
-| Mobile navigation drawer | ✅ Replaced | Old Radix Dialog mobile drawer replaced by shadcn Sidebar's built-in `Sheet` on mobile (automatic via `collapsible="icon"`) |
+| Slot                                          | Status         | Note                                                                                                                                                                                                                                           |
+| --------------------------------------------- | -------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Brand/Logo                                    | ✅ Preserved   | `LuxAlgoMark` + "Trade Journal" text in `SidebarHeader` via `<Link href="/">`                                                                                                                                                                  |
+| NAV_GROUPS (NAV + NAV_SETUP)                  | ✅ Preserved   | Two `SidebarGroup`s with `SidebarMenu` / `SidebarMenuItem` / `SidebarMenuButton`                                                                                                                                                               |
+| Custom nav entries (filter query passthrough) | ✅ Preserved   | `filterQuery` built from `FILTER_KEYS` and appended to nav hrefs; `prop-firms` excluded from filter passthrough                                                                                                                                |
+| PrivacyToggle                                 | ✅ Preserved   | `PrivacyToggle` from `./privacy` rendered in `SidebarFooter` via `SidebarFooterToggles`; collapses to icon-only when sidebar collapsed                                                                                                         |
+| ThemeToggle                                   | ✅ Preserved   | `ThemeToggle` from `./theme` rendered alongside PrivacyToggle in `SidebarFooter`                                                                                                                                                               |
+| DictationMenuItem                             | ⚠️ Placeholder | No `DictationMenuItem` component exists in the codebase. `VoiceNote` is a page-level component with no sidebar-menu-item variant. A placeholder ghost button (`Mic` icon + "Dictate" label) is rendered in `SidebarFooter`. See CONCERN below. |
+| VoiceNotesMenuItem                            | ⚠️ Placeholder | Same as DictationMenuItem — no standalone component. Placeholder rendered.                                                                                                                                                                     |
+| DashboardCustomizerMenuItem                   | ⚠️ Placeholder | `DashboardCustomizer` is a popover trigger used in `dashboard-layout.tsx`. No sidebar-menu-item variant exists. A placeholder ghost button (`Settings2` icon + "Customize" label) is rendered in `SidebarFooter`.                              |
+| PageTransition                                | ✅ Preserved   | `PageTransition` from `./page-transition` wraps children inside `SidebarInset`                                                                                                                                                                 |
+| Mobile navigation drawer                      | ✅ Replaced    | Old Radix Dialog mobile drawer replaced by shadcn Sidebar's built-in `Sheet` on mobile (automatic via `collapsible="icon"`)                                                                                                                    |
 
 ## CONCERN — Missing Components
 

@@ -3,6 +3,7 @@
 ## Files Created
 
 ### Source (7 files)
+
 - `apps/web/src/server/ctrader-mcp/schemas.ts` — All Zod schemas + `AssetClass` type
 - `apps/web/src/server/ctrader-mcp/accounts.ts` — `listCTraderAccounts`
 - `apps/web/src/server/ctrader-mcp/symbols.ts` — `fetchSymbols`, `buildAssetClassMap`
@@ -12,6 +13,7 @@
 - `apps/web/src/server/ctrader-mcp/deals.ts` — `fetchAllDeals`, `mapDealToExecution`
 
 ### Tests (2 files)
+
 - `apps/web/tests/ctrader-mcp/schemas.test.ts` — 2 tests (parse valid deal, reject missing fields)
 - `apps/web/tests/ctrader-mcp/deals.test.ts` — 2 tests (BUY/SELL mapping)
 
@@ -40,6 +42,7 @@ All 4 required tests pass.
 `client.ts` — changed `callTool<OUT>(schema: z.ZodSchema<OUT>)` → `callTool<S extends z.ZodType<z.infer<S>, ZodTypeDef, unknown>>(schema: S)`.
 
 **Finding 1 fix** (`client.ts`):
+
 ```ts
 // Before (input=output coupling; OUT can't be inferred from schema arg alone)
 async callTool<OUT>(name, args, schema: z.ZodType<OUT>): Promise<OUT>
@@ -57,6 +60,7 @@ async callTool<S extends z.ZodType<z.infer<S>, z.ZodTypeDef, unknown>>(
 `deals.ts:46` — changed `assetClass` → `assetClass === "stock" ? "equity" : assetClass` before assigning to `ImportedExecution.assetClass`. Local `AssetClass` enum in `schemas.ts` is unchanged.
 
 ### Test command
+
 ```
 $ npx vitest run apps/web/tests/ctrader-mcp/ --reporter=verbose
   RUN  v3.2.7
@@ -67,12 +71,14 @@ $ npx vitest run apps/web/tests/ctrader-mcp/ --reporter=verbose
 ```
 
 ### Typecheck (touched files)
+
 ```
 $ npx tsc --noEmit --project apps/web/tsconfig.json 2>&1 | grep -E "ctrader-mcp/(deals|positions|client)\.ts"
 (none — clean)
 ```
 
 ### Commit
+
 ```
 8464a6f fix(ctrader-mcp): decouple zod input/output in callTool; map stock to equity
 ```

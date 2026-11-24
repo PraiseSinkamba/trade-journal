@@ -1,7 +1,8 @@
 import { asc, eq } from "drizzle-orm";
 import { db, playbooks, trades } from "@/db";
 import { bad, handler, ok } from "@/server/api";
-import { newId, nowIso } from "@/server/ids";
+import { newId, newUuid, nowIso } from "@/server/ids";
+import { recordSourceChanges } from "@/server/intelligence/composition";
 
 export const GET = handler(() => {
   const rows = db.select().from(playbooks).orderBy(asc(playbooks.createdAt)).all();
@@ -20,16 +21,29 @@ export const GET = handler(() => {
 
 export const POST = handler(async (request: Request) => {
   const body = (await request.json()) as { name?: string; description?: string; rules?: string[] };
-  if (!body.name) return bad("name is required");
+  const name = body.name;
+  if (!name) return bad("name is required");
   const id = newId();
-  db.insert(playbooks)
-    .values({
-      id,
-      name: body.name,
-      description: body.description ?? "",
-      rulesJson: JSON.stringify(body.rules ?? []),
-      createdAt: nowIso(),
-    })
-    .run();
+  // The playbook and its source revision commit together.
+  recordSourceChanges((tx) => {
+    tx.insert(playbooks)
+      .values({
+        id,
+        name,
+        description: body.description ?? "",
+        rulesJson: JSON.stringify(body.rules ?? []),
+        createdAt: nowIso(),
+      })
+      .run();
+    return [
+      {
+        kind: "playbook",
+        action: "revised",
+        sourceId: id,
+        accountId: null,
+        correlationId: newUuid(),
+      },
+    ];
+  });
   return ok({ id });
 });

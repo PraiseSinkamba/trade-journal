@@ -76,7 +76,15 @@ it("sends an XTB workbook to the server as base64 for both preview and commit", 
     needsMapping: false,
     executions: [],
     warnings: [],
-    totals: { executions: 2, symbols: 1, skippedRows: 0, skippedReasons: [], skippedReasonsTruncated: false, from: null, to: null },
+    totals: {
+      executions: 2,
+      symbols: 1,
+      skippedRows: 0,
+      skippedReasons: [],
+      skippedReasonsTruncated: false,
+      from: null,
+      to: null,
+    },
   });
   await upload();
   const content = Buffer.from(workbookBytes).toString("base64");

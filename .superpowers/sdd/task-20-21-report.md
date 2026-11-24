@@ -25,6 +25,7 @@
 4. **Typecheck**: PASS
 
 ### Commit
+
 ```
 f4c9b89 Restore tooltip primitive with HoverHint and HelpHint exports
 ```
@@ -49,6 +50,7 @@ f4c9b89 Restore tooltip primitive with HoverHint and HelpHint exports
 3. **Typecheck**: PASS
 
 ### Commit
+
 ```
 4fbd285 Restore button primitive with HoverHint auto-wrap on icon-only
 ```
@@ -57,38 +59,41 @@ f4c9b89 Restore tooltip primitive with HoverHint and HelpHint exports
 
 ## Verification
 
-| Check | Result |
-|-------|--------|
-| `pnpm --filter web typecheck` | PASS (✓ Route types generated) |
-| Task 20 commit | `f4c9b89` |
-| Task 21 commit | `4fbd285` |
-| `HoverHint` content null short-circuit | ✓ preserved |
-| `HoverHint` delayDuration=350 / skipDelayDuration=150 | ✓ implemented via base-ui `delay`/`closeDelay` |
-| `HelpHint` with `heading` prop | ✓ typed and implemented |
-| Button `HoverHint` auto-wrap for `title` set | ✓ preserved |
-| Button `HoverHint` auto-wrap for icon-only without aria-label | ✓ preserved |
-| `asChild` support via base-ui `render` prop | ✓ restored |
+| Check                                                         | Result                                         |
+| ------------------------------------------------------------- | ---------------------------------------------- |
+| `pnpm --filter web typecheck`                                 | PASS (✓ Route types generated)                 |
+| Task 20 commit                                                | `f4c9b89`                                      |
+| Task 21 commit                                                | `4fbd285`                                      |
+| `HoverHint` content null short-circuit                        | ✓ preserved                                    |
+| `HoverHint` delayDuration=350 / skipDelayDuration=150         | ✓ implemented via base-ui `delay`/`closeDelay` |
+| `HelpHint` with `heading` prop                                | ✓ typed and implemented                        |
+| Button `HoverHint` auto-wrap for `title` set                  | ✓ preserved                                    |
+| Button `HoverHint` auto-wrap for icon-only without aria-label | ✓ preserved                                    |
+| `asChild` support via base-ui `render` prop                   | ✓ restored                                     |
 
 ---
 
 ## Concerns
 
 ### Concern 1: `@base-ui/react` tooltip API is substantially different from Radix
+
 The base-ui tooltip uses `TooltipPopup` (not `TooltipContent`), `TooltipTrigger` children (not `asChild`), `delay`/`closeDelay` (not `delayDuration`/`skipDelayDuration`), and no `collisionPadding` on content. All HoverHint/HelpHint consumers were updated to match, but any future base-ui API changes may require more migration work.
 
 ### Concern 2: `TooltipProvider` delay propagation
+
 Base-ui's `TooltipProvider` has a single `delay` prop. The plan specified `skipDelayDuration` (how long to wait before re-showing after hiding). Base-ui uses `closeDelay` on `TooltipTrigger` for this. The current implementation passes `closeDelay={skipDelayDuration ?? 150}` to `TooltipTrigger` per-HoverHint call, which is the correct mapping but differs from the original Radix behavior where `skipDelayDuration` was on the `TooltipProvider`.
 
 ### Concern 3: `layout.tsx` fix outside task scope
+
 The `TooltipProvider` prop name change (`delayDuration`/`skipDelayDuration` → `delay`) was a minimal fix applied in Task 20 to make typecheck pass. This was not in the plan's Task 20 scope (layout.tsx changes are in Task 22's SidebarProvider wrapping), but was unavoidable given the type error.
 
 ---
 
 ## Files Changed
 
-| File | Task | Change |
-|------|------|--------|
-| `apps/web/src/components/ui/tooltip.tsx` | 20 | Restored HoverHint + HelpHint on base-ui primitives |
-| `apps/web/src/app/layout.tsx` | 20 | TooltipProvider props: `delayDuration`/`skipDelayDuration` → `delay={350}` |
-| `apps/web/src/components/ui/button.tsx` | 21 | Restored HoverHint auto-wrap + `asChild` via base-ui `render` prop |
-| `apps/web/package.json` | 20 | Added `@base-ui/react` dependency |
+| File                                     | Task | Change                                                                     |
+| ---------------------------------------- | ---- | -------------------------------------------------------------------------- |
+| `apps/web/src/components/ui/tooltip.tsx` | 20   | Restored HoverHint + HelpHint on base-ui primitives                        |
+| `apps/web/src/app/layout.tsx`            | 20   | TooltipProvider props: `delayDuration`/`skipDelayDuration` → `delay={350}` |
+| `apps/web/src/components/ui/button.tsx`  | 21   | Restored HoverHint auto-wrap + `asChild` via base-ui `render` prop         |
+| `apps/web/package.json`                  | 20   | Added `@base-ui/react` dependency                                          |

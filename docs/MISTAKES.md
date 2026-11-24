@@ -11,6 +11,12 @@ to recognize the next time.
 
 ---
 
+## 2026-10-25 — Handoff test reference drift
+
+- **Symptom:** Draft OMP packets named `intelligence-mutation-paths.test.ts`, while the authoritative plan names `trade-mutation-events.test.ts`.
+- **Cause:** Reconstructed a test filename from its purpose instead of copying the plan's exact target.
+- **Fix:** See LEARNINGS.md → "Validate planned paths against their source contract".
+
 ## 2026-10-22 — Shell-specific file expansion
 
 - **Symptom:** Architecture inspection stopped at a PowerShell parser error before reading files.

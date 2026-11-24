@@ -1,22 +1,22 @@
 import { db, accounts } from "@/db";
-import { rebuildAccount } from "@/server/rebuild";
 import { handler, ok, requireValue } from "@/server/api";
+import { updateSettings, type SettingsPatch } from "@/server/trading/commands";
 import {
   getMultipliers,
   getCurrencyConversion,
   getTimeZone,
   getImportTimeZone,
   aiKeyEnvironment,
-  aiModelSetting,
   getAiProvider,
   getAiSettings,
   getCurrentAccountId,
-  setCurrentAccountId,
   normalizeAiBaseUrl,
-  setAiKey,
-  setCompatibleBaseUrl,
-  setSetting,
 } from "@/server/settings";
+import { getBackgroundPolicy, saveBackgroundPolicy } from "@/server/intelligence/composition";
+import {
+  backgroundPolicyPatchSchema,
+  type BackgroundPolicyPatch,
+} from "@/server/intelligence/contracts/policy";
 import { AI_PROVIDERS, AI_PROVIDER_NAMES, isAiProvider, type AiProvider } from "@/lib/ai-settings";
 import { isTimeZone } from "@/lib/timezone";
 import { parseCurrencyConversion, type CurrencyConversion } from "@/lib/currencies";
@@ -29,6 +29,7 @@ export const GET = handler(() =>
     currencyConversion: getCurrencyConversion(),
     ...getAiSettings(),
     currentAccountId: getCurrentAccountId(),
+    backgroundAi: getBackgroundPolicy(),
   }),
 );
 
@@ -47,6 +48,8 @@ interface SettingsBody {
   currencyConversion?: CurrencyConversion;
   /** Persisted single-account default. Absent = unchanged. `null` clears it. */
   currentAccountId?: string | null;
+  /** The background AI policy. Absent = unchanged. */
+  backgroundAi?: unknown;
 }
 
 export const PATCH = handler(async (request: Request) => {
@@ -130,31 +133,35 @@ export const PATCH = handler(async (request: Request) => {
         ),
       "Contract multipliers must be positive numbers.",
     );
-  db.transaction(() => {
-    // A display-only change must not silently alter the legacy import default.
-    if (conversion) setSetting("currencyConversion", JSON.stringify(conversion));
-    if (body.timeZone !== undefined || body.importTimeZone !== undefined)
-      setSetting("importTimeZone", body.importTimeZone ?? getImportTimeZone());
-    if (body.timeZone !== undefined) setSetting("timeZone", body.timeZone);
-  });
-  if (body.multipliers !== undefined)
-    db.transaction(() => {
-      setSetting("multipliers", JSON.stringify(body.multipliers));
-      for (const account of db.select({ id: accounts.id }).from(accounts).all())
-        rebuildAccount(account.id);
-    });
-  db.transaction(() => {
-    if (body.currentAccountId !== undefined) setCurrentAccountId(body.currentAccountId);
-  });
-  db.transaction(() => {
-    for (const id of AI_PROVIDERS) {
-      const key = body[`${id}Key`];
-      if (key !== undefined) setAiKey(id, key);
-    }
-    if (compatibleBaseUrl)
-      setCompatibleBaseUrl(compatibleBaseUrl, body.compatibleKey !== undefined);
-    if (body.aiProvider !== undefined) setSetting("aiProvider", body.aiProvider);
-    if (body.aiModel !== undefined) setSetting(aiModelSetting(provider), body.aiModel.trim());
-  });
+  const patch: SettingsPatch = {};
+  if (conversion) patch.currencyConversion = conversion;
+  if (body.timeZone !== undefined) patch.timeZone = body.timeZone;
+  if (body.importTimeZone !== undefined) patch.importTimeZone = body.importTimeZone;
+  if (body.multipliers !== undefined) patch.multipliers = body.multipliers;
+  if (body.currentAccountId !== undefined) patch.currentAccountId = body.currentAccountId;
+  if (body.aiProvider !== undefined) patch.aiProvider = body.aiProvider;
+  if (body.aiModel !== undefined) {
+    patch.aiModel = body.aiModel.trim();
+    // The model belongs to the provider this request names, else to the one
+    // the journal has selected.
+    patch.aiModelProvider = provider;
+  }
+  const aiKeys: NonNullable<SettingsPatch["aiKeys"]> = {};
+  for (const id of AI_PROVIDERS) {
+    const key = body[`${id}Key`];
+    if (key !== undefined) aiKeys[id] = key;
+  }
+  if (Object.keys(aiKeys).length > 0) patch.aiKeys = aiKeys;
+  if (compatibleBaseUrl) patch.compatibleBaseUrl = compatibleBaseUrl;
+  // The background policy is validated before anything is written, so a bad
+  // request changes no setting at all.
+  let backgroundPolicy: BackgroundPolicyPatch | undefined;
+  if (body.backgroundAi !== undefined) {
+    const policy = backgroundPolicyPatchSchema.safeParse(body.backgroundAi);
+    requireValue(policy.success, "Enter valid background AI settings.");
+    backgroundPolicy = policy.data;
+  }
+  updateSettings(patch);
+  if (backgroundPolicy) saveBackgroundPolicy(backgroundPolicy);
   return ok({ saved: true });
 });

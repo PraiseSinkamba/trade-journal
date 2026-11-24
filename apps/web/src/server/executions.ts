@@ -1,12 +1,14 @@
 import { and, eq, inArray } from "drizzle-orm";
 import { positionFillProblem, type ImportedExecution } from "@luxalgo/journal-importers";
-import { db, executions, accounts, trades } from "@/db";
+import { db, executions, accounts, executionEvidence, trades } from "@/db";
+import { withJournalTransaction, type JournalTx } from "@/db/transaction";
 import { executionHash, newId, nowIso } from "./ids";
-import { rebuildAccount } from "./rebuild";
-import { getJournalDefaults } from "./settings";
+import { getJournalDefaultsInTx } from "./settings";
 import { defaultFee } from "@/lib/journal-defaults";
-import { requireValue } from "./api";
+import { requireValue } from "./request-error";
 import { positionImportErrors } from "./position-import";
+import { changeContext, reconcileAccountInTx, type ChangeContext } from "./trading/reconcile";
+import type { TimingQuality } from "@/server/trading/projection";
 
 export interface InsertResult {
   inserted: number;
@@ -18,6 +20,30 @@ export interface InsertResult {
 }
 
 export type ExecutionSource = "sync" | "import" | "manual";
+
+/**
+ * The source quality of one fill.
+ *
+ * The quality is what the source could prove about the fill's timing, never a
+ * conclusion the journal draws from it.
+ */
+export interface ExecutionSourceQuality {
+  readonly timingQuality: TimingQuality;
+  readonly sourceKind: string;
+}
+
+/**
+ * The optional work one insertion does beyond storing the fills.
+ *
+ * `quality` is called for every usable row and returns the source's evidence
+ * about that fill, or null when the source proves nothing. The classification
+ * is written to the `execution_evidence` sidecar before the reconciliation
+ * fingerprints the projection, so the fingerprint sees the resolved quality.
+ */
+export interface InsertExecutionsOptions {
+  preserveFees?: boolean;
+  quality?: (row: ImportedExecution) => ExecutionSourceQuality | null;
+}
 
 const MAX_SKIP_REASONS = 5;
 
@@ -93,13 +119,77 @@ export const partitionExecutions = (
   return { usable, skipped, skippedReasons };
 };
 
-/** Insert fills, rebuild trades, and attach optional manual notes in one transaction. */
-export const insertExecutions = (
+/** The change context a source implies: where it came from, and whether it is live. */
+const contextForSource = (source: ExecutionSource): ChangeContext =>
+  source === "manual"
+    ? changeContext("user", "live")
+    : source === "sync"
+      ? changeContext("broker_sync", "live")
+      : changeContext("import", "historical");
+
+/**
+ * Writes the source quality of one fill into the evidence sidecar.
+ *
+ * The write is idempotent and never downgrades a known quality: an `unknown`
+ * quality is upgraded to a known one, a known quality is kept. The sidecar row
+ * lands before the reconciliation fingerprints the projection, so the fingerprint
+ * sees the resolved quality.
+ *
+ * @returns whether the sidecar changed. A changed quality is a change of the
+ * projection's facts, so it must be reconciled even when no fill was inserted.
+ */
+const writeExecutionQualityInTx = (
+  tx: JournalTx,
+  executionId: string,
+  quality: ExecutionSourceQuality,
+  recordedAt: number,
+): boolean => {
+  const existing = tx
+    .select({ timingQuality: executionEvidence.timingQuality })
+    .from(executionEvidence)
+    .where(eq(executionEvidence.executionId, executionId))
+    .get();
+  if (!existing) {
+    tx.insert(executionEvidence)
+      .values({
+        executionId,
+        timingQuality: quality.timingQuality,
+        sourceKind: quality.sourceKind,
+        evidenceVersion: 1,
+        recordedAt,
+      })
+      .run();
+    return true;
+  }
+  if (existing.timingQuality === "unknown" && quality.timingQuality !== "unknown") {
+    tx.update(executionEvidence)
+      .set({
+        timingQuality: quality.timingQuality,
+        sourceKind: quality.sourceKind,
+        recordedAt,
+      })
+      .where(eq(executionEvidence.executionId, executionId))
+      .run();
+    return true;
+  }
+  return false;
+};
+
+/**
+ * Insert fills, rebuild the trades, and attach optional manual notes — all in
+ * one transaction the caller owns.
+ *
+ * The fills, the projection rows, the projection revisions, the domain events
+ * and the notes commit together or not at all.
+ */
+export const insertExecutionsInTx = (
+  tx: JournalTx,
   accountId: string,
   rows: ImportedExecution[],
   source: ExecutionSource,
+  context: ChangeContext,
   manualNotes?: string,
-  options: { preserveFees?: boolean } = {},
+  options: InsertExecutionsOptions = {},
 ): InsertResult => {
   requireValue(
     manualNotes === undefined ||
@@ -107,7 +197,7 @@ export const insertExecutions = (
     "Manual trade notes must be at most 100,000 characters.",
   );
   requireValue(
-    db.select({ id: accounts.id }).from(accounts).where(eq(accounts.id, accountId)).get(),
+    tx.select({ id: accounts.id }).from(accounts).where(eq(accounts.id, accountId)).get(),
     "Account not found.",
   );
   const { usable, skipped, skippedReasons } = partitionExecutions(rows, source);
@@ -117,115 +207,185 @@ export const insertExecutions = (
   );
   let inserted = 0;
   let duplicates = 0;
+  // Whether the source proved something new about a fill that was already
+  // stored. A corrected quality changes the projection's fingerprint, so it
+  // has to be reconciled even when no fill was inserted.
+  let qualityChanged = false;
   const createdAt = nowIso();
-  const defaults = getJournalDefaults();
+  const defaults = getJournalDefaultsInTx(tx);
   const note = manualNotes?.trim() ? manualNotes : undefined;
 
-  db.transaction((tx) => {
-    const positionErrors = positionImportErrors(accountId, usable);
-    requireValue(positionErrors.length === 0, positionErrors.join(" "));
-    if (source === "import") {
-      const existingHashes = new Set(
-        tx
-          .select({ hash: executions.contentHash })
-          .from(executions)
-          .where(and(eq(executions.accountId, accountId), eq(executions.source, "import")))
-          .all()
-          .map((row) => row.hash),
-      );
-      for (const row of usable) {
-        if (existingHashes.has(executionHash(row))) continue;
-        const candidates = [row.legacyExecutedAt, row.executedAt.replace(/\.\d{3}Z$/, ".000Z")];
-        requireValue(
-          !candidates.some(
-            (executedAt) =>
-              executedAt &&
-              executedAt !== row.executedAt &&
-              existingHashes.has(executionHash({ ...row, executedAt })),
-          ),
-          "Matching imported fills have timestamps from an older parser or indistinguishable whole-second executions. Import the complete corrected history into a new journal account and compare it before retiring the old account; nothing was saved.",
-        );
-      }
-    }
-    const noteExecutionIds = new Set<string>();
+  const positionErrors = positionImportErrors(tx, accountId, usable);
+  requireValue(positionErrors.length === 0, positionErrors.join(" "));
+  if (source === "import") {
+    const existingHashes = new Set(
+      tx
+        .select({ hash: executions.contentHash })
+        .from(executions)
+        .where(and(eq(executions.accountId, accountId), eq(executions.source, "import")))
+        .all()
+        .map((row) => row.hash),
+    );
     for (const row of usable) {
-      const id = newId();
-      const contentHash = executionHash(row);
-      const result = tx
-        .insert(executions)
-        .values({
-          id,
-          accountId,
-          symbol: row.symbol,
-          side: row.side,
-          quantity: row.quantity,
-          price: row.price,
-          fee:
-            row.importMetadata?.preserveFee || options.preserveFees
-              ? row.fee
-              : defaultFee(row.fee, row.quantity, accountId, row.symbol, defaults),
-          executedAt: row.executedAt,
-          assetClass: row.assetClass ?? null,
-          source,
-          importMetadataJson: row.importMetadata ? JSON.stringify(row.importMetadata) : null,
-          contentHash,
-          createdAt,
-        })
-        .onConflictDoNothing()
-        .run();
-      if (result.changes > 0) {
-        inserted++;
-        if (note) noteExecutionIds.add(id);
-      } else {
-        duplicates++;
-        if (note) {
-          const existing = tx
+      if (existingHashes.has(executionHash(row))) continue;
+      const candidates = [row.legacyExecutedAt, row.executedAt.replace(/\.\d{3}Z$/, ".000Z")];
+      requireValue(
+        !candidates.some(
+          (executedAt) =>
+            executedAt &&
+            executedAt !== row.executedAt &&
+            existingHashes.has(executionHash({ ...row, executedAt })),
+        ),
+        "Matching imported fills have timestamps from an older parser or indistinguishable whole-second executions. Import the complete corrected history into a new journal account and compare it before retiring the old account; nothing was saved.",
+      );
+    }
+  }
+  const noteExecutionIds = new Set<string>();
+  for (const row of usable) {
+    const id = newId();
+    const contentHash = executionHash(row);
+    const result = tx
+      .insert(executions)
+      .values({
+        id,
+        accountId,
+        symbol: row.symbol,
+        side: row.side,
+        quantity: row.quantity,
+        price: row.price,
+        fee:
+          row.importMetadata?.preserveFee || options.preserveFees
+            ? row.fee
+            : defaultFee(row.fee, row.quantity, accountId, row.symbol, defaults),
+        executedAt: row.executedAt,
+        assetClass: row.assetClass ?? null,
+        source,
+        importMetadataJson: row.importMetadata ? JSON.stringify(row.importMetadata) : null,
+        contentHash,
+        createdAt,
+      })
+      .onConflictDoNothing()
+      .run();
+    const existingId =
+      result.changes > 0
+        ? id
+        : tx
             .select({ id: executions.id })
             .from(executions)
             .where(
               and(eq(executions.accountId, accountId), eq(executions.contentHash, contentHash)),
             )
-            .get();
-          if (existing) noteExecutionIds.add(existing.id);
-        }
-      }
+            .get()?.id;
+    if (result.changes > 0) {
+      inserted++;
+      if (note) noteExecutionIds.add(id);
+    } else {
+      duplicates++;
+      if (note && existingId) noteExecutionIds.add(existingId);
     }
-    if (inserted > 0) rebuildAccount(accountId);
-    if (note) {
-      const affected = tx
-        .select({
-          key: trades.key,
-          notes: trades.notes,
-          executionIdsJson: trades.executionIdsJson,
-        })
-        .from(trades)
-        .where(eq(trades.accountId, accountId))
-        .all();
-      for (const trade of affected) {
-        const ids = JSON.parse(trade.executionIdsJson) as string[];
-        if (!ids.some((id) => noteExecutionIds.has(id))) continue;
-        // Keep prior annotations when these fills extend or close an existing position.
-        // Retrying the same submission must not append the note a second time.
-        if (trade.notes === note || trade.notes?.endsWith(`\n\n${note}`)) continue;
-        const notes = trade.notes?.trim() ? `${trade.notes}\n\n${note}` : note;
-        requireValue(
-          notes.length <= 100000,
-          "Combined trade notes must be at most 100,000 characters.",
-        );
-        tx.update(trades).set({ notes }).where(eq(trades.key, trade.key)).run();
-      }
+    // The quality of every usable row is classified, not only of the rows this
+    // call inserted: a duplicate is the one chance to learn what the source
+    // could prove about a fill that is already stored.
+    const quality = options.quality?.(row);
+    if (quality && existingId) {
+      if (writeExecutionQualityInTx(tx, existingId, quality, Date.now())) qualityChanged = true;
     }
-  });
+  }
+  // The projections, the revisions and the events are written by the one
+  // reconciliation boundary, in this transaction. Nothing changed when no fill
+  // was inserted, so there is nothing to reconcile — unless the source proved
+  // something new about a fill that was already stored, because a corrected
+  // quality is a change of the projection's facts.
+  if (inserted > 0 || qualityChanged) reconcileAccountInTx(tx, accountId, context);
+  if (note) {
+    const affected = tx
+      .select({
+        key: trades.key,
+        notes: trades.notes,
+        executionIdsJson: trades.executionIdsJson,
+      })
+      .from(trades)
+      .where(eq(trades.accountId, accountId))
+      .all();
+    for (const trade of affected) {
+      const ids = JSON.parse(trade.executionIdsJson) as string[];
+      if (!ids.some((id) => noteExecutionIds.has(id))) continue;
+      // Keep prior annotations when these fills extend or close an existing position.
+      // Retrying the same submission must not append the note a second time.
+      if (trade.notes === note || trade.notes?.endsWith(`\n\n${note}`)) continue;
+      const notes = trade.notes?.trim() ? `${trade.notes}\n\n${note}` : note;
+      requireValue(
+        notes.length <= 100000,
+        "Combined trade notes must be at most 100,000 characters.",
+      );
+      tx.update(trades).set({ notes }).where(eq(trades.key, trade.key)).run();
+    }
+  }
 
   return { inserted, duplicates, skipped, skippedReasons };
 };
 
+/** Insert fills, rebuild trades, and attach optional manual notes in one transaction. */
+export const insertExecutions = (
+  accountId: string,
+  rows: ImportedExecution[],
+  source: ExecutionSource,
+  manualNotes?: string,
+  options: InsertExecutionsOptions = {},
+): InsertResult => {
+  const context = contextForSource(source);
+  return withJournalTransaction((tx) =>
+    insertExecutionsInTx(tx, accountId, rows, source, context, manualNotes, options),
+  );
+};
+
+/**
+ * SQLite's bind-parameter limit. Every statement that names a list of ids
+ * stays below it, even for a long history.
+ */
+const ID_CHUNK = 500;
+
+/**
+ * Deletes the given fills of one account inside the caller's transaction.
+ *
+ * The fills are deleted in chunks, so a trade with a long history never
+ * exceeds SQLite's bind-parameter limit.
+ */
+export const deleteExecutionsForTradesInTx = (
+  tx: JournalTx,
+  accountId: string,
+  executionIds: readonly string[],
+): void => {
+  if (executionIds.length === 0) return;
+  for (let i = 0; i < executionIds.length; i += ID_CHUNK) {
+    tx.delete(executions)
+      .where(
+        and(
+          eq(executions.accountId, accountId),
+          inArray(executions.id, executionIds.slice(i, i + ID_CHUNK)),
+        ),
+      )
+      .run();
+  }
+};
+
+/**
+ * Deletes every fill of one account inside the caller's transaction.
+ *
+ * One statement: the account is named, not a list of fills, so there is no
+ * bind-parameter limit to stay below.
+ */
+export const deleteAccountExecutionsInTx = (tx: JournalTx, accountId: string): void => {
+  tx.delete(executions).where(eq(executions.accountId, accountId)).run();
+};
+
 export const deleteExecutionsForTrades = (accountId: string, executionIds: string[]): void => {
   if (executionIds.length === 0) return;
-  db.delete(executions)
-    .where(and(eq(executions.accountId, accountId), inArray(executions.id, executionIds)))
-    .run();
-  rebuildAccount(accountId);
+  const context = changeContext("user", "live");
+  withJournalTransaction((tx) => {
+    deleteExecutionsForTradesInTx(tx, accountId, executionIds);
+    reconcileAccountInTx(tx, accountId, context);
+  });
 };
 
 export const listExecutions = (accountId: string, ids?: string[]) => {

@@ -28,10 +28,12 @@ updated: 2026-10-10
 ### Task 1: Establish the Phase 2 capability contract from current behavior
 
 **Files:**
+
 - Create: `docs/superpowers/research/2026-10-10-ai-capability-extraction.md`
 - Test: no new tests; discovery validates against existing source and focused test evidence only.
 
 **Interfaces:**
+
 - Consumes: `readAiRequest`, `accountContext`, `queryTrades`, `getTradeByKey`, `listExecutions`, the current Ask/recap/critique routes, and AI scope/UI tests.
 - Produces: an evidence-cited discovery record that a follow-up implementation plan can use to define exact capability inputs, outputs, ownership, bounds, and route cutovers.
 

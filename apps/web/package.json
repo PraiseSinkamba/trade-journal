@@ -5,9 +5,14 @@
   "type": "module",
   "scripts": {
     "dev": "next dev --turbopack",
-    "build": "next build && node scripts/copy-static-build.js",
-    "start": "next start",
-    "typecheck": "next typegen && tsc --noEmit"
+    "dev:journal": "node scripts/run-journal.mjs --mode dev",
+    "build": "next build && node scripts/build-worker.mjs && node scripts/copy-static-build.js",
+    "build:worker": "node scripts/build-worker.mjs",
+    "start": "node .next/standalone/apps/web/scripts/run-journal.mjs --mode production",
+    "typecheck": "next typegen && tsc --noEmit",
+    "migrations:build": "node scripts/build-migration-manifest.mjs",
+    "migrations:check": "node scripts/build-migration-manifest.mjs --check",
+    "intelligence:operations": "node scripts/intelligence-operations.mjs"
   },
   "dependencies": {
     "@ai-sdk/anthropic": "^4.0.41",

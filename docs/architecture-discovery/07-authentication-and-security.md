@@ -14,10 +14,10 @@
 
 ### Password Gate
 
-| Env var | Effect | Default |
-|---------|--------|---------|
-| `JOURNAL_PASSWORD` unset | No auth — all requests pass | Active |
-| `JOURNAL_PASSWORD=...` | Login required; session cookie checked | — |
+| Env var                  | Effect                                 | Default |
+| ------------------------ | -------------------------------------- | ------- |
+| `JOURNAL_PASSWORD` unset | No auth — all requests pass            | Active  |
+| `JOURNAL_PASSWORD=...`   | Login required; session cookie checked | —       |
 
 Login is a single POST to `/api/auth` with `{ password }`. Success sets an `httpOnly` cookie. No username — one password, one session.
 
@@ -48,7 +48,7 @@ jar.set(AUTH_COOKIE, sessionToken(), {
   sameSite: "lax",
   secure: new URL(request.url).protocol === "https:",
   path: "/",
-  maxAge: 60 * 60 * 24 * 30,  // 30 days
+  maxAge: 60 * 60 * 24 * 30, // 30 days
 });
 ```
 
@@ -85,7 +85,7 @@ export const middleware = (request: NextRequest) => {
 
 **Critical limitation:** The middleware only checks for cookie **presence**, not validity. `VERIFIED` for the code; `INFERRED` for the stated reason.
 
-The source comment (`middleware.ts:3-7`) says: *"the middleware runtime has no Node crypto, so it gates navigation while the handlers gate data."* Next 15.5 does support a Node.js middleware runtime, so the constraint is a **choice of the author**, not a hard platform limit — reworded accordingly.
+The source comment (`middleware.ts:3-7`) says: _"the middleware runtime has no Node crypto, so it gates navigation while the handlers gate data."_ Next 15.5 does support a Node.js middleware runtime, so the constraint is a **choice of the author**, not a hard platform limit — reworded accordingly.
 
 The matcher (`middleware.ts:23-24`) is `["/((?!_next/static|_next/image|favicon.ico).*)"]` — everything except Next's static asset paths and the favicon runs through the gate.
 
@@ -117,7 +117,7 @@ export const GET = handler(async (request: Request) => { ... });
 // → { public: true } required for unauthenticated access
 ```
 
-No role checks and no per-resource authorization — the app is single-user. The one meaningful narrowing control is at the **AI boundary**: `readAiRequest` (`apps/web/src/server/ai-scope.ts:50-181`) whitelists the request body fields (`question`/`date`, `filters`, `timeZone`, `dataSource`, `tradeCritiqueKey`), validates `dataSource` against a fixed enum, rejects unknown filter keys, and freezes the resulting scope (`deepFreeze`, `:15-22`). That is scope *narrowing*, not identity-based authorization.
+No role checks and no per-resource authorization — the app is single-user. The one meaningful narrowing control is at the **AI boundary**: `readAiRequest` (`apps/web/src/server/ai-scope.ts:50-181`) whitelists the request body fields (`question`/`date`, `filters`, `timeZone`, `dataSource`, `tradeCritiqueKey`), validates `dataSource` against a fixed enum, rejects unknown filter keys, and freezes the resulting scope (`deepFreeze`, `:15-22`). That is scope _narrowing_, not identity-based authorization.
 
 `ARCH-307`
 
@@ -217,7 +217,7 @@ server/settings.ts:24-29  setSetting → db.insert(settings).values({key, value}
 
 Two corrections to the commonly assumed flow: the settings **row key is `anthropicKeyEnc`** (or `openaiKeyEnc`), not `anthropicKey`; and the write is an **upsert** via `setSetting`, not a `db.update(...).run()`.
 
-Also note `setAiKey` is unconditional — a key saved through the UI is persisted to the DB **even when the same provider's environment variable is already set**. The env var only wins on *read*; it does not prevent storage.
+Also note `setAiKey` is unconditional — a key saved through the UI is persisted to the DB **even when the same provider's environment variable is already set**. The env var only wins on _read_; it does not prevent storage.
 
 The plaintext key never appears in logs.
 
@@ -236,14 +236,14 @@ The plaintext key never appears in logs.
 
 ## 7.5 Credential Exposure Surface
 
-| Credential | Storage | Access |
-|-----------|---------|--------|
-| `JOURNAL_PASSWORD` | env var | Middleware (presence only), Node API handlers (HMAC compare) |
-| AI API keys (`ANTHROPIC_API_KEY`, `OPENAI_API_KEY`) | env var | Node only (runtime) |
-| Saved AI keys (encrypted) | `settings` table, row key `${provider}KeyEnc` | Node only |
-| Broker credentials | `settings` table, AES-256-GCM encrypted | Node only |
-| Encryption key (`.secret`) | `{JOURNAL_DATA_DIR}/.secret` file | Node only |
-| Session cookie | Browser httpOnly cookie | JavaScript: none |
+| Credential                                          | Storage                                       | Access                                                       |
+| --------------------------------------------------- | --------------------------------------------- | ------------------------------------------------------------ |
+| `JOURNAL_PASSWORD`                                  | env var                                       | Middleware (presence only), Node API handlers (HMAC compare) |
+| AI API keys (`ANTHROPIC_API_KEY`, `OPENAI_API_KEY`) | env var                                       | Node only (runtime)                                          |
+| Saved AI keys (encrypted)                           | `settings` table, row key `${provider}KeyEnc` | Node only                                                    |
+| Broker credentials                                  | `settings` table, AES-256-GCM encrypted       | Node only                                                    |
+| Encryption key (`.secret`)                          | `{JOURNAL_DATA_DIR}/.secret` file             | Node only                                                    |
+| Session cookie                                      | Browser httpOnly cookie                       | JavaScript: none                                             |
 
 `ARCH-312`
 
@@ -264,10 +264,7 @@ All route handlers use the `handler()` wrapper which catches exceptions and retu
 
 ```typescript
 // apps/web/src/server/api.ts:33-38
-return NextResponse.json(
-  { error: message },
-  { status: error instanceof RequestError ? 400 : 500 },
-);
+return NextResponse.json({ error: message }, { status: error instanceof RequestError ? 400 : 500 });
 ```
 
 `RequestError` is thrown by `requireValue(...)` for validation failures → 400. Other exceptions → 500. No stack traces in responses.
@@ -278,20 +275,20 @@ return NextResponse.json(
 
 ## 7.7 Static Analysis of Auth Invariants
 
-| Invariant | Status | Evidence |
-|-----------|--------|---------|
-| No auth bypass when `JOURNAL_PASSWORD` unset | VERIFIED — middleware returns early | `middleware.ts:10`; `api.ts:27` |
-| No route is accessible without session when password is set | VERIFIED — handler wrapper checks every route; only `/api/auth` is `public: true` | `api.ts:27-30`; `app/api/auth/route.ts:21` |
-| Password comparison is timing-safe | VERIFIED with caveat — `timingSafeEqual`, guarded by a length check | `auth.ts:20,28` |
-| Session token is HMAC (not MAC-then-compare issue) | VERIFIED — `createHmac` + `timingSafeEqual` | `auth.ts:12-15,28` |
-| **No server-side session expiry** | VERIFIED — `verifySession` checks only the HMAC; no timestamp/TTL is stored or checked | `auth.ts:23-29` |
-| AI keys encrypted at rest | VERIFIED — AES-256-GCM | `crypto.ts:24-34` |
-| AI keys use KDF | VERIFIED — `scryptSync` | `crypto.ts:14` |
-| Broker credentials encrypted at rest | VERIFIED — same `crypto.ts` | `ARCH-309` |
-| CSRF protection | VERIFIED — **no** CSRF token, no `Origin`/`Referer` check anywhere in `apps/web/src`. Mitigated only by `sameSite: "lax"` plus `Content-Type: application/json` on mutating requests | `app/api/auth/route.ts:14`; grep for `csrf\|Origin\|Referer` in `apps/web/src` → zero hits |
-| Login brute-force protection | VERIFIED — **none**. `POST /api/auth` has no attempt counter, delay, or lockout; see `08` §8.8 | `app/api/auth/route.ts:7-19` |
-| No API key in URL params or logs | INFERRED — `resolveAiConfiguration` returns key to runtime only | `settings.ts:119-129` |
-| `OPENAI_API_KEY` / `ANTHROPIC_API_KEY` not **persisted** | PARTIALLY VERIFIED — env vars are never written to the DB, but `setAiKey` stores a UI-entered key unconditionally, even when an env var is also set | `settings.ts:59-61,77-80` |
+| Invariant                                                   | Status                                                                                                                                                                               | Evidence                                                                                   |
+| ----------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ | ------------------------------------------------------------------------------------------ |
+| No auth bypass when `JOURNAL_PASSWORD` unset                | VERIFIED — middleware returns early                                                                                                                                                  | `middleware.ts:10`; `api.ts:27`                                                            |
+| No route is accessible without session when password is set | VERIFIED — handler wrapper checks every route; only `/api/auth` is `public: true`                                                                                                    | `api.ts:27-30`; `app/api/auth/route.ts:21`                                                 |
+| Password comparison is timing-safe                          | VERIFIED with caveat — `timingSafeEqual`, guarded by a length check                                                                                                                  | `auth.ts:20,28`                                                                            |
+| Session token is HMAC (not MAC-then-compare issue)          | VERIFIED — `createHmac` + `timingSafeEqual`                                                                                                                                          | `auth.ts:12-15,28`                                                                         |
+| **No server-side session expiry**                           | VERIFIED — `verifySession` checks only the HMAC; no timestamp/TTL is stored or checked                                                                                               | `auth.ts:23-29`                                                                            |
+| AI keys encrypted at rest                                   | VERIFIED — AES-256-GCM                                                                                                                                                               | `crypto.ts:24-34`                                                                          |
+| AI keys use KDF                                             | VERIFIED — `scryptSync`                                                                                                                                                              | `crypto.ts:14`                                                                             |
+| Broker credentials encrypted at rest                        | VERIFIED — same `crypto.ts`                                                                                                                                                          | `ARCH-309`                                                                                 |
+| CSRF protection                                             | VERIFIED — **no** CSRF token, no `Origin`/`Referer` check anywhere in `apps/web/src`. Mitigated only by `sameSite: "lax"` plus `Content-Type: application/json` on mutating requests | `app/api/auth/route.ts:14`; grep for `csrf\|Origin\|Referer` in `apps/web/src` → zero hits |
+| Login brute-force protection                                | VERIFIED — **none**. `POST /api/auth` has no attempt counter, delay, or lockout; see `08` §8.8                                                                                       | `app/api/auth/route.ts:7-19`                                                               |
+| No API key in URL params or logs                            | INFERRED — `resolveAiConfiguration` returns key to runtime only                                                                                                                      | `settings.ts:119-129`                                                                      |
+| `OPENAI_API_KEY` / `ANTHROPIC_API_KEY` not **persisted**    | PARTIALLY VERIFIED — env vars are never written to the DB, but `setAiKey` stores a UI-entered key unconditionally, even when an env var is also set                                  | `settings.ts:59-61,77-80`                                                                  |
 
 `ARCH-315`
 
@@ -356,23 +353,23 @@ Practical impact: the effective session lifetime is "until the browser drops the
 
 ## Evidence Register
 
-| ID | Source | Status |
-|----|--------|--------|
-| ARCH-301 | `apps/web/src/server/auth.ts:4-6` | VERIFIED |
-| ARCH-302 | `apps/web/src/server/auth.ts:10`; `apps/web/src/middleware.ts:10`; `apps/web/src/server/api.ts:27` | VERIFIED |
-| ARCH-303 | `apps/web/src/server/auth.ts:12-15` | VERIFIED |
-| ARCH-303a | `apps/web/src/server/auth.ts:20,28` — `timingSafeEqual` behind a length check | VERIFIED with caveat |
-| ARCH-304 | `apps/web/src/app/api/auth/route.ts:12-18` (cookie code) | VERIFIED — **file corrected** from `server/auth.ts` |
-| ARCH-305 | `apps/web/src/middleware.ts:9-20` (presence check), `:23-24` (matcher) | VERIFIED (code) / INFERRED (Edge rationale) |
-| ARCH-306 | `apps/web/src/server/api.ts:27-30` | VERIFIED |
-| ARCH-307 | `apps/web/src/server/api.ts:20-40`; `apps/web/src/app/api/auth/route.ts:21` | VERIFIED |
-| ARCH-308 | `apps/web/src/server/settings.ts:119-129` (`resolveAiConfiguration`, field `modelId`), `:59-75` (resolution order) | VERIFIED — **signature corrected** |
-| ARCH-309 | `apps/web/src/server/crypto.ts:12-22` (KDF), `:24-34` (encryptJson), `:36-46` (decryptJson) | VERIFIED |
-| ARCH-310 | `apps/web/src/app/api/settings/route.ts:47,133-134`; `apps/web/src/server/settings.ts:77-80`; `:24-29` | VERIFIED — **flow corrected**: row key `anthropicKeyEnc`, upsert via `setSetting` |
-| ARCH-311 | `apps/web/src/server/ai-runtime.ts:145,199,262,304` (`store: false`), `:66-111` (`mapAiRuntimeError`) | VERIFIED |
-| ARCH-312 | `apps/web/src/server/settings.ts`, `crypto.ts`, `auth.ts` | VERIFIED |
-| ARCH-313 | `apps/web/src/server/api.ts:33`; `apps/web/src/server/ai-runtime.ts` | INFERRED |
-| ARCH-314 | `apps/web/src/server/api.ts:33-38` | VERIFIED |
-| ARCH-315 | `auth.ts`, `crypto.ts`, `api.ts`, `settings.ts`, `middleware.ts` | VERIFIED |
-| ARCH-315a | `apps/web/src/server/auth.ts:23-29` (`verifySession` — no expiry check); `apps/web/src/app/api/auth/route.ts:17` (browser-only `maxAge`) | VERIFIED — **no server-side session expiry** |
-| ARCH-315c | `apps/web/src/server/settings.ts:59-61,77-80` | PARTIALLY VERIFIED — env vars not persisted, but `setAiKey` stores unconditionally |
+| ID        | Source                                                                                                                                   | Status                                                                             |
+| --------- | ---------------------------------------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------- |
+| ARCH-301  | `apps/web/src/server/auth.ts:4-6`                                                                                                        | VERIFIED                                                                           |
+| ARCH-302  | `apps/web/src/server/auth.ts:10`; `apps/web/src/middleware.ts:10`; `apps/web/src/server/api.ts:27`                                       | VERIFIED                                                                           |
+| ARCH-303  | `apps/web/src/server/auth.ts:12-15`                                                                                                      | VERIFIED                                                                           |
+| ARCH-303a | `apps/web/src/server/auth.ts:20,28` — `timingSafeEqual` behind a length check                                                            | VERIFIED with caveat                                                               |
+| ARCH-304  | `apps/web/src/app/api/auth/route.ts:12-18` (cookie code)                                                                                 | VERIFIED — **file corrected** from `server/auth.ts`                                |
+| ARCH-305  | `apps/web/src/middleware.ts:9-20` (presence check), `:23-24` (matcher)                                                                   | VERIFIED (code) / INFERRED (Edge rationale)                                        |
+| ARCH-306  | `apps/web/src/server/api.ts:27-30`                                                                                                       | VERIFIED                                                                           |
+| ARCH-307  | `apps/web/src/server/api.ts:20-40`; `apps/web/src/app/api/auth/route.ts:21`                                                              | VERIFIED                                                                           |
+| ARCH-308  | `apps/web/src/server/settings.ts:119-129` (`resolveAiConfiguration`, field `modelId`), `:59-75` (resolution order)                       | VERIFIED — **signature corrected**                                                 |
+| ARCH-309  | `apps/web/src/server/crypto.ts:12-22` (KDF), `:24-34` (encryptJson), `:36-46` (decryptJson)                                              | VERIFIED                                                                           |
+| ARCH-310  | `apps/web/src/app/api/settings/route.ts:47,133-134`; `apps/web/src/server/settings.ts:77-80`; `:24-29`                                   | VERIFIED — **flow corrected**: row key `anthropicKeyEnc`, upsert via `setSetting`  |
+| ARCH-311  | `apps/web/src/server/ai-runtime.ts:145,199,262,304` (`store: false`), `:66-111` (`mapAiRuntimeError`)                                    | VERIFIED                                                                           |
+| ARCH-312  | `apps/web/src/server/settings.ts`, `crypto.ts`, `auth.ts`                                                                                | VERIFIED                                                                           |
+| ARCH-313  | `apps/web/src/server/api.ts:33`; `apps/web/src/server/ai-runtime.ts`                                                                     | INFERRED                                                                           |
+| ARCH-314  | `apps/web/src/server/api.ts:33-38`                                                                                                       | VERIFIED                                                                           |
+| ARCH-315  | `auth.ts`, `crypto.ts`, `api.ts`, `settings.ts`, `middleware.ts`                                                                         | VERIFIED                                                                           |
+| ARCH-315a | `apps/web/src/server/auth.ts:23-29` (`verifySession` — no expiry check); `apps/web/src/app/api/auth/route.ts:17` (browser-only `maxAge`) | VERIFIED — **no server-side session expiry**                                       |
+| ARCH-315c | `apps/web/src/server/settings.ts:59-61,77-80`                                                                                            | PARTIALLY VERIFIED — env vars not persisted, but `setAiKey` stores unconditionally |

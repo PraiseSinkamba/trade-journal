@@ -6,6 +6,11 @@ import {
   mapDealToExecution,
 } from "@/server/ctrader-mcp/deals";
 import { findAssetClass } from "@/server/ctrader-mcp/symbols";
+import {
+  classifyExecutionEvidence,
+  isSyntheticExecutionId,
+  SYNTHETIC_EXECUTION_ID_PREFIX,
+} from "@/server/trading/projection";
 
 const localDeal = {
   orderId: 12345,
@@ -209,5 +214,96 @@ describe("deal × symbol join (Local)", () => {
     expect(deals[0]!.symbolName).toBe("NAS100");
     expect(ex.symbol).toBe("NAS100");
     expect(ex.assetClass).toBe("cfd");
+  });
+});
+
+describe("classifyExecutionEvidence (Local)", () => {
+  const syntheticFill = { sourceId: `${SYNTHETIC_EXECUTION_ID_PREFIX}close-1` };
+
+  it("never calls a synthetic opening fill source-reported", () => {
+    expect(
+      classifyExecutionEvidence(syntheticFill, {
+        sourceKind: "ctrader_synthetic_open",
+        sourceReportedTime: true,
+        reconstructedTime: true,
+        synthetic: true,
+      }),
+    ).toEqual({ timingQuality: "reconstructed", sourceKind: "ctrader_synthetic_open" });
+
+    expect(
+      classifyExecutionEvidence(syntheticFill, {
+        sourceKind: "ctrader_synthetic_open",
+        sourceReportedTime: true,
+        reconstructedTime: false,
+        synthetic: true,
+      }).timingQuality,
+    ).toBe("unknown");
+  });
+
+  it("keeps a legacy synthetic entry unknown rather than guessing it", () => {
+    expect(
+      classifyExecutionEvidence(syntheticFill, {
+        sourceKind: "ctrader_synthetic_open",
+        sourceReportedTime: false,
+        reconstructedTime: false,
+        synthetic: true,
+      }).timingQuality,
+    ).toBe("unknown");
+  });
+
+  it("calls a real cTrader deal source-reported", () => {
+    expect(
+      classifyExecutionEvidence(
+        { sourceId: "12345:2026-09-30T12:00:00Z:1000:1.2345" },
+        {
+          sourceKind: "ctrader_deal",
+          sourceReportedTime: true,
+          reconstructedTime: false,
+          synthetic: false,
+        },
+      ),
+    ).toEqual({ timingQuality: "source_reported", sourceKind: "ctrader_deal" });
+  });
+
+  it("calls a fill whose time came from other source records reconstructed", () => {
+    expect(
+      classifyExecutionEvidence(
+        { sourceId: "42:2026-09-30T12:00:00Z:1000:1.2345" },
+        {
+          sourceKind: "ctrader_order_history",
+          sourceReportedTime: false,
+          reconstructedTime: true,
+          synthetic: false,
+        },
+      ).timingQuality,
+    ).toBe("reconstructed");
+  });
+
+  it("marks the opening fill the mapper invents as synthetic", () => {
+    const [entry] = mapClosedPositionToExecutions(
+      {
+        orderId: 395217525,
+        positionId: 626745677,
+        symbolName: "NAS100",
+        dealType: "close",
+        side: "Sell" as const,
+        filledVolume: 0.1,
+        executionPrice: 29555,
+        entryPrice: 29447.1,
+        pips: -107.9,
+        grossProfit: -10.79,
+        commission: 0,
+        swap: 0,
+        netProfit: -10.79,
+        label: "",
+        comment: "",
+        time: "2026-10-15T14:01:25.056Z",
+      },
+      "NAS100",
+      "cfd",
+      5,
+    );
+    expect(isSyntheticExecutionId(entry?.importMetadata?.id ?? null)).toBe(true);
+    expect(entry?.importMetadata?.id.startsWith(SYNTHETIC_EXECUTION_ID_PREFIX)).toBe(true);
   });
 });

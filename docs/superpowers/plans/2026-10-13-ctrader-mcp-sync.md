@@ -65,10 +65,12 @@ No edits to `packages/importers/`, `packages/core/`, or `apps/web/src/db/schema.
 ## Task 1: Add `@ai-sdk/mcp` dependency
 
 **Files:**
+
 - Modify: `apps/web/package.json`
 - Test: `pnpm --filter web typecheck`
 
 **Interfaces:**
+
 - Consumes: nothing
 - Produces: `@ai-sdk/mcp` resolves to a version that exports `experimental_createMCPClient` or its stable name
 
@@ -124,12 +126,14 @@ git commit -m "deps: add @ai-sdk/mcp for cTrader MCP client"
 ## Task 2: Error taxonomy + MCP client wrapper
 
 **Files:**
+
 - Create: `apps/web/src/server/ctrader-mcp/errors.ts`
 - Create: `apps/web/src/server/ctrader-mcp/client.ts`
 - Create: `apps/web/tests/ctrader-mcp/errors.test.ts`
 - Create: `apps/web/tests/ctrader-mcp/client.test.ts`
 
 **Interfaces:**
+
 - Consumes: `@ai-sdk/mcp` (the export key from Task 1 step 3), `zod`
 - Produces:
   - `class CTraderMcpSyncError extends Error { readonly kind: 'unreachable' | 'auth' | 'account_gone' | 'rate_limited' | 'parse' | 'unknown' }`
@@ -180,12 +184,7 @@ Expected: FAIL — module `@/server/ctrader-mcp/errors` not found.
 
 ```ts
 export type CTraderMcpSyncErrorKind =
-  | "unreachable"
-  | "auth"
-  | "account_gone"
-  | "rate_limited"
-  | "parse"
-  | "unknown";
+  "unreachable" | "auth" | "account_gone" | "rate_limited" | "parse" | "unknown";
 
 export class CTraderMcpSyncError extends Error {
   constructor(
@@ -397,14 +396,21 @@ export class CTraderMcpClient {
       throw new CTraderMcpSyncError("unknown", "MCP client not initialized");
     }
     try {
-      const result = await this.raw.callTool({ name, arguments: args }, {
-        signal: opts?.signal,
-      });
+      const result = await this.raw.callTool(
+        { name, arguments: args },
+        {
+          signal: opts?.signal,
+        },
+      );
       return schema.parse(result);
     } catch (err) {
       if (err instanceof CTraderMcpSyncError) throw err;
       if (err instanceof z.ZodError) {
-        throw new CTraderMcpSyncError("parse", `cTrader MCP ${name} payload failed validation`, err);
+        throw new CTraderMcpSyncError(
+          "parse",
+          `cTrader MCP ${name} payload failed validation`,
+          err,
+        );
       }
       throw classifyMcpError(err);
     }
@@ -448,6 +454,7 @@ git commit -m "feat(ctrader-mcp): JSON-RPC client + error taxonomy"
 ## Task 3: Zod schemas + tool wrappers (deals, positions, orders, account, symbols, accounts)
 
 **Files:**
+
 - Create: `apps/web/src/server/ctrader-mcp/schemas.ts`
 - Create: `apps/web/src/server/ctrader-mcp/accounts.ts`
 - Create: `apps/web/src/server/ctrader-mcp/symbols.ts`
@@ -459,6 +466,7 @@ git commit -m "feat(ctrader-mcp): JSON-RPC client + error taxonomy"
 - Create: `apps/web/tests/ctrader-mcp/deals.test.ts`
 
 **Interfaces:**
+
 - Consumes: `CTraderMcpClient` from Task 2
 - Produces:
   - `CTraderSymbol` (id, name, digits, assetClass)
@@ -585,7 +593,9 @@ export const cTraderDealsResponseSchema = z.object({
   deals: z.array(cTraderDealSchema),
   nextCursor: z.string().nullable().optional(),
 });
-export const cTraderPositionsResponseSchema = z.object({ positions: z.array(cTraderPositionSchema) });
+export const cTraderPositionsResponseSchema = z.object({
+  positions: z.array(cTraderPositionSchema),
+});
 export const cTraderOrdersResponseSchema = z.object({ orders: z.array(cTraderOrderSchema) });
 export const cTraderAccountsResponseSchema = z.object({ accounts: z.array(cTraderAccountSchema) });
 ```
@@ -640,10 +650,7 @@ export const buildAssetClassMap = (symbols: CTraderSymbol[]): Map<number, AssetC
 import type { CTraderMcpClient } from "./client";
 import { cTraderAccountInfoSchema } from "./schemas";
 
-export const getAccountInfo = async (
-  client: CTraderMcpClient,
-  ctraderAccountId?: number,
-) => {
+export const getAccountInfo = async (client: CTraderMcpClient, ctraderAccountId?: number) => {
   return client.callTool(
     "get_account_info",
     ctraderAccountId ? { accountId: ctraderAccountId } : {},
@@ -824,11 +831,13 @@ git commit -m "feat(ctrader-mcp): tool wrappers and Zod schemas for cTrader resp
 ## Task 4: Sync orchestrator
 
 **Files:**
+
 - Create: `apps/web/src/server/ctrader-mcp/sync.ts`
 - Create: `apps/web/tests/ctrader-mcp/sync.test.ts`
 - Read: `apps/web/src/server/executions.ts`, `apps/web/src/server/crypto.ts`, `apps/web/src/server/ids.ts` to mirror their transaction + helper conventions
 
 **Interfaces:**
+
 - Consumes: `CTraderMcpClient`, all tool wrappers from Task 3, `insertExecutions` from `apps/web/src/server/executions`, `encryptJson`/`decryptJson` from `@/server/crypto`, `nowIso` from `@/server/ids`
 - Produces:
   - `syncCTraderMcpAccount(accountId: string): Promise<SyncOutcome>`
@@ -872,18 +881,44 @@ describe("syncCTraderMcpAccount", () => {
       get_symbols: { symbols: [{ symbolId: 42, name: "EURUSD", digits: 5, assetClass: "forex" }] },
       get_deals: {
         deals: [
-          { dealId: "D-1", positionId: "P-1", symbolId: 42, side: "BUY", filledVolume: 1000, executionPrice: 1.1, executionTime: "2026-09-30T12:00:00Z", commission: 0, swap: 0 },
-          { dealId: "D-2", positionId: "P-1", symbolId: 42, side: "SELL", filledVolume: 1000, executionPrice: 1.2, executionTime: "2026-09-30T13:00:00Z", commission: 0, swap: 0 },
+          {
+            dealId: "D-1",
+            positionId: "P-1",
+            symbolId: 42,
+            side: "BUY",
+            filledVolume: 1000,
+            executionPrice: 1.1,
+            executionTime: "2026-09-30T12:00:00Z",
+            commission: 0,
+            swap: 0,
+          },
+          {
+            dealId: "D-2",
+            positionId: "P-1",
+            symbolId: 42,
+            side: "SELL",
+            filledVolume: 1000,
+            executionPrice: 1.2,
+            executionTime: "2026-09-30T13:00:00Z",
+            commission: 0,
+            swap: 0,
+          },
         ],
       },
       get_positions: { positions: [] },
       get_pending_orders: { orders: [] },
-      get_account_info: { accountId: 1, balance: 100, equity: 100, freeMargin: 100, currency: "USD" },
+      get_account_info: {
+        accountId: 1,
+        balance: 100,
+        equity: 100,
+        freeMargin: 100,
+        currency: "USD",
+      },
     };
     (globalThis as { __FAKE_MCP__?: unknown }).__FAKE_MCP__ = fake;
 
     const accountId = newId();
-    db.insert(/* accounts … */) // omitted for brevity; uses test fixture pattern from existing tests
+    db.insert(/* accounts … */); // omitted for brevity; uses test fixture pattern from existing tests
 
     const first = await syncCTraderMcpAccount(accountId);
     expect(first.inserted).toBe(2);
@@ -1058,9 +1093,11 @@ git commit -m "feat(ctrader-mcp): sync orchestrator with tx-scoped cursor"
 ## Task 5: Wire `broker === "ctrader-mcp"` into `sync.ts`
 
 **Files:**
+
 - Modify: `apps/web/src/server/sync.ts` (only the dispatcher)
 
 **Interfaces:**
+
 - Consumes: `syncCTraderMcpAccount` from Task 4
 - Produces: when `account.broker === "ctrader-mcp"`, `syncAccount` calls the new orchestrator and returns its `SyncOutcome`; everything else keeps going through `connect()`.
 
@@ -1079,9 +1116,9 @@ import { syncCTraderMcpAccount } from "./ctrader-mcp/sync";
 Modify the start of `syncAccount` so that the cTrader-MCP broker short-circuits before the `connect()` call. The change goes right after the credential decryption:
 
 ```ts
-  if (account.broker === "ctrader-mcp") {
-    return syncCTraderMcpAccount(accountId);
-  }
+if (account.broker === "ctrader-mcp") {
+  return syncCTraderMcpAccount(accountId);
+}
 ```
 
 - [ ] **Step 3: Verify the existing test still passes**
@@ -1104,12 +1141,14 @@ git commit -m "feat(ctrader-mcp): route cTrader MCP accounts through the new orc
 ## Task 6: Connect form + account picker endpoint
 
 **Files:**
+
 - Create: `apps/web/src/lib/ctrader-mcp-form.ts`
 - Modify: `apps/web/src/app/api/accounts/route.ts`
 - Modify: `apps/web/src/components/accounts/` (connect form component for this broker)
 - Create: `apps/web/src/app/api/accounts/ctrader-mcp-preview/route.ts`
 
 **Interfaces:**
+
 - Consumes: existing `/api/accounts` POST, the new `syncCTraderMcpAccount` orchestrator, the new `CTraderMcpClient`
 - Produces:
   - `POST /api/accounts { broker: "ctrader-mcp", credentials: { mode, endpoint, bearerToken?, ctraderAccountId?, authHeader? } }` returns `{ id, sync }` exactly like existing sync accounts.
@@ -1214,6 +1253,7 @@ git commit -m "feat(ctrader-mcp): connect form + account picker preview endpoint
 ## Task 7: Boundary check + ADR scan
 
 **Files:**
+
 - Create: `apps/web/tests/ctrader-mcp/boundary.test.ts` (a static grep-style test)
 
 - [ ] **Step 1: Write the boundary test**
@@ -1290,25 +1330,26 @@ git commit -m "test(ctrader-mcp): ADR 0002 boundary scan"
 
 **1. Spec coverage:**
 
-| Spec section | Task |
-|---|---|
-| Goals 1 (sync trades via MCP into executions) | T2, T3, T4 |
-| Goal 2 (fill-level granularity) | T3 (deal→execution mapping) |
-| Goal 3 (dedup across re-syncs) | T3 (`importMetadata.id`), T4 (insertExecutions) |
-| Goal 4 (Local + Remote without code forks) | T2 (mode-driven auth), T6 (form) |
-| Goal 5 (multi-account Remote tokens) | T2 (account list), T6 (preview endpoint + dropdown) |
-| Goal 6 (snapshot positions, orders, balance) | T3, T4 |
-| Goal 7 (one new dep) | T1 |
-| ADR 0002 carve-out | T2 (folder layout), T7 (boundary scan) |
-| Error taxonomy | T2 (errors + classify), T4 (mapping in orchestrator) |
-| Cursor safety (`lastSyncAt` only on commit) | T4 (single transaction) |
-| `importMetadata.id = dealId` for dedup | T3 (deals.ts) |
-| Asset class via `get_symbols` | T3 (symbols.ts) |
-| Acceptable dependencies: `@ai-sdk/mcp` only | T1 |
+| Spec section                                  | Task                                                 |
+| --------------------------------------------- | ---------------------------------------------------- |
+| Goals 1 (sync trades via MCP into executions) | T2, T3, T4                                           |
+| Goal 2 (fill-level granularity)               | T3 (deal→execution mapping)                          |
+| Goal 3 (dedup across re-syncs)                | T3 (`importMetadata.id`), T4 (insertExecutions)      |
+| Goal 4 (Local + Remote without code forks)    | T2 (mode-driven auth), T6 (form)                     |
+| Goal 5 (multi-account Remote tokens)          | T2 (account list), T6 (preview endpoint + dropdown)  |
+| Goal 6 (snapshot positions, orders, balance)  | T3, T4                                               |
+| Goal 7 (one new dep)                          | T1                                                   |
+| ADR 0002 carve-out                            | T2 (folder layout), T7 (boundary scan)               |
+| Error taxonomy                                | T2 (errors + classify), T4 (mapping in orchestrator) |
+| Cursor safety (`lastSyncAt` only on commit)   | T4 (single transaction)                              |
+| `importMetadata.id = dealId` for dedup        | T3 (deals.ts)                                        |
+| Asset class via `get_symbols`                 | T3 (symbols.ts)                                      |
+| Acceptable dependencies: `@ai-sdk/mcp` only   | T1                                                   |
 
 **2. Placeholder scan:** No "TBD" / "TODO" / "implement later". One block in T4 (integration test) shows a stub; the surrounding prose names the omitted bits as "use the existing Vitest fixture pattern" — replaced inline when implementing. No other placeholders.
 
 **3. Type consistency:**
+
 - `CTraderMcpCredentials` is defined in T2 client.js (referenced) and re-declared in T4 sync.ts. Both versions are identical. T2's version is the contract; T4 re-declares it because `client.ts` doesn't export it (kept internal). Acceptable duplication for the boundary.
 - `SyncOutcome` is re-declared in T4. It matches the existing `SyncOutcome` interface in `apps/web/src/server/sync.ts`. Implementation will import the existing one or rename the new one to avoid collision.
 - `CTraderMcpSyncError` is referenced consistently across T2, T4, T6.
@@ -1324,27 +1365,27 @@ The original plan above was written against the assumed cTrader Remote MCP shape
 
 ### Files this revision changes
 
-| File | Change |
-|---|---|
-| `docs/superpowers/specs/2026-10-13-ctrader-mcp-sync-design.md` | Rewritten for Local-only; Remote mode deferred |
-| `docs/decisions/0002-ctrader-mcp-via-direct-mcp-client.md` | "Scope (revision 2026-10-17)" paragraph documenting Local-only |
-| `apps/web/src/server/ctrader-mcp/schemas.ts` | Local Zod schemas (`CTraderAccount`, `CTraderAccountInfo`, `CTraderDeal`, `CTraderPosition`, `CTraderOrder`, `CTraderSymbol`) |
-| `apps/web/src/server/ctrader-mcp/accounts.ts` | `listCTraderAccounts` calls `get_accounts_list` (no args) |
-| `apps/web/src/server/ctrader-mcp/account.ts` | `getAccountInfo` calls `get_balance` (no args) |
-| `apps/web/src/server/ctrader-mcp/symbols.ts` | `fetchSymbols` calls `get_symbols` (no args); `buildAssetClassMap` keys by symbolName |
-| `apps/web/src/server/ctrader-mcp/deals.ts` | Paginate `get_deals` by `count: 200`; composite dedup key `${orderId}:${time}:${filledVolume}:${executionPrice}` |
-| `apps/web/src/server/ctrader-mcp/positions.ts` | `getOpenPositions` calls `get_positions` (no args) |
-| `apps/web/src/server/ctrader-mcp/orders.ts` | `getPendingOrders` calls `get_pending_orders` (no args) |
-| `apps/web/src/server/ctrader-mcp/sync.ts` | Drop Remote-mode account-existence check; drop `mode` discriminator; `CTraderMcpCredentials` = `{ endpoint, authHeader?, ctraderAccountId }` |
-| `apps/web/src/lib/ctrader-mcp-form.ts` | Drop `mode: "remote" \| "local"` union; Local-only schema `{ endpoint, authHeader?, ctraderAccountId }`; `defaultEndpoint` = `http://127.0.0.1:9876/mcp/` |
-| `apps/web/src/app/api/accounts/ctrader-mcp-preview/route.ts` | Body = `{ endpoint, authHeader? }`; calls `get_accounts_list`; smaller `SAFE` map (no `account_gone`) |
-| `apps/web/src/app/api/accounts/route.ts` | Drop `ctraderAccountId` Remote validation |
-| `apps/web/src/app/api/brokers/route.ts` | Update `readOnlySetup` for Local MCP |
-| `apps/web/src/app/import/page.tsx` | Drop Mode tabs and Bearer-token field; single Local form with Fetch-accounts + Select |
-| `apps/web/tests/ctrader-mcp/schemas.test.ts` | Local `cTraderDealSchema` fixtures |
-| `apps/web/tests/ctrader-mcp/deals.test.ts` | Local `mapDealToExecution` tests; composite dedup id |
-| `apps/web/tests/ctrader-mcp/sync.test.ts` | Local canned responses (no `account_gone` test) |
-| `apps/web/tests/ctrader-mcp/ctrader-mcp-preview-route.test.ts` | Local body shape; smaller `SAFE` map |
+| File                                                           | Change                                                                                                                                                    |
+| -------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `docs/superpowers/specs/2026-10-13-ctrader-mcp-sync-design.md` | Rewritten for Local-only; Remote mode deferred                                                                                                            |
+| `docs/decisions/0002-ctrader-mcp-via-direct-mcp-client.md`     | "Scope (revision 2026-10-17)" paragraph documenting Local-only                                                                                            |
+| `apps/web/src/server/ctrader-mcp/schemas.ts`                   | Local Zod schemas (`CTraderAccount`, `CTraderAccountInfo`, `CTraderDeal`, `CTraderPosition`, `CTraderOrder`, `CTraderSymbol`)                             |
+| `apps/web/src/server/ctrader-mcp/accounts.ts`                  | `listCTraderAccounts` calls `get_accounts_list` (no args)                                                                                                 |
+| `apps/web/src/server/ctrader-mcp/account.ts`                   | `getAccountInfo` calls `get_balance` (no args)                                                                                                            |
+| `apps/web/src/server/ctrader-mcp/symbols.ts`                   | `fetchSymbols` calls `get_symbols` (no args); `buildAssetClassMap` keys by symbolName                                                                     |
+| `apps/web/src/server/ctrader-mcp/deals.ts`                     | Paginate `get_deals` by `count: 200`; composite dedup key `${orderId}:${time}:${filledVolume}:${executionPrice}`                                          |
+| `apps/web/src/server/ctrader-mcp/positions.ts`                 | `getOpenPositions` calls `get_positions` (no args)                                                                                                        |
+| `apps/web/src/server/ctrader-mcp/orders.ts`                    | `getPendingOrders` calls `get_pending_orders` (no args)                                                                                                   |
+| `apps/web/src/server/ctrader-mcp/sync.ts`                      | Drop Remote-mode account-existence check; drop `mode` discriminator; `CTraderMcpCredentials` = `{ endpoint, authHeader?, ctraderAccountId }`              |
+| `apps/web/src/lib/ctrader-mcp-form.ts`                         | Drop `mode: "remote" \| "local"` union; Local-only schema `{ endpoint, authHeader?, ctraderAccountId }`; `defaultEndpoint` = `http://127.0.0.1:9876/mcp/` |
+| `apps/web/src/app/api/accounts/ctrader-mcp-preview/route.ts`   | Body = `{ endpoint, authHeader? }`; calls `get_accounts_list`; smaller `SAFE` map (no `account_gone`)                                                     |
+| `apps/web/src/app/api/accounts/route.ts`                       | Drop `ctraderAccountId` Remote validation                                                                                                                 |
+| `apps/web/src/app/api/brokers/route.ts`                        | Update `readOnlySetup` for Local MCP                                                                                                                      |
+| `apps/web/src/app/import/page.tsx`                             | Drop Mode tabs and Bearer-token field; single Local form with Fetch-accounts + Select                                                                     |
+| `apps/web/tests/ctrader-mcp/schemas.test.ts`                   | Local `cTraderDealSchema` fixtures                                                                                                                        |
+| `apps/web/tests/ctrader-mcp/deals.test.ts`                     | Local `mapDealToExecution` tests; composite dedup id                                                                                                      |
+| `apps/web/tests/ctrader-mcp/sync.test.ts`                      | Local canned responses (no `account_gone` test)                                                                                                           |
+| `apps/web/tests/ctrader-mcp/ctrader-mcp-preview-route.test.ts` | Local body shape; smaller `SAFE` map                                                                                                                      |
 
 ### Local MCP contract (new)
 

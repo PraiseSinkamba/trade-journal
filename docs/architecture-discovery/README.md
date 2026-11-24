@@ -1,5 +1,7 @@
 # Architecture Discovery — Progress Tracker
 
+> **HISTORICAL PRE-MODERNIZATION:** This audit preserves the architecture observed before the intelligence modernization. Its absence claims and runtime descriptions are not current operating guidance. Start with [Intelligence onboarding](../intelligence.md) and the [operations runbook](../intelligence-operations.md) for the shipped system.
+
 > Read-only investigation of the trade-journal monorepo for downstream AI-architecture redesign.
 
 | Phase | Report                                   | Status   | Subagent                               | Notes                                      |

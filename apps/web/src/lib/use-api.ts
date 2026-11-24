@@ -66,6 +66,22 @@ export const useApi = <T>(url: string | null): ApiState<T> => {
   };
 };
 
+/**
+ * A failed request.
+ *
+ * The status is carried so a caller can tell a stale action (409) from a
+ * refused one (403) from a broken one (500) without reading the message.
+ */
+export class ApiError extends Error {
+  readonly status: number;
+
+  constructor(message: string, status: number) {
+    super(message);
+    this.name = "ApiError";
+    this.status = status;
+  }
+}
+
 export const postJson = async <T = unknown>(
   url: string,
   body: unknown,
@@ -76,7 +92,13 @@ export const postJson = async <T = unknown>(
     headers: { "Content-Type": "application/json" },
     body: body === undefined ? undefined : JSON.stringify(body),
   });
-  const data = (await response.json()) as T & { error?: string };
-  if (!response.ok) throw new Error(data.error ?? `Request failed (${response.status})`);
+  // A body that is not JSON cannot be read. A success that cannot be read is
+  // a failure, not an empty answer, so the status carries it.
+  const data = (await response.json().catch(() => undefined)) as
+    (T & { error?: string }) | undefined;
+  if (!response.ok)
+    throw new ApiError(data?.error ?? `Request failed (${response.status})`, response.status);
+  if (data === undefined)
+    throw new ApiError(`Request failed (${response.status})`, response.status);
   return data;
 };

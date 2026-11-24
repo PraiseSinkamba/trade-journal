@@ -1,223 +1,241 @@
 # Trade Journal Desktop
 
-A self-contained Windows desktop application for the Trade Journal trading journal application. The app bundles a Node.js 24 runtime and the Next.js standalone server, presenting the journal UI in a native Tauri webview window.
+A self-contained Windows desktop application for the Trade Journal trading journal. It bundles a
+Node.js 24 sidecar and the packaged journal tree, and presents the journal UI in a native Tauri
+webview.
 
-## Quickstart
-
-Download the latest installer and run it:
-
-- **MSI**: `desktop/src-tauri/target/release/bundle/msi/Trade Journal_0.1.0_x64_en-US.msi`
-- **NSIS**: `desktop/src-tauri/target/release/bundle/nsis/Trade Journal_0.1.0_x64-setup.exe`
-
-After installation, launch **Trade Journal** from the Start Menu. The app will:
-1. Open a 1400×900 window titled "Trade Journal"
-2. Start the embedded Next.js server in the background
-3. Load the journal UI in the webview
-
-On first launch, data is stored under `%APPDATA%\TradeJournal\data\journal.db`.
-
-## Development
-
-### Prerequisites
-
-- pnpm 9+
-- Rust 1.91+ and Cargo
-- The Node.js 24 sidecar binary is **not** checked in. Run `pnpm setup:sidecar` once after cloning to download `node-v24.11.0-win-x64.zip` from nodejs.org, extract `node.exe`, rename it to the Tauri-required triple-suffixed file, and verify its SHA-256. Re-runs are a no-op when the file is already present and hash-matches.
-
-### First-time setup
-
-```bash
-# from the repo root
-pnpm --filter desktop setup:sidecar   # downloads binaries/node-x86_64-pc-windows-msvc.exe
-pnpm --filter desktop setup:icons     # optional, icons are already committed
-```
-
-### Dev workflow
-
-```bash
-# Build the Next.js standalone (requires Node 24 — use the sidecar you just downloaded)
-pnpm --filter web build
-# OR run the dev server straight from the Next.js workspace
-pnpm --filter web dev
-
-# Run Tauri in dev mode (spawns Next.js from resource dir)
-pnpm --filter desktop tauri dev
-```
-
-### Rebuilding after source changes
-
-If you modify `apps/web/src/`, rebuild the Next.js standalone first, then run:
-
-```bash
-pnpm --filter web build
-pnpm --filter desktop tauri build
-```
-
-## Build
-
-### Build outputs
-
-| Artifact | Path |
-|---|---|
-| MSI installer | `desktop/src-tauri/target/release/bundle/msi/Trade Journal_0.1.0_x64_en-US.msi` |
-| NSIS installer | `desktop/src-tauri/target/release/bundle/nsis/Trade Journal_0.1.0_x64-setup.exe` |
-| Standalone exe | `desktop/src-tauri/target/release/trade-journal-desktop.exe` |
-
-### Build requirements
-
-- ~2GB disk space on the volume holding `CARGO_TARGET_DIR` and `TAURI_BUNDLER_CACHE` (default: `E:\build-cache\`)
-- WiX (downloaded automatically by Tauri for MSI bundling)
-- NSIS (downloaded automatically for the NSIS installer)
-
-### Build storage on E:
-
-All Rust and Tauri build storage is redirected off `C:` to `E:` via persistent user-scope environment variables. Set them once and every future session uses them:
-
-| Variable | Value | What it redirects |
-|---|---|---|
-| `CARGO_HOME` | `E:\build-cache\cargo` | Cargo registry, git checkouts, build cache |
-| `CARGO_TARGET_DIR` | `E:\build-cache\target` | All `cargo build` artifacts (Tauri Rust compilation) |
-| `TAURI_BUNDLER_CACHE` | `E:\build-cache\tauri` | WiX + NSIS toolchain downloads |
-
-To (re)set:
-
-```powershell
-[Environment]::SetEnvironmentVariable('CARGO_HOME', 'E:\build-cache\cargo', 'User')
-[Environment]::SetEnvironmentVariable('CARGO_TARGET_DIR', 'E:\build-cache\target', 'User')
-[Environment]::SetEnvironmentVariable('TAURI_BUNDLER_CACHE', 'E:\build-cache\tauri', 'User')
-```
-
-Open a fresh terminal after setting.
-
-### Build steps
-
-```bash
-# 1. Make sure the sidecar binary is present (no-op if already downloaded)
-pnpm --filter desktop setup:sidecar
-
-# 2. Build Next.js standalone
-pnpm --filter web build
-
-# 3. Build Tauri app (produces both MSI and NSIS)
-pnpm --filter desktop tauri build
-```
-
-## Project layout
-
-```
-desktop/
-  src-tauri/
-    src/
-      main.rs          # Tauri entry point
-      server.rs        # Next.js sidecar spawn + port discovery
-    binaries/          # .gitkeep only; node.exe is downloaded by `pnpm setup:sidecar`
-    scripts/
-      gen_icons/       # `cargo run` regenerates icons/* into ../icons/
-      setup-sidecar-node.{ps1,sh}  # Idempotent Node sidecar installer
-    tauri.conf.json    # App config, bundle targets, resources
-  scripts/
-    run-sidecar-setup.js   # Cross-platform dispatcher for setup-sidecar-node.*
-  package.json
-
-apps/web/
-  .next/standalone/    # Next.js standalone server output
-  .next/tauri-dist/   # Webview assets (static build, no node_modules)
-  scripts/
-    copy-static-build.js  # Copies standalone + static for Tauri bundling
-```
-
-## How it works
+## What the app does at runtime
 
 ```
 trade-journal-desktop.exe
-  ├── Spawns: node-x86_64-pc-windows-msvc.exe apps/web/server.js
-  │   ├── PORT=0 (ephemeral port)
-  │   ├── JOURNAL_DATA_DIR=%APPDATA%/TradeJournal/data
-  │   ├── NODE_ENV=production
-  │   └── stdout → regex extracts assigned port (e.g. "Local: http://127.0.0.1:38472")
-  │
-  └── Webview window → http://127.0.0.1:<discovered-port>
+  ├── picks a free loopback port (127.0.0.1:0 → reads the assigned port → releases it)
+  ├── spawns ONE managed child:
+  │     node-x86_64-pc-windows-msvc.exe apps/web/scripts/run-journal.mjs
+  │       --mode production --host 127.0.0.1 --port <port>
+  │       --data-dir <absolute data dir> --worker enabled
+  │     env: JOURNAL_DATA_DIR, NODE_ENV=production, HOSTNAME=127.0.0.1, PORT=<port>
+  │   └── the supervisor owns the web child and the worker child
+  ├── reads the supervisor's JSON readiness line on stdout:
+  │     {"type":"ready","host":"127.0.0.1","port":<port>,"worker":"ready"}
+  │   (the supervisor publishes it only after its own HTTP probe succeeded)
+  ├── emits the Tauri event `server-ready` with {"url":"http://127.0.0.1:<port>"}
+  └── webview window → the splash page → the journal URL once ready
 ```
 
-- **Resource directory**: At runtime, `process.resourcesPath` points to the installed app's `resources/` folder. The Next.js standalone (`server.js`, `.next/`, `node_modules`) is bundled there under `apps/web/`.
-- **Port discovery**: The Rust sidecar spawns `node server.js`, reads stdout line-by-line until it finds the bound port via a regex (`Local:.*http://127.0.0.1:(\d+)`), then emits a `server-ready` Tauri event carrying the URL.
-- **Tray menu**: Right-click the tray icon → Show / Restart Server / Open Data Folder / Quit.
-- **Data directory**: All journal data lives under `%APPDATA%\TradeJournal\data\` (not inside the install directory, so upgrades don't touch user data).
+- **One managed child.** The desktop owns the supervisor process. The supervisor owns the Next.js
+  web child and the intelligence worker child.
+- **Explicit nonzero port.** The desktop binds `127.0.0.1:0`, reads the port the OS assigned,
+  releases the socket and passes that port to the child. If the child loses the release-to-bind
+  race and exits before it becomes ready, the desktop picks a new port and retries, up to five
+  attempts, then reports the failure.
+- **Structured readiness.** The desktop does not scrape the Next.js banner. It parses the
+  supervisor's JSON line, so the readiness it reports is already backed by a real HTTP response.
+  The crate needs no HTTP client dependency.
+- **Whole-tree termination.** The supervisor forks grandchildren, so termination kills the tree:
+  `taskkill /F /T /PID <pid>` on Windows, then waits until the PID is gone. On other platforms the
+  direct child is killed and waited for.
+- **Shared state.** One `SharedServerState` holds the child, its PID, the URL and the lifecycle
+  (`starting` → `ready` → `stopped`). Restart terminates the running tree before starting the
+  next one. Quit and window close terminate the tree and then exit the application.
+- **Tray menu**: right-click the tray icon → Show / Restart Server / Open Data Folder / Quit.
+- **Data directory**: `%APPDATA%\com.luxalgo.tradejournal\TradeJournal\data` — outside the
+  install directory, so upgrades never touch user data.
+
+## Requirements
+
+- pnpm 11 (the repository pins `pnpm@11.0.8`)
+- Node.js 22 or newer for the workspace scripts
+- Rust 1.91+ and Cargo
+- The Node sidecar binary is **not** checked in. `pnpm --filter desktop setup:sidecar` downloads
+  Node **24.11.0** (Node ABI **137**) and writes it to
+  `desktop/src-tauri/binaries/node-x86_64-pc-windows-msvc.exe`. The bundle icons are generated
+  the same way: `pnpm --filter desktop setup:icons`.
+
+The sidecar is Node 24.11.0 because `better-sqlite3` is a native module compiled for one Node ABI.
+Build the web tree with a Node 24 runtime (the sidecar) or the native module will not load in the
+bundled server.
+
+## Development
+
+```bash
+# from the repo root
+pnpm --filter desktop setup:sidecar   # downloads the Node 24.11.0 sidecar
+pnpm --filter desktop setup:icons     # regenerates desktop/src-tauri/icons/*
+pnpm --filter web build               # builds the packaged tree under apps/web/.next/tauri-dist
+pnpm --filter desktop tauri dev       # dev window; devUrl is http://localhost:3000
+```
+
+`pnpm --filter desktop build:app` builds the web tree and then the packaged application.
+`pnpm --filter desktop build:debug` does the same in debug mode.
+
+**The Rust gates need the icons.** `cargo check` and `cargo test` compile
+`desktop/src-tauri/icons/icon.ico` into the Windows resource of the binary, and the icons are
+**generated and gitignored** — like the Node sidecar. Every desktop script that runs cargo now
+generates them first: `pnpm --filter desktop typecheck`, `pnpm --filter desktop build:app` and
+`pnpm --filter desktop build:debug`. A **direct** `cargo check` or `cargo test` does not go through
+those scripts, so it needs `pnpm --filter desktop setup:icons` once before it — a checkout that
+still holds an icon from an older generator otherwise fails with `RC2175`.
+
+## Build outputs
+
+The release artifacts land under the **active `CARGO_TARGET_DIR`** — read the variable instead of
+assuming a path:
+
+| Artifact       | Path                                                  |
+| -------------- | ----------------------------------------------------- |
+| MSI installer  | `$CARGO_TARGET_DIR/release/bundle/msi/*.msi`          |
+| NSIS installer | `$CARGO_TARGET_DIR/release/bundle/nsis/*.exe`         |
+| Standalone exe | `$CARGO_TARGET_DIR/release/trade-journal-desktop.exe` |
+
+With no `CARGO_TARGET_DIR` set, that is `desktop/src-tauri/target/release/...`.
+
+Build storage can be redirected off the system volume with `CARGO_HOME`,
+`CARGO_TARGET_DIR` and `TAURI_BUNDLER_CACHE`. WiX and NSIS are downloaded automatically.
+
+## Packaged tree
+
+`pnpm --filter web build` writes the tree the desktop launches:
+
+```
+apps/web/.next/tauri-dist/apps/web/
+  ├── index.html              # splash page the webview loads first
+  ├── server.js               # Next.js standalone entry point
+  ├── scripts/run-journal.mjs # the supervisor the desktop spawns
+  ├── scripts/http-child.mjs  # the web child the supervisor forks
+  ├── worker/worker-entry.cjs # the intelligence worker the supervisor forks
+  ├── .next/  public/  node_modules/
+```
+
+`tauri.conf.json` bundles that directory as the resource `apps/web`, so at runtime
+`resource_dir/apps/web/scripts/run-journal.mjs` is the supervisor the desktop starts.
+
+## Windows packaged smoke
+
+```powershell
+# 1. build the tree and the bundle
+pnpm --filter web build
+pnpm --filter desktop build:app
+
+# 2. run the packaged exe and let it serve
+& "$env:CARGO_TARGET_DIR\release\trade-journal-desktop.exe"
+
+# 3. from another shell: the journal answers on the loopback port the app picked
+Get-NetTCPConnection -State Listen | Where-Object LocalAddress -eq '127.0.0.1'
+
+# 4. close the window (or use the tray → Quit): the app terminates the whole tree
+#    and no node.exe descendant survives
+```
+
+The CI desktop job runs the same check: it discovers the loopback port from the `node.exe`
+descendants of the app process, asserts the journal answers over HTTP, closes the app and then
+asserts that none of those `node.exe` processes survived.
 
 ## Configuration
 
-The following environment variables are passed to the Next.js server:
+The desktop passes these to the supervisor, which forwards them to both children:
 
-| Variable | Default | Description |
-|---|---|---|
-| `PORT` | `0` | Ephemeral port assigned by the OS |
-| `JOURNAL_DATA_DIR` | `%APPDATA%\TradeJournal\data` | Where `journal.db` and all data lives |
-| `NODE_ENV` | `production` | Enables Next.js production mode |
+| Variable           | Value                                        |
+| ------------------ | -------------------------------------------- |
+| `JOURNAL_DATA_DIR` | absolute path of the app data directory      |
+| `NODE_ENV`         | `production`                                 |
+| `HOSTNAME`         | `127.0.0.1`                                  |
+| `PORT`             | the nonzero loopback port the desktop picked |
 
-Next.js also reads these if set:
+The journal also reads these if they are set in the environment of the app:
 
-| Variable | Description |
-|---|---|
-| `JOURNAL_PASSWORD` | Database encryption password |
-| `JOURNAL_SECRET` | Session secret |
+| Variable            | Description                       |
+| ------------------- | --------------------------------- |
+| `JOURNAL_PASSWORD`  | Database encryption password      |
+| `JOURNAL_SECRET`    | Session secret                    |
 | `ANTHROPIC_API_KEY` | Anthropic API key for AI features |
-| `OPENAI_API_KEY` | OpenAI API key for AI features |
+| `OPENAI_API_KEY`    | OpenAI API key for AI features    |
 
 ## Troubleshooting
 
-### "Port already in use" after restart
+### "Port already in use"
 
-Kill any lingering `node.exe` processes and try again:
+The desktop picks its own free port, so this only happens when a foreign process holds the
+journal's data directory lock or the app is started twice. Check for leftovers:
+
 ```
 taskkill /F /IM node.exe
 ```
 
-### App window is blank
+### The window stays on the splash page
 
-Check the tray icon — the server may have failed to start. Right-click → Open Data Folder and verify `journal.db` was created. Check the app logs for errors.
-
-### Sidecar not found
-
-The Node 24 binary must be at `binaries/node-x86_64-pc-windows-msvc.exe` inside the installed app's resource directory. If upgrading, do `pnpm setup:sidecar` from the `desktop/` workspace to (re)install it.
+The journal did not become ready. The app prints the supervisor's stderr to its own output;
+check that the sidecar exists in `desktop/src-tauri/binaries/` and that the data directory is
+writable.
 
 ### Build fails — better-sqlite3 ABI mismatch
 
-`better-sqlite3` is a native module compiled for a specific Node.js ABI version. After changing the Node.js version used to build:
+`better-sqlite3` is a native module compiled for one Node ABI. Rebuild it with the same Node
+major the sidecar uses (24):
+
 ```bash
 cd apps/web/node_modules/better-sqlite3 && npx node-gyp rebuild
 ```
 
 ### Build fails — `next build` crashes
 
-A pinned Node v24.20.0 once crashed the Next.js build worker during static page generation with `Assertion failed: (env) != nullptr`. The bundled sidecar (v24.11.0) sidesteps this. If your system Node crashes on the same call, run `next build` against the sidecar:
+A pinned Node v24.20.0 once crashed the Next.js build worker during static page generation with
+`Assertion failed: (env) != nullptr`. The bundled sidecar (v24.11.0) sidesteps this. If your
+system Node crashes on the same call, run `next build` against the sidecar:
+
 ```bash
 PATH="$(pwd)/desktop/src-tauri/binaries:$PATH" node --max-old-space-size=2048 ./node_modules/next/dist/bin/next build
 ```
 
+### The dispatcher fails on `Get-FileHash`
+
+`setup-sidecar-node.ps1` verifies the download with `Get-FileHash`, which Windows PowerShell 5.1
+does not provide. The dispatcher runs the script with PowerShell 7 (`pwsh`) and falls back to
+`powershell` only when `pwsh` is not installed, so install PowerShell 7 to run
+`pnpm --filter desktop setup:sidecar`.
+
+### `cargo check` fails with `RC2175` — the icon is not in 3.00 format
+
+The Windows resource compiler rejects an `icon.ico` it cannot read. The icons are generated, not
+checked in, so a checkout that carries an icon from an older generator fails this way. Regenerate
+them:
+
+```bash
+pnpm --filter desktop setup:icons
+```
+
+`pnpm --filter desktop typecheck` does this for you.
+
 ## Limitations
 
-- **Windows-only**: No macOS or Linux builds are configured. The `bundle.targets` in `tauri.conf.json` is `["msi", "nsis"]`.
-- **No auto-update**: There is no Tauri updater configured. Upgrades require reinstalling the installer.
-- **No code signing**: The installers are not signed. Windows SmartScreen may show a warning.
-- **Large installer size**: The bundled Node 24 runtime (~86 MB) makes the installer ~60 MB. This is expected for a self-contained app.
-- **MSI requires GUI session**: The MSI install process requires an interactive desktop session (cannot be silently installed in all environments due to Windows Installer requirements).
+- **Windows-only**: no macOS or Linux builds are configured; `bundle.targets` is `["msi", "nsis"]`.
+- **No auto-update**: upgrades require reinstalling the installer.
+- **No code signing**: Windows SmartScreen may show a warning.
+- **Large installer**: the bundled Node runtime and the packaged journal tree dominate the size.
+- **MSI requires a GUI session**: Windows Installer cannot install silently in every environment.
 
 ## MCP bridge (planned, not yet wired)
 
-`.omp/mcp.json` documents the planned `mcp-server-tauri` setup: webview screenshots, DOM queries, IPC command capture, window state, all over a WebSocket on `127.0.0.1:9223`.
+`.omp/mcp.json` documents the planned `mcp-server-tauri` setup: webview screenshots, DOM queries,
+IPC command capture, window state, all over a WebSocket on `127.0.0.1:9223`.
 
 **Status:** not wired. Two stacked upstream bugs:
-1. **`webview2-com` version conflict** — `tauri-plugin-mcp-bridge 0.13` and the hushlor fork both pin `webview2-com = 0.38`. Tauri 2.12+ pulls `webview2-com = 0.39`. The two versions produce incompatible Rust types (e.g. `COREWEBVIEW2_CAPTURE_PREVIEW_IMAGE_FORMAT`).
-2. **Tauri menu plugin macro bug** — every Tauri 2.x version from 2.9.0 through 2.12.1 has a `do_menu_item!` macro referencing `error::Error::UnexpectedMenuKind` that was never added to the enum. Verified by attempting builds at 2.9.0, 2.9.2, 2.9.5, 2.11.0–2.11.6, 2.12.0 — all fail with the same error. Fix will land in a future Tauri patch.
 
-Workarounds documented in `.omp/mcp.json`. For runtime inspection today, use the browser MCP (`mcp__browsermcp_*`) against `pnpm --filter web dev` at `http://127.0.0.1:3000` — no Tauri wrapper, no version pins.
+1. **`webview2-com` version conflict** — `tauri-plugin-mcp-bridge 0.13` and the hushlor fork both
+   pin `webview2-com = 0.38`. Tauri 2.12+ pulls `webview2-com = 0.39`. The two versions produce
+   incompatible Rust types (e.g. `COREWEBVIEW2_CAPTURE_PREVIEW_IMAGE_FORMAT`).
+2. **Tauri menu plugin macro bug** — every Tauri 2.x version from 2.9.0 through 2.12.1 has a
+   `do_menu_item!` macro referencing `error::Error::UnexpectedMenuKind` that was never added to
+   the enum. Verified by attempting builds at 2.9.0, 2.9.2, 2.9.5, 2.11.0–2.11.6, 2.12.0 — all
+   fail with the same error. Fix will land in a future Tauri patch.
+
+Workarounds are documented in `.omp/mcp.json`. For runtime inspection today, use the browser MCP
+(`mcp__browsermcp_*`) against `pnpm --filter web dev` at `http://127.0.0.1:3000` — no Tauri
+wrapper, no version pins.
 
 ## Migration from existing `apps/web/data/` users
 
-If you have data in `apps/web/data/` from development:
-
 1. Install the desktop app
-2. Copy `apps/web/data/` to `%APPDATA%\TradeJournal\data\`
-3. Launch the app — it will detect and use the existing database
+2. Copy `apps/web/data/` to `%APPDATA%\com.luxalgo.tradejournal\TradeJournal\data\`
+3. Launch the app — it uses the existing database
 
 No migration script is needed; the database schema is identical.

@@ -1,9 +1,18 @@
 import Database from "better-sqlite3";
+import { applyMigrations, LEDGER_TABLE_SQL_SNAPSHOT } from "./migrations.ts";
+import { TRADE_PROJECTION_SQL } from "./migrations/0002-trade-projections.ts";
+import { DURABLE_JOBS_SQL } from "./migrations/0003-durable-jobs.ts";
+import { OBSERVATIONS_SQL } from "./migrations/0004-observations.ts";
+import { INTELLIGENCE_RUNTIME_SQL } from "./migrations/0005-intelligence-runtime.ts";
+import { KNOWLEDGE_SCHEDULING_SQL } from "./migrations/0006-knowledge-scheduling.ts";
+import { EXPERIENCE_SQL } from "./migrations/0007-intelligence-experience.ts";
+import { INSIGHTS_SQL } from "./migrations/0008-ai-insights.ts";
 
 /**
- * Idempotent schema bootstrap, run by the app at startup. Self-hosted software
- * should never make its user run a migration tool; new columns arrive as
- * additive `ALTER TABLE` guards in `migrate` below.
+ * Final-schema snapshot of the journal, used by the schema parity test and by
+ * the legacy fixtures. It is **not** what startup runs: startup applies the
+ * ordered migrations in `./migrations.ts`, so a journal whose history cannot be
+ * validated is refused before any schema write.
  *
  * Keep in sync with schema.ts.
  */
@@ -198,35 +207,23 @@ CREATE TABLE IF NOT EXISTS import_batches (
  snapshot_json TEXT NOT NULL, created_at TEXT NOT NULL
 );
 CREATE UNIQUE INDEX IF NOT EXISTS import_batch_unique ON import_batches(account_id, format, fingerprint);
+
+${TRADE_PROJECTION_SQL}
+
+${DURABLE_JOBS_SQL}
+
+${OBSERVATIONS_SQL}
+
+${INTELLIGENCE_RUNTIME_SQL}
+
+${KNOWLEDGE_SCHEDULING_SQL}
+
+${EXPERIENCE_SQL}
+
+${INSIGHTS_SQL}
+
+${LEDGER_TABLE_SQL_SNAPSHOT}
 `;
-
-const hasColumn = (sqlite: Database.Database, table: string, name: string) =>
-  (sqlite.pragma(`table_info(${table})`) as { name: string }[]).some(
-    (column) => column.name === name,
-  );
-
-function migrate(sqlite: Database.Database) {
-  sqlite.exec(BOOTSTRAP_SQL);
-  if (!hasColumn(sqlite, "folders", "deleted_at")) {
-    sqlite.exec("ALTER TABLE folders ADD COLUMN deleted_at TEXT");
-  }
-  if (!hasColumn(sqlite, "accounts", "ibkr_sync_time_zone")) {
-    sqlite.exec("ALTER TABLE accounts ADD COLUMN ibkr_sync_time_zone TEXT");
-  }
-  // Additive upgrade: existing executions retain their fields and dedup hashes.
-  if (!hasColumn(sqlite, "executions", "import_metadata_json")) {
-    sqlite.exec("ALTER TABLE executions ADD COLUMN import_metadata_json TEXT");
-  }
-  // Materialize CSV bounds once so connection and range lookups never scan candle JSON.
-  for (const name of ["bar_count", "first_time", "last_time"]) {
-    if (!hasColumn(sqlite, "market_csv_datasets", name))
-      sqlite.exec(`ALTER TABLE market_csv_datasets ADD COLUMN ${name} INTEGER NOT NULL DEFAULT 0`);
-  }
-  sqlite.exec(`UPDATE market_csv_datasets SET
-    bar_count = json_array_length(bars_json),
-    first_time = json_extract(bars_json, '$[0].time'),
-    last_time = json_extract(bars_json, '$[#-1].time') WHERE bar_count = 0`);
-}
 
 const SETUP_DEADLINE_MS = 15_000;
 const sleeper = new Int32Array(new SharedArrayBuffer(4));
@@ -253,10 +250,17 @@ function retryWhileBusy<T>(step: () => T): T {
 /** Opens the journal and brings its schema up to date; safe to call from many processes at once. */
 export function openJournalDatabase(file: string): Database.Database {
   const sqlite = new Database(file);
-  retryWhileBusy(() => sqlite.pragma("journal_mode = WAL"));
-  sqlite.pragma("foreign_keys = ON");
-  // One write lock covers every column check and ALTER, so concurrent first runs
-  // cannot both decide a column is missing.
-  retryWhileBusy(() => sqlite.transaction(() => migrate(sqlite)).immediate());
+  try {
+    retryWhileBusy(() => sqlite.pragma("journal_mode = WAL"));
+    sqlite.pragma("foreign_keys = ON");
+    // The runner validates the applied history before it writes anything, then
+    // applies the pending migrations and their ledger rows inside one immediate
+    // transaction, so concurrent first runs cannot both decide a column is missing.
+    retryWhileBusy(() => applyMigrations(sqlite));
+  } catch (error) {
+    // A refused journal must not leave its handle open.
+    sqlite.close();
+    throw error;
+  }
   return sqlite;
 }

@@ -96,19 +96,19 @@ export const pepperstone: ImportFormat = {
   id: "pepperstone",
   label: "Pepperstone (cTrader order history export)",
   detect: (headers) =>
-    hasHeaders(headers, [
-      ["position_id"],
-      ["deal_kind"],
-      ["execution_price"],
-      ["broker"],
-    ]),
-  parse: (content, options) => { /* see "Parsing algorithm" */ },
+    hasHeaders(headers, [["position_id"], ["deal_kind"], ["execution_price"], ["broker"]]),
+  parse: (content, options) => {
+    /* see "Parsing algorithm" */
+  },
 };
 
-export const SYMBOL_CLASSES: Record<string, AssetClass> = { /* table */ };
+export const SYMBOL_CLASSES: Record<string, AssetClass> = {/* table */};
 export const KNOWN_DEAL_KINDS: ReadonlySet<string> = new Set([
-  "close_full", "close_partial", "close_final",
-  "stop_out", "manual_after_stop",
+  "close_full",
+  "close_partial",
+  "close_final",
+  "stop_out",
+  "manual_after_stop",
 ]);
 ```
 
@@ -153,7 +153,7 @@ For each CSV record (parsed via `parseCsv` + `toRecords`):
 
 10. If `unknownDealKinds.size > 0` after the loop, push a single
     warning: `"Unrecognised deal_kind values encountered: {…}. Imported
-    anyway; verify if your Pepperstone export format changed."`
+anyway; verify if your Pepperstone export format changed."`
 
 Skipped rows use the existing `skippedReasons.push({ row, reason })`
 shape with the same reason vocabulary as `rowsToFills`
@@ -162,11 +162,11 @@ timestamp", "non-positive quantity", "non-positive price").
 
 ## Symbol class table
 
-| Symbol | Class |
-| --- | --- |
-| `AUDUSD`, `CHFJPY`, `EURGBP`, `GBPUSD`, `USDJPY` | `forex` |
-| `XAUUSD`, `XAGUSD`, `UKOUSD`, `USOUSD` | `cfd` |
-| `NAS100`, `US30`, `SPX500`, `GER40`, `JPN225`, `UK100` | `cfd` |
+| Symbol                                                 | Class   |
+| ------------------------------------------------------ | ------- |
+| `AUDUSD`, `CHFJPY`, `EURGBP`, `GBPUSD`, `USDJPY`       | `forex` |
+| `XAUUSD`, `XAGUSD`, `UKOUSD`, `USOUSD`                 | `cfd`   |
+| `NAS100`, `US30`, `SPX500`, `GER40`, `JPN225`, `UK100` | `cfd`   |
 
 The table is exported so a future caller (e.g. an `import review` UI
 or settings page) can extend it without editing this file.

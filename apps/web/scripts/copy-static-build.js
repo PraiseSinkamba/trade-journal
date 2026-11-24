@@ -1,7 +1,18 @@
 // ponytail: minimal static build for Tauri webview — no node_modules
-import { copyFileSync, mkdirSync, readdirSync, readlinkSync, realpathSync, statSync, rmSync, existsSync, writeFileSync } from "node:fs";
+import {
+  copyFileSync,
+  mkdirSync,
+  readdirSync,
+  readlinkSync,
+  realpathSync,
+  statSync,
+  rmSync,
+  existsSync,
+  writeFileSync,
+} from "node:fs";
 import { join, dirname } from "node:path";
 import { fileURLToPath } from "node:url";
+import { repairBrokenLinks } from "./repair-links.mjs";
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const root = join(__dirname, "..");
@@ -13,11 +24,29 @@ const outputDir = join(root, ".next/tauri-dist");
 if (existsSync(outputDir)) rmSync(outputDir, { recursive: true });
 mkdirSync(outputDir, { recursive: true });
 
+// Next's standalone output copies pnpm's package links as they are. Windows cannot
+// resolve some of them, so the packaged server dies with EPERM before it serves.
+// Point every unresolvable link at the target it already names.
+repairBrokenLinks(join(root, ".next/standalone"));
+
 // Structure: tauri-dist/ = webview files (no node_modules)
 // server.rs looks for resource_dir/apps/web/server.js
 // so we put server files at outputDir/apps/web/
 const appsWebDir = join(outputDir, "apps/web");
 mkdirSync(appsWebDir, { recursive: true });
+
+// The independent worker and supervisor are not part of Next's dependency trace.
+// Ship their complete runtime assets in both server distributions.
+for (const destination of [standaloneDir, appsWebDir]) {
+  const workerDir = join(destination, "worker");
+  if (existsSync(workerDir)) rmSync(workerDir, { recursive: true });
+  copyDir(join(root, ".next/worker-dist"), workerDir);
+  const scriptsDir = join(destination, "scripts");
+  mkdirSync(scriptsDir, { recursive: true });
+  for (const name of ["run-journal.mjs", "http-child.mjs"]) {
+    copyFileSync(join(__dirname, name), join(scriptsDir, name));
+  }
+}
 
 // Copy standalone server.js, package.json, .next, data dirs
 for (const name of ["server.js", "package.json"]) {
@@ -32,6 +61,12 @@ if (existsSync(standaloneNext)) copyDir(standaloneNext, join(appsWebDir, ".next"
 // Copy data dir if present
 const dataDir = join(standaloneDir, "data");
 if (existsSync(dataDir)) copyDir(dataDir, join(appsWebDir, "data"));
+
+// Next never copies .next/static or public into the standalone output. The packaged
+// standalone server (apps/web/package.json "start") runs from .next/standalone/apps/web,
+// so both must sit next to its server.js or it serves HTML without CSS/JS and 404s public files.
+copyDir(staticDir, join(standaloneDir, ".next/static"));
+if (existsSync(publicDir)) copyDir(publicDir, join(standaloneDir, "public"));
 
 // Copy node_modules. The standalone output uses pnpm's structure: apps/web/node_modules/{next,...}
 // are junctions to .pnpm/next@15.5.23_.../node_modules/next. Node walks up from `next` and finds

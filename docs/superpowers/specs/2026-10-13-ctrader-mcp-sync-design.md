@@ -83,9 +83,9 @@ Persisted as encrypted JSON in `accounts.credentialsEnc`. Same encryption as eve
 
 ```ts
 type CTraderMcpCredentials = {
-  endpoint: string;        // default http://127.0.0.1:9876/mcp/
-  authHeader?: string;     // optional Authorization header for desktop builds that need one
-  ctraderAccountId: number;// the cTrader Desktop account id the user picked
+  endpoint: string; // default http://127.0.0.1:9876/mcp/
+  authHeader?: string; // optional Authorization header for desktop builds that need one
+  ctraderAccountId: number; // the cTrader Desktop account id the user picked
 };
 ```
 
@@ -109,15 +109,15 @@ Tool wrappers (`deals.ts`, `positions.ts`, `orders.ts`, `account.ts`, `symbols.t
 
 ## MCP tools used
 
-| Tool | Returns | Used for |
-|------|---------|----------|
-| (handshake) `initialize` + `notifications/initialized` | session | one-time per client lifetime |
-| `get_accounts_list` | list of cTrader accounts the desktop session is connected to | account picker |
-| `get_balance` | balance, equity, free margin (real currency) | snapshot JSON |
-| `get_symbols` | per-symbol metadata | asset-class lookup |
-| `get_deals` (paginated) | historical fills | source of `executions` rows |
-| `get_positions` | open positions | snapshot JSON |
-| `get_pending_orders` | working orders | snapshot JSON |
+| Tool                                                   | Returns                                                      | Used for                     |
+| ------------------------------------------------------ | ------------------------------------------------------------ | ---------------------------- |
+| (handshake) `initialize` + `notifications/initialized` | session                                                      | one-time per client lifetime |
+| `get_accounts_list`                                    | list of cTrader accounts the desktop session is connected to | account picker               |
+| `get_balance`                                          | balance, equity, free margin (real currency)                 | snapshot JSON                |
+| `get_symbols`                                          | per-symbol metadata                                          | asset-class lookup           |
+| `get_deals` (paginated)                                | historical fills                                             | source of `executions` rows  |
+| `get_positions`                                        | open positions                                               | snapshot JSON                |
+| `get_pending_orders`                                   | working orders                                               | snapshot JSON                |
 
 ## Mapping a cTrader deal to an `ImportedExecution`
 
@@ -153,13 +153,13 @@ A re-sync returns `{ inserted: 0, duplicates: N, skipped: 0 }`. No harm, no dupl
 
 `CTraderMcpSyncError extends Error` with `kind` matching the table below. The existing `/api/accounts` POST handler maps it to `bad(message, 502)`. Logs capture JSON-RPC `requestId` and `code`; raw payloads never reach the client.
 
-| `kind`         | Trigger                                              | User-facing message |
-|----------------|------------------------------------------------------|---------------------|
-| `unreachable`  | MCP endpoint unreachable / TCP refusal               | "Can't reach cTrader MCP at <endpoint>. Check the URL and that the desktop is running." |
-| `auth`         | 401/403 on initialize or tool call                   | "cTrader MCP authentication failed. Check the Authorization header and that the desktop is running." |
-| `rate_limited` | 429                                                  | "cTrader MCP rate-limited. Retry in a minute." |
-| `parse`        | Tool response fails Zod validation                   | "cTrader MCP returned unexpected data." (raw payload in logs only) |
-| `unknown`      | Anything else                                        | "cTrader MCP sync failed. Check server logs." |
+| `kind`         | Trigger                                | User-facing message                                                                                  |
+| -------------- | -------------------------------------- | ---------------------------------------------------------------------------------------------------- |
+| `unreachable`  | MCP endpoint unreachable / TCP refusal | "Can't reach cTrader MCP at <endpoint>. Check the URL and that the desktop is running."              |
+| `auth`         | 401/403 on initialize or tool call     | "cTrader MCP authentication failed. Check the Authorization header and that the desktop is running." |
+| `rate_limited` | 429                                    | "cTrader MCP rate-limited. Retry in a minute."                                                       |
+| `parse`        | Tool response fails Zod validation     | "cTrader MCP returned unexpected data." (raw payload in logs only)                                   |
+| `unknown`      | Anything else                          | "cTrader MCP sync failed. Check server logs."                                                        |
 
 `account_gone` is **not** reachable on Local — there is no per-account token to invalidate. The Local desktop session either authenticates or it doesn't.
 

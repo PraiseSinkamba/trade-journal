@@ -9,6 +9,7 @@ import {
   type AiFeature,
   AiRuntimeError,
 } from "./ai-contracts";
+import { BACKGROUND_EXECUTION_LIMITS } from "./intelligence/contracts/policy";
 import type { AiProvider } from "@/lib/ai-settings";
 
 export interface AiRuntimeConfiguration {
@@ -28,6 +29,8 @@ export interface TextAiRequest {
   prompt: string;
   /** Overrides the feature policy cap when the caller knows the budget. */
   maxOutputTokens?: number;
+  /** Cancels the request. The provider call stops when it fires. */
+  abortSignal?: AbortSignal;
 }
 
 export interface AskAgentAiRequest {
@@ -37,6 +40,8 @@ export interface AskAgentAiRequest {
   system: string;
   prompt: string;
   createTools: (reserveToolCall: () => boolean) => ToolSet;
+  /** Cancels the request. The provider call stops when it fires. */
+  abortSignal?: AbortSignal;
 }
 
 export interface ReportsAgentAiRequest {
@@ -46,6 +51,8 @@ export interface ReportsAgentAiRequest {
   system: string;
   prompt: string;
   createTools: (reserveToolCall: () => boolean) => ToolSet;
+  /** Cancels the request. The provider call stops when it fires. */
+  abortSignal?: AbortSignal;
 }
 
 export interface ObjectAiRequest {
@@ -178,6 +185,7 @@ export const runTextAi = async (request: TextAiRequest): Promise<AiRunResult<str
       prompt: request.prompt,
       maxOutputTokens: request.maxOutputTokens ?? policy.maxOutputTokens,
       maxRetries: policy.maxRetries,
+      ...(request.abortSignal ? { abortSignal: request.abortSignal } : {}),
       ...(provider === "openai" ? { providerOptions: { openai: { store: false } } } : {}),
     });
     return {
@@ -228,7 +236,9 @@ export const runAskAgentAi = async (request: AskAgentAiRequest) => {
       stopWhen: isStepCount(maxSteps),
       maxOutputTokens: Math.floor(policy.maxOutputTokens / maxSteps),
       maxRetries: policy.maxRetries,
-      abortSignal: AbortSignal.timeout(policy.timeoutMs ?? 30_000),
+      abortSignal: request.abortSignal
+        ? AbortSignal.any([request.abortSignal, AbortSignal.timeout(policy.timeoutMs ?? 30_000)])
+        : AbortSignal.timeout(policy.timeoutMs ?? 30_000),
       ...(provider === "openai" ? { providerOptions: { openai: { store: false } } } : {}),
     });
     const stepCount = result.steps.length;
@@ -288,7 +298,9 @@ export const runReportsAgentAi = async (request: ReportsAgentAiRequest) => {
       stopWhen: isStepCount(maxSteps),
       maxOutputTokens: Math.floor(policy.maxOutputTokens / maxSteps),
       maxRetries: policy.maxRetries,
-      abortSignal: AbortSignal.timeout(policy.timeoutMs ?? 30_000),
+      abortSignal: request.abortSignal
+        ? AbortSignal.any([request.abortSignal, AbortSignal.timeout(policy.timeoutMs ?? 30_000)])
+        : AbortSignal.timeout(policy.timeoutMs ?? 30_000),
       ...(provider === "openai" ? { providerOptions: { openai: { store: false } } } : {}),
     });
     const stepCount = result.steps.length;
@@ -333,6 +345,79 @@ export const runObjectAi = async <T>(request: ObjectAiRequest): Promise<AiRunRes
     return {
       output: result.output as T,
       meta: buildMeta(request, policy, result, startedAt),
+    };
+  } catch (error) {
+    throw mapAiRuntimeError(error, provider);
+  }
+};
+
+/** A background request: the pinned configuration and the work to do. */
+export interface BackgroundAiRequest {
+  /** The provider configuration the run was approved against. */
+  configuration: AiRuntimeConfiguration;
+  promptVersion: string;
+  system: string;
+  prompt: string;
+  /** Cancels the request. The provider call stops when it fires. */
+  abortSignal?: AbortSignal;
+  /** Overrides the background output cap when the caller knows the budget. */
+  maxOutputTokens?: number;
+}
+
+/**
+ * Run one background request against the pinned provider.
+ *
+ * The configuration is the one the run was approved under: the adapter never
+ * substitutes another provider, another model or another endpoint, so a
+ * changed configuration cannot silently reroute a background run. It issues
+ * exactly one request — a background run never retries on its own, because a
+ * retry would spend another allowance and reach the provider again.
+ *
+ * The hosted OpenAI policy (`store:false`) and the compatible-server key
+ * binding are the same as for the interactive adapters: the key sent is the one
+ * saved for that server.
+ */
+export const runBackgroundAi = async (
+  request: BackgroundAiRequest,
+): Promise<AiRunResult<string>> => {
+  const { provider } = request.configuration;
+  // A hosted provider needs its key. The refusal happens before the model is
+  // built, so no request reaches the provider.
+  if (provider !== "compatible" && !request.configuration.apiKey?.trim())
+    throw new AiRuntimeError("missing_key", "AI is not configured — add an API key in Settings.");
+  const model = buildModel(request.configuration);
+  const startedAt = performance.now();
+  const abortSignal = request.abortSignal
+    ? AbortSignal.any([
+        request.abortSignal,
+        AbortSignal.timeout(BACKGROUND_EXECUTION_LIMITS.timeoutMs),
+      ])
+    : AbortSignal.timeout(BACKGROUND_EXECUTION_LIMITS.timeoutMs);
+  try {
+    const result = await generateText({
+      model,
+      system: request.system,
+      prompt: request.prompt,
+      maxOutputTokens: request.maxOutputTokens ?? BACKGROUND_EXECUTION_LIMITS.maxOutputTokens,
+      maxRetries: BACKGROUND_EXECUTION_LIMITS.maxRetries,
+      abortSignal,
+      ...(provider === "openai" ? { providerOptions: { openai: { store: false } } } : {}),
+    });
+    return {
+      output: result.text,
+      meta: {
+        feature: "background",
+        provider,
+        modelId: request.configuration.modelId,
+        promptVersion: request.promptVersion,
+        durationMs: Math.round(performance.now() - startedAt),
+        finishReason: result.finishReason,
+        inputTokens: result.usage?.inputTokens,
+        outputTokens: result.usage?.outputTokens,
+        maxRetries: BACKGROUND_EXECUTION_LIMITS.maxRetries,
+        stepCount: undefined,
+        toolCallCount: undefined,
+      },
     };
   } catch (error) {
     throw mapAiRuntimeError(error, provider);

@@ -1,7 +1,9 @@
 import { eq } from "drizzle-orm";
 import type { ImportedExecution } from "@luxalgo/journal-importers";
-import { accounts, db } from "@/db";
-import { insertExecutions } from "./executions";
+import { accounts } from "@/db";
+import { withJournalTransaction } from "@/db/transaction";
+import { insertExecutionsInTx } from "./executions";
+import { changeContext } from "./trading/reconcile";
 import { newId, nowIso } from "./ids";
 
 /** Demo accounts are tagged by broker so they can be found and deleted. */
@@ -170,30 +172,45 @@ export interface DemoResult {
   alreadyLoaded: boolean;
 }
 
-/** Idempotent: a second call returns the existing demo account untouched. */
-export const loadDemoData = (): DemoResult => {
-  const existing = db.select().from(accounts).where(eq(accounts.broker, DEMO_BROKER)).get();
-  if (existing) {
-    if (existing.archivedAt)
-      db.update(accounts).set({ archivedAt: null }).where(eq(accounts.id, existing.id)).run();
-    return { accountId: existing.id, inserted: 0, alreadyLoaded: true };
-  }
+/**
+ * Loads the demo journal.
+ *
+ * Idempotent: a second call returns the existing demo account untouched. The
+ * account row and the demo fills are written in one transaction, so a failed
+ * fill insert leaves no empty demo account behind. The fills go through the
+ * same ingestion boundary as every other import, in historical mode: a demo
+ * trade is never a live opening.
+ */
+export const loadDemoData = (): DemoResult =>
+  withJournalTransaction((tx) => {
+    const existing = tx.select().from(accounts).where(eq(accounts.broker, DEMO_BROKER)).get();
+    if (existing) {
+      if (existing.archivedAt)
+        tx.update(accounts).set({ archivedAt: null }).where(eq(accounts.id, existing.id)).run();
+      return { accountId: existing.id, inserted: 0, alreadyLoaded: true };
+    }
 
-  const id = newId();
-  db.insert(accounts)
-    .values({
+    const id = newId();
+    tx.insert(accounts)
+      .values({
+        id,
+        name: "Demo data",
+        broker: DEMO_BROKER,
+        kind: "import",
+        currency: "USD",
+        initialBalance: 25000,
+        profitCalcMethod: "fifo",
+        credentialsEnc: null,
+        autoSync: false,
+        createdAt: nowIso(),
+      })
+      .run();
+    const { inserted } = insertExecutionsInTx(
+      tx,
       id,
-      name: "Demo data",
-      broker: DEMO_BROKER,
-      kind: "import",
-      currency: "USD",
-      initialBalance: 25000,
-      profitCalcMethod: "fifo",
-      credentialsEnc: null,
-      autoSync: false,
-      createdAt: nowIso(),
-    })
-    .run();
-  const { inserted } = insertExecutions(id, generateExecutions(), "import");
-  return { accountId: id, inserted, alreadyLoaded: false };
-};
+      generateExecutions(),
+      "import",
+      changeContext("import", "historical"),
+    );
+    return { accountId: id, inserted, alreadyLoaded: false };
+  });

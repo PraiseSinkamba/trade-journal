@@ -1,0 +1,2521 @@
+{
+  "schemaVersion": 1,
+  "feature": "ai-native-journal",
+  "preparedAt": "2026-10-25",
+  "agentRoles": {
+    "preparation": "Codex; documentation only",
+    "coordinator": "Parent OMP; native Orca tasks, dispatch, monitoring, review, integration decisions",
+    "implementation": "Worker OMP; exclusive checkout, implementation, tests, commits"
+  },
+  "sourceBaseline": "548656bde1925afa8b1d66322e0fbd805eee60da",
+  "handoffRef": {
+    "strategy": "commit-introducing-path",
+    "path": "docs/orchestration/ai-native-journal/execution-manifest.json",
+    "command": "git log --diff-filter=A -1 --format=%H -- docs/orchestration/ai-native-journal/execution-manifest.json",
+    "note": "Resolve and freeze this SHA before creation; never use moving main or historical source baseline as worker base."
+  },
+  "repositories": [
+    {
+      "id": "trade-journal",
+      "path": "E:/4004/orca/trade-journal",
+      "origin": "https://github.com/PraiseSinkamba/trade-journal.git",
+      "upstream": "https://github.com/LuxAlgo/trade-journal",
+      "branchAtPreparation": "main",
+      "submodules": [],
+      "modules": ["packages/core", "packages/importers", "apps/web", "desktop"],
+      "externalDependencies": [
+        "@luxalgo/broker-sdk (locked package; no source edits)",
+        "cTrader MCP (existing integration; no server edits)"
+      ]
+    }
+  ],
+  "sourceHashEncoding": "UTF-8 with CRLF normalized to LF",
+  "sources": [
+    {
+      "path": "AGENTS.md",
+      "sha256": "dce15e9fca3b277d49ca30964fd4d8f4aa59c4698c048951a902db4d69a4dd10"
+    },
+    {
+      "path": "CONTRIBUTING.md",
+      "sha256": "8f8f9b669d561e37fe66b22226dce5bc5697a6f170b64b808c1f38d2c1e640d9"
+    },
+    {
+      "path": "docs/superpowers/specs/2026-10-22-ai-native-journal-architecture-design.md",
+      "sha256": "e5a3e314ac6957746a2d8f155b268d7abbe8a334445b7fb19268a8ee9dbe3b1f"
+    },
+    {
+      "path": "docs/superpowers/specs/2026-10-22-ai-native-journal-architecture-contract-review.md",
+      "sha256": "700c6dcdfa4ca480befe8425bd98ab340417c8d46e142835118b5fc9a2835f1b"
+    },
+    {
+      "path": "docs/superpowers/plans/2026-10-22-ai-native-journal-modernization.md",
+      "sha256": "8d5ee65ea893e29d6846acb768adbc9f901258019ad111824b4fc1cd92e63805"
+    },
+    {
+      "path": "docs/superpowers/plans/2026-10-23-ai-native-journal-phases.md",
+      "sha256": "1c54d4533952266b25c5754f8d3d14eb59c18da69fff0bb3db2502039b7ab707"
+    },
+    {
+      "path": "docs/decisions/0006-transactional-trade-events-and-identity.md",
+      "sha256": "2e0c975892ea5b4f70b0633c3e63845d9cb69caeacd9b3eb0d954425de8d39a3"
+    },
+    {
+      "path": "docs/decisions/0007-durable-sqlite-worker-and-migrations.md",
+      "sha256": "b6f446de0bb273efbc1e4c1efe6967c190f089ddcd61d971d4de3af962837c6f"
+    },
+    {
+      "path": "docs/decisions/0008-scoped-intelligence-and-provider-compatibility.md",
+      "sha256": "ca3a2f9d98afb2f6ec5e2918ee12f5b971ba8eaa7d4398ad4743828b84d10e1e",
+      "ownedBy": "T-012"
+    },
+    {
+      "path": "docs/architecture-discovery/CODE_NAVIGATION.md",
+      "sha256": "d9d3383b51af2c82414e2745b3a457b59915246766b961775e6286600c137466"
+    },
+    {
+      "path": "docs/architecture-discovery/EVIDENCE_REGISTER.md",
+      "sha256": "9c0a261766b91b72096f35082f5e2a60c3b9429f5e3b43a217cb15a4453c69c2"
+    },
+    {
+      "path": "docs/superpowers/plans/2026-10-24-ai-native-journal-handoff-prompts.md",
+      "sha256": "1cb75881c23b9c625979cf95e65863a96d1e9df494e66d8a28882a9c2e811522"
+    }
+  ],
+  "concurrency": {
+    "initialImplementationWorkers": 1,
+    "maxImplementationWorkersPerPhase": 2,
+    "defaultImplementationWorkersPerPhase": 1,
+    "concurrentPhases": false,
+    "requiresForSplit": [
+      "committed interfaces",
+      "exclusive path allocation",
+      "native child task records",
+      "new child worktrees",
+      "reviewed phase-only plan"
+    ],
+    "readOnlyReviewers": 1
+  },
+  "gates": [
+    {
+      "id": "G-BOOTSTRAP",
+      "owner": "coordinator",
+      "requires": "Pinned handoff commit, authorized phase, dependencies/tools checked, source drift assessed"
+    },
+    {
+      "id": "G-A",
+      "after": "T-011",
+      "requires": "Slice A ten scenarios as one no-provider slice, targeted financial regression and full pnpm test, packaged Node smoke, recorded measured results; Docker scratch-volume smoke and actual Tauri lifecycle and ABI evidence are required at G-FINAL"
+    },
+    {
+      "id": "G-B",
+      "after": "T-019",
+      "requires": "Slice B including no-provider optional AI and restart continuation"
+    },
+    {
+      "id": "G-FINAL",
+      "after": "T-021",
+      "requires": "All tasks integrated, full CI, real Docker/Windows smoke, actual Tauri sidecar ABI with desktop restart and quit, benchmarks, package audit"
+    }
+  ],
+  "waves": [
+    {
+      "id": "W-01",
+      "tasks": ["T-001"],
+      "entry": "G-BOOTSTRAP",
+      "exit": "Reviewed phase merge plus committed integration evidence; stop until next phase assigned"
+    },
+    {
+      "id": "W-02",
+      "tasks": ["T-002"],
+      "entry": "Predecessor reviewed, integrated and post-merge verified",
+      "exit": "Reviewed phase merge plus committed integration evidence; stop until next phase assigned"
+    },
+    {
+      "id": "W-03",
+      "tasks": ["T-003"],
+      "entry": "Predecessor reviewed, integrated and post-merge verified",
+      "exit": "Reviewed phase merge plus committed integration evidence; stop until next phase assigned"
+    },
+    {
+      "id": "W-04",
+      "tasks": ["T-004"],
+      "entry": "Predecessor reviewed, integrated and post-merge verified",
+      "exit": "Reviewed phase merge plus committed integration evidence; stop until next phase assigned"
+    },
+    {
+      "id": "W-05",
+      "tasks": ["T-005"],
+      "entry": "Predecessor reviewed, integrated and post-merge verified",
+      "exit": "Reviewed phase merge plus committed integration evidence; stop until next phase assigned"
+    },
+    {
+      "id": "W-06",
+      "tasks": ["T-006"],
+      "entry": "Predecessor reviewed, integrated and post-merge verified",
+      "exit": "Reviewed phase merge plus committed integration evidence; stop until next phase assigned"
+    },
+    {
+      "id": "W-07",
+      "tasks": ["T-007"],
+      "entry": "Predecessor reviewed, integrated and post-merge verified",
+      "exit": "Reviewed phase merge plus committed integration evidence; stop until next phase assigned"
+    },
+    {
+      "id": "W-08",
+      "tasks": ["T-008"],
+      "entry": "Predecessor reviewed, integrated and post-merge verified",
+      "exit": "Reviewed phase merge plus committed integration evidence; stop until next phase assigned"
+    },
+    {
+      "id": "W-09",
+      "tasks": ["T-009"],
+      "entry": "Predecessor reviewed, integrated and post-merge verified",
+      "exit": "Reviewed phase merge plus committed integration evidence; stop until next phase assigned"
+    },
+    {
+      "id": "W-10",
+      "tasks": ["T-010"],
+      "entry": "Predecessor reviewed, integrated and post-merge verified",
+      "exit": "Reviewed phase merge plus committed integration evidence; stop until next phase assigned"
+    },
+    {
+      "id": "W-11",
+      "tasks": ["T-011"],
+      "entry": "Predecessor reviewed, integrated and post-merge verified",
+      "exit": "Reviewed phase merge plus committed integration evidence; stop until next phase assigned"
+    },
+    {
+      "id": "W-12",
+      "tasks": ["T-012"],
+      "entry": "Predecessor reviewed, integrated and post-merge verified",
+      "exit": "Reviewed phase merge plus committed integration evidence; stop until next phase assigned"
+    },
+    {
+      "id": "W-13",
+      "tasks": ["T-013"],
+      "entry": "Predecessor reviewed, integrated and post-merge verified",
+      "exit": "Reviewed phase merge plus committed integration evidence; stop until next phase assigned"
+    },
+    {
+      "id": "W-14",
+      "tasks": ["T-014"],
+      "entry": "Predecessor reviewed, integrated and post-merge verified",
+      "exit": "Reviewed phase merge plus committed integration evidence; stop until next phase assigned"
+    },
+    {
+      "id": "W-15",
+      "tasks": ["T-015"],
+      "entry": "Predecessor reviewed, integrated and post-merge verified",
+      "exit": "Reviewed phase merge plus committed integration evidence; stop until next phase assigned"
+    },
+    {
+      "id": "W-16",
+      "tasks": ["T-016"],
+      "entry": "Predecessor reviewed, integrated and post-merge verified",
+      "exit": "Reviewed phase merge plus committed integration evidence; stop until next phase assigned"
+    },
+    {
+      "id": "W-17",
+      "tasks": ["T-017"],
+      "entry": "Predecessor reviewed, integrated and post-merge verified",
+      "exit": "Reviewed phase merge plus committed integration evidence; stop until next phase assigned"
+    },
+    {
+      "id": "W-18",
+      "tasks": ["T-018"],
+      "entry": "Predecessor reviewed, integrated and post-merge verified",
+      "exit": "Reviewed phase merge plus committed integration evidence; stop until next phase assigned"
+    },
+    {
+      "id": "W-19",
+      "tasks": ["T-019"],
+      "entry": "Predecessor reviewed, integrated and post-merge verified",
+      "exit": "Reviewed phase merge plus committed integration evidence; stop until next phase assigned"
+    },
+    {
+      "id": "W-20",
+      "tasks": ["T-020"],
+      "entry": "Predecessor reviewed, integrated and post-merge verified",
+      "exit": "Reviewed phase merge plus committed integration evidence; stop until next phase assigned"
+    },
+    {
+      "id": "W-21",
+      "tasks": ["T-021"],
+      "entry": "Predecessor reviewed, integrated and post-merge verified",
+      "exit": "Reviewed phase merge plus committed integration evidence; stop until next phase assigned"
+    }
+  ],
+  "tasks": [
+    {
+      "id": "T-001",
+      "title": "Safe connection/transaction seams; separate request errors from Next",
+      "phase": "01",
+      "milestone": "M0",
+      "objective": "Safe connection/transaction seams; separate request errors from Next",
+      "planSubset": "1",
+      "specSections": [2, 3, 5, 16, 17],
+      "repository": "trade-journal",
+      "packet": "docs/orchestration/ai-native-journal/tasks/T-001.md",
+      "dependsOn": [],
+      "wave": 1,
+      "docs": [
+        "AGENTS.md",
+        "CONTRIBUTING.md",
+        "docs/superpowers/specs/2026-10-22-ai-native-journal-architecture-design.md",
+        "docs/superpowers/specs/2026-10-22-ai-native-journal-architecture-contract-review.md",
+        "docs/superpowers/plans/2026-10-22-ai-native-journal-modernization.md",
+        "docs/superpowers/plans/2026-10-23-ai-native-journal-phases.md",
+        "docs/decisions/0006-transactional-trade-events-and-identity.md",
+        "docs/decisions/0007-durable-sqlite-worker-and-migrations.md",
+        "docs/decisions/0008-scoped-intelligence-and-provider-compatibility.md",
+        "docs/architecture-discovery/CODE_NAVIGATION.md",
+        "docs/architecture-discovery/EVIDENCE_REGISTER.md"
+      ],
+      "contextPaths": [
+        {
+          "path": "apps/web/src/db/index.ts",
+          "status": "existing"
+        },
+        {
+          "path": "apps/web/src/db/bootstrap.ts",
+          "status": "existing"
+        },
+        {
+          "path": "apps/web/src/db/schema.ts",
+          "status": "existing"
+        },
+        {
+          "path": "apps/web/src/server/api.ts",
+          "status": "existing"
+        },
+        {
+          "path": "apps/web/src/server/executions.ts",
+          "status": "existing"
+        },
+        {
+          "path": "apps/web/src/server/request-error.ts",
+          "status": "planned"
+        },
+        {
+          "path": "apps/web/tests/execution-storage.test.ts",
+          "status": "existing"
+        },
+        {
+          "path": "apps/web/tests/ai-scope.test.ts",
+          "status": "existing"
+        }
+      ],
+      "ownership": {
+        "areas": [
+          "apps/web/src/db/index.ts",
+          "apps/web/src/db/bootstrap.ts",
+          "apps/web/src/db/schema.ts",
+          "apps/web/src/server/api.ts",
+          "apps/web/src/server/executions.ts",
+          "apps/web/src/server/request-error.ts",
+          "apps/web/tests/execution-storage.test.ts",
+          "apps/web/tests/ai-scope.test.ts"
+        ],
+        "exclusive": true,
+        "sharedFilesPolicy": "Single phase owner; see integration-plan.md. No edits outside task subset without coordinator allocation."
+      },
+      "contracts": "JournalDb, JournalTx, openConnection, synchronous withJournalTransaction; identical RequestError class re-export",
+      "schema": "None",
+      "acceptance": "Connection lifecycle, async-tx rejection, existing rollback/scope tests",
+      "tests": [
+        "apps/web/tests/db-connection-lifecycle.test.ts",
+        "apps/web/tests/intelligence-boundaries.test.ts",
+        "apps/web/tests/execution-storage.test.ts",
+        "apps/web/tests/ai-scope.test.ts"
+      ],
+      "verification": [
+        "pnpm exec vitest run apps/web/tests/db-connection-lifecycle.test.ts apps/web/tests/intelligence-boundaries.test.ts apps/web/tests/execution-storage.test.ts apps/web/tests/ai-scope.test.ts",
+        "pnpm typecheck",
+        "Phase and merged-feature full pnpm test; see integration-plan.md for extra gates"
+      ],
+      "phasePlan": "docs/superpowers/plans/ai-native-journal/phase-01.md",
+      "planning": "Expand the existing task into small connection lifecycle, synchronous transaction, error-boundary and import-guard tasks; no architecture redesign.",
+      "parallelCandidate": "After connection/error exports are settled, import-graph guards and lifecycle tests may run in separate task worktrees.",
+      "worktree": {
+        "relationship": "child",
+        "parent": "feature worktree full Orca ID",
+        "branch": "codex/ai-native-journal-p01",
+        "startRef": "handoff commit (resolved by git-readiness.md)",
+        "integrationDestination": "codex/ai-native-journal",
+        "crossRepositoryAccess": false
+      },
+      "report": "docs/superpowers/reports/ai-native-journal-phase-01.md",
+      "integrationReport": "docs/superpowers/reports/ai-native-journal-integration-01.md",
+      "status": "planned",
+      "testPaths": [
+        {
+          "path": "apps/web/tests/db-connection-lifecycle.test.ts",
+          "status": "planned"
+        },
+        {
+          "path": "apps/web/tests/intelligence-boundaries.test.ts",
+          "status": "planned"
+        },
+        {
+          "path": "apps/web/tests/execution-storage.test.ts",
+          "status": "existing"
+        },
+        {
+          "path": "apps/web/tests/ai-scope.test.ts",
+          "status": "existing"
+        }
+      ]
+    },
+    {
+      "id": "T-002",
+      "title": "Versioned migration runner and legacy baseline",
+      "phase": "02",
+      "milestone": "M0",
+      "objective": "Versioned migration runner and legacy baseline",
+      "planSubset": "2 runner",
+      "specSections": [16, 17],
+      "repository": "trade-journal",
+      "packet": "docs/orchestration/ai-native-journal/tasks/T-002.md",
+      "dependsOn": ["T-001"],
+      "wave": 2,
+      "docs": [
+        "AGENTS.md",
+        "CONTRIBUTING.md",
+        "docs/superpowers/specs/2026-10-22-ai-native-journal-architecture-design.md",
+        "docs/superpowers/specs/2026-10-22-ai-native-journal-architecture-contract-review.md",
+        "docs/superpowers/plans/2026-10-22-ai-native-journal-modernization.md",
+        "docs/superpowers/plans/2026-10-23-ai-native-journal-phases.md",
+        "docs/decisions/0006-transactional-trade-events-and-identity.md",
+        "docs/decisions/0007-durable-sqlite-worker-and-migrations.md",
+        "docs/decisions/0008-scoped-intelligence-and-provider-compatibility.md",
+        "docs/architecture-discovery/CODE_NAVIGATION.md",
+        "docs/architecture-discovery/EVIDENCE_REGISTER.md"
+      ],
+      "contextPaths": [
+        {
+          "path": "apps/web/src/db/bootstrap.ts",
+          "status": "existing"
+        },
+        {
+          "path": "apps/web/src/db/schema.ts",
+          "status": "existing"
+        },
+        {
+          "path": "apps/web/src/db/connection.ts",
+          "status": "planned"
+        },
+        {
+          "path": "apps/web/src/db/transaction.ts",
+          "status": "planned"
+        },
+        {
+          "path": "apps/web/tests/db-concurrent-init.test.ts",
+          "status": "existing"
+        },
+        {
+          "path": "docs/decisions/0007-durable-sqlite-worker-and-migrations.md",
+          "status": "existing"
+        }
+      ],
+      "ownership": {
+        "areas": [
+          "apps/web/src/db/bootstrap.ts",
+          "apps/web/src/db/schema.ts",
+          "apps/web/src/db/connection.ts",
+          "apps/web/src/db/transaction.ts",
+          "apps/web/tests/db-concurrent-init.test.ts",
+          "docs/decisions/0007-durable-sqlite-worker-and-migrations.md"
+        ],
+        "exclusive": true,
+        "sharedFilesPolicy": "Single phase owner; see integration-plan.md. No edits outside task subset without coordinator allocation."
+      },
+      "contracts": "JournalMigration, inspectMigrations, applyMigrations; frozen baseline, ledger and source checksum artifact",
+      "schema": "0001 + ledger",
+      "acceptance": "Fresh/legacy/concurrent/failure/checksum/future-version tests",
+      "tests": [
+        "apps/web/tests/intelligence-migrations.test.ts",
+        "apps/web/tests/db-concurrent-init.test.ts",
+        "apps/web/tests/db-connection-lifecycle.test.ts",
+        "apps/web/tests/execution-storage.test.ts"
+      ],
+      "verification": [
+        "pnpm exec vitest run apps/web/tests/intelligence-migrations.test.ts apps/web/tests/db-concurrent-init.test.ts apps/web/tests/db-connection-lifecycle.test.ts apps/web/tests/execution-storage.test.ts",
+        "pnpm typecheck",
+        "Phase and merged-feature full pnpm test; see integration-plan.md for extra gates"
+      ],
+      "phasePlan": "docs/superpowers/plans/ai-native-journal/phase-02.md",
+      "planning": "Write a detailed migration-runner plan first: frozen baseline, immutable source checksums, history validation, synchronous application, manifest generation, legacy parity and failure recovery.",
+      "parallelCandidate": "One owner for registry/schema/checksum changes; documentation can run independently after the migration contract is fixed.",
+      "worktree": {
+        "relationship": "child",
+        "parent": "feature worktree full Orca ID",
+        "branch": "codex/ai-native-journal-p02",
+        "startRef": "verified feature HEAD after T-001 integration",
+        "integrationDestination": "codex/ai-native-journal",
+        "crossRepositoryAccess": false
+      },
+      "report": "docs/superpowers/reports/ai-native-journal-phase-02.md",
+      "integrationReport": "docs/superpowers/reports/ai-native-journal-integration-02.md",
+      "status": "planned",
+      "testPaths": [
+        {
+          "path": "apps/web/tests/intelligence-migrations.test.ts",
+          "status": "planned"
+        },
+        {
+          "path": "apps/web/tests/db-concurrent-init.test.ts",
+          "status": "existing"
+        },
+        {
+          "path": "apps/web/tests/db-connection-lifecycle.test.ts",
+          "status": "planned"
+        },
+        {
+          "path": "apps/web/tests/execution-storage.test.ts",
+          "status": "existing"
+        }
+      ]
+    },
+    {
+      "id": "T-003",
+      "title": "Projection identity, fingerprints and immutable revisions, not wired to routes",
+      "phase": "03",
+      "milestone": "M1",
+      "objective": "Projection identity, fingerprints and immutable revisions, not wired to routes",
+      "planSubset": "3 + 2 projection",
+      "specSections": [6, 7, 9],
+      "repository": "trade-journal",
+      "packet": "docs/orchestration/ai-native-journal/tasks/T-003.md",
+      "dependsOn": ["T-002"],
+      "wave": 3,
+      "docs": [
+        "AGENTS.md",
+        "CONTRIBUTING.md",
+        "docs/superpowers/specs/2026-10-22-ai-native-journal-architecture-design.md",
+        "docs/superpowers/specs/2026-10-22-ai-native-journal-architecture-contract-review.md",
+        "docs/superpowers/plans/2026-10-22-ai-native-journal-modernization.md",
+        "docs/superpowers/plans/2026-10-23-ai-native-journal-phases.md",
+        "docs/decisions/0006-transactional-trade-events-and-identity.md",
+        "docs/decisions/0007-durable-sqlite-worker-and-migrations.md",
+        "docs/decisions/0008-scoped-intelligence-and-provider-compatibility.md",
+        "docs/architecture-discovery/CODE_NAVIGATION.md",
+        "docs/architecture-discovery/EVIDENCE_REGISTER.md"
+      ],
+      "contextPaths": [
+        {
+          "path": "apps/web/src/server/rebuild.ts",
+          "status": "existing"
+        },
+        {
+          "path": "packages/core/src/round-trips.ts",
+          "status": "existing"
+        },
+        {
+          "path": "packages/core/src/types.ts",
+          "status": "existing"
+        },
+        {
+          "path": "apps/web/src/server/ids.ts",
+          "status": "existing"
+        },
+        {
+          "path": "docs/decisions/0006-transactional-trade-events-and-identity.md",
+          "status": "existing"
+        }
+      ],
+      "ownership": {
+        "areas": [
+          "apps/web/src/server/rebuild.ts",
+          "packages/core/src/round-trips.ts",
+          "packages/core/src/types.ts",
+          "apps/web/src/server/ids.ts",
+          "docs/decisions/0006-transactional-trade-events-and-identity.md"
+        ],
+        "exclusive": true,
+        "sharedFilesPolicy": "Single phase owner; see integration-plan.md. No edits outside task subset without coordinator allocation."
+      },
+      "contracts": "fingerprintProjection, resolveIdentity; immutable revision membership, exact active key or proven transfer",
+      "schema": "0002",
+      "acceptance": "Key stability, reappearance, split/merge ambiguity tests",
+      "tests": ["apps/web/tests/trade-projection-identity.test.ts"],
+      "verification": [
+        "pnpm exec vitest run apps/web/tests/trade-projection-identity.test.ts",
+        "pnpm typecheck",
+        "Phase and merged-feature full pnpm test; see integration-plan.md for extra gates"
+      ],
+      "phasePlan": "docs/superpowers/plans/ai-native-journal/phase-03.md",
+      "planning": "Plan canonical fingerprints, exact-key identity, explicit transfer proof, tombstones and revision membership separately before coding.",
+      "parallelCandidate": "Pure canonicalization and identity fixtures can split after types are committed; only one schema/migration owner.",
+      "worktree": {
+        "relationship": "child",
+        "parent": "feature worktree full Orca ID",
+        "branch": "codex/ai-native-journal-p03",
+        "startRef": "verified feature HEAD after T-002 integration",
+        "integrationDestination": "codex/ai-native-journal",
+        "crossRepositoryAccess": false
+      },
+      "report": "docs/superpowers/reports/ai-native-journal-phase-03.md",
+      "integrationReport": "docs/superpowers/reports/ai-native-journal-integration-03.md",
+      "status": "planned",
+      "testPaths": [
+        {
+          "path": "apps/web/tests/trade-projection-identity.test.ts",
+          "status": "planned"
+        }
+      ]
+    },
+    {
+      "id": "T-004",
+      "title": "Outbox, durable jobs and fenced worker mechanics, exercised in tests only",
+      "phase": "04",
+      "milestone": "M1",
+      "objective": "Outbox, durable jobs and fenced worker mechanics, exercised in tests only",
+      "planSubset": "4 + 2 transport",
+      "specSections": [6, 8],
+      "repository": "trade-journal",
+      "packet": "docs/orchestration/ai-native-journal/tasks/T-004.md",
+      "dependsOn": ["T-003"],
+      "wave": 4,
+      "docs": [
+        "AGENTS.md",
+        "CONTRIBUTING.md",
+        "docs/superpowers/specs/2026-10-22-ai-native-journal-architecture-design.md",
+        "docs/superpowers/specs/2026-10-22-ai-native-journal-architecture-contract-review.md",
+        "docs/superpowers/plans/2026-10-22-ai-native-journal-modernization.md",
+        "docs/superpowers/plans/2026-10-23-ai-native-journal-phases.md",
+        "docs/decisions/0006-transactional-trade-events-and-identity.md",
+        "docs/decisions/0007-durable-sqlite-worker-and-migrations.md",
+        "docs/decisions/0008-scoped-intelligence-and-provider-compatibility.md",
+        "docs/architecture-discovery/CODE_NAVIGATION.md",
+        "docs/architecture-discovery/EVIDENCE_REGISTER.md"
+      ],
+      "contextPaths": [
+        {
+          "path": "apps/web/src/server/domain-events.ts",
+          "status": "planned"
+        },
+        {
+          "path": "apps/web/src/db/connection.ts",
+          "status": "planned"
+        },
+        {
+          "path": "apps/web/src/db/transaction.ts",
+          "status": "planned"
+        },
+        {
+          "path": "apps/web/src/db/migrations.ts",
+          "status": "planned"
+        },
+        {
+          "path": "docs/decisions/0007-durable-sqlite-worker-and-migrations.md",
+          "status": "existing"
+        }
+      ],
+      "ownership": {
+        "areas": [
+          "apps/web/src/server/domain-events.ts",
+          "apps/web/src/db/connection.ts",
+          "apps/web/src/db/transaction.ts",
+          "apps/web/src/db/migrations.ts",
+          "docs/decisions/0007-durable-sqlite-worker-and-migrations.md"
+        ],
+        "exclusive": true,
+        "sharedFilesPolicy": "Single phase owner; see integration-plan.md. No edits outside task subset without coordinator allocation."
+      },
+      "contracts": "TradeChanged, appendDomainEvent, JobStore, EffectStore, JobClaim, WorkerService; fenced completion",
+      "schema": "0003",
+      "acceptance": "Two-connection claims, duplicate fanout, expired/stale owner tests",
+      "tests": [
+        "apps/web/tests/intelligence-outbox.test.ts",
+        "apps/web/tests/intelligence-jobs.test.ts",
+        "apps/web/tests/intelligence-worker.test.ts"
+      ],
+      "verification": [
+        "pnpm exec vitest run apps/web/tests/intelligence-outbox.test.ts apps/web/tests/intelligence-jobs.test.ts apps/web/tests/intelligence-worker.test.ts",
+        "pnpm typecheck",
+        "Phase and merged-feature full pnpm test; see integration-plan.md for extra gates"
+      ],
+      "phasePlan": "docs/superpowers/plans/ai-native-journal/phase-04.md",
+      "planning": "Write a detailed concurrency plan with claim SQL, lease/fence semantics, completion transaction, cancellation and crash boundaries.",
+      "parallelCandidate": "Outbox and job adapters may split only after common schemas/claim contracts land; worker integration is dependent.",
+      "worktree": {
+        "relationship": "child",
+        "parent": "feature worktree full Orca ID",
+        "branch": "codex/ai-native-journal-p04",
+        "startRef": "verified feature HEAD after T-003 integration",
+        "integrationDestination": "codex/ai-native-journal",
+        "crossRepositoryAccess": false
+      },
+      "report": "docs/superpowers/reports/ai-native-journal-phase-04.md",
+      "integrationReport": "docs/superpowers/reports/ai-native-journal-integration-04.md",
+      "status": "planned",
+      "testPaths": [
+        {
+          "path": "apps/web/tests/intelligence-outbox.test.ts",
+          "status": "planned"
+        },
+        {
+          "path": "apps/web/tests/intelligence-jobs.test.ts",
+          "status": "planned"
+        },
+        {
+          "path": "apps/web/tests/intelligence-worker.test.ts",
+          "status": "planned"
+        }
+      ]
+    },
+    {
+      "id": "T-005",
+      "title": "Transaction-aware reconciliation for manual and generic ingestion",
+      "phase": "05",
+      "milestone": "M2",
+      "objective": "Transaction-aware reconciliation for manual and generic ingestion",
+      "planSubset": "5 manual/generic",
+      "specSections": [6, 7],
+      "repository": "trade-journal",
+      "packet": "docs/orchestration/ai-native-journal/tasks/T-005.md",
+      "dependsOn": ["T-004"],
+      "wave": 5,
+      "docs": [
+        "AGENTS.md",
+        "CONTRIBUTING.md",
+        "docs/superpowers/specs/2026-10-22-ai-native-journal-architecture-design.md",
+        "docs/superpowers/specs/2026-10-22-ai-native-journal-architecture-contract-review.md",
+        "docs/superpowers/plans/2026-10-22-ai-native-journal-modernization.md",
+        "docs/superpowers/plans/2026-10-23-ai-native-journal-phases.md",
+        "docs/decisions/0006-transactional-trade-events-and-identity.md",
+        "docs/decisions/0007-durable-sqlite-worker-and-migrations.md",
+        "docs/decisions/0008-scoped-intelligence-and-provider-compatibility.md",
+        "docs/architecture-discovery/CODE_NAVIGATION.md",
+        "docs/architecture-discovery/EVIDENCE_REGISTER.md"
+      ],
+      "contextPaths": [
+        {
+          "path": "apps/web/src/server/executions.ts",
+          "status": "existing"
+        },
+        {
+          "path": "apps/web/src/server/rebuild.ts",
+          "status": "existing"
+        },
+        {
+          "path": "apps/web/src/server/position-import.ts",
+          "status": "existing"
+        },
+        {
+          "path": "apps/web/src/server/settings.ts",
+          "status": "existing"
+        },
+        {
+          "path": "apps/web/src/app/api/executions/route.ts",
+          "status": "existing"
+        },
+        {
+          "path": "apps/web/src/app/api/import/route.ts",
+          "status": "existing"
+        },
+        {
+          "path": "apps/web/src/server/trading/",
+          "status": "planned"
+        }
+      ],
+      "ownership": {
+        "areas": [
+          "apps/web/src/server/executions.ts",
+          "apps/web/src/server/rebuild.ts",
+          "apps/web/src/server/position-import.ts",
+          "apps/web/src/server/settings.ts",
+          "apps/web/src/app/api/executions/route.ts",
+          "apps/web/src/app/api/import/route.ts",
+          "apps/web/src/server/trading/"
+        ],
+        "exclusive": true,
+        "sharedFilesPolicy": "Single phase owner; see integration-plan.md. No edits outside task subset without coordinator allocation."
+      },
+      "contracts": "ChangeContext, reconcileAccountInTx, insertExecutionsInTx; preserve InsertResult and API shapes",
+      "schema": "None",
+      "acceptance": "Failure injection rolls back fills/projections/events/notes; identical retry silent",
+      "tests": [
+        "apps/web/tests/trade-reconciliation.test.ts",
+        "apps/web/tests/trade-mutation-events.test.ts",
+        "apps/web/tests/execution-storage.test.ts",
+        "apps/web/tests/history-import.test.ts"
+      ],
+      "verification": [
+        "pnpm exec vitest run apps/web/tests/trade-reconciliation.test.ts apps/web/tests/trade-mutation-events.test.ts apps/web/tests/execution-storage.test.ts apps/web/tests/history-import.test.ts",
+        "pnpm typecheck",
+        "Phase and merged-feature full pnpm test; see integration-plan.md for extra gates"
+      ],
+      "phasePlan": "docs/superpowers/plans/ai-native-journal/phase-05.md",
+      "planning": "Extract only manual/generic ingestion integration; plan every transaction-taking call and unchanged public adapter before coding.",
+      "parallelCandidate": "Keep shared ingestion/rebuild ownership serial; independent test fixtures may run separately.",
+      "worktree": {
+        "relationship": "child",
+        "parent": "feature worktree full Orca ID",
+        "branch": "codex/ai-native-journal-p05",
+        "startRef": "verified feature HEAD after T-004 integration",
+        "integrationDestination": "codex/ai-native-journal",
+        "crossRepositoryAccess": false
+      },
+      "report": "docs/superpowers/reports/ai-native-journal-phase-05.md",
+      "integrationReport": "docs/superpowers/reports/ai-native-journal-integration-05.md",
+      "status": "planned",
+      "testPaths": [
+        {
+          "path": "apps/web/tests/trade-reconciliation.test.ts",
+          "status": "planned"
+        },
+        {
+          "path": "apps/web/tests/trade-mutation-events.test.ts",
+          "status": "planned"
+        },
+        {
+          "path": "apps/web/tests/execution-storage.test.ts",
+          "status": "existing"
+        },
+        {
+          "path": "apps/web/tests/history-import.test.ts",
+          "status": "existing"
+        }
+      ]
+    },
+    {
+      "id": "T-006",
+      "title": "All broker and specialized import paths",
+      "phase": "06",
+      "milestone": "M2",
+      "objective": "All broker and specialized import paths",
+      "planSubset": "5 brokers/imports",
+      "specSections": [6, 7],
+      "repository": "trade-journal",
+      "packet": "docs/orchestration/ai-native-journal/tasks/T-006.md",
+      "dependsOn": ["T-005"],
+      "wave": 6,
+      "docs": [
+        "AGENTS.md",
+        "CONTRIBUTING.md",
+        "docs/superpowers/specs/2026-10-22-ai-native-journal-architecture-design.md",
+        "docs/superpowers/specs/2026-10-22-ai-native-journal-architecture-contract-review.md",
+        "docs/superpowers/plans/2026-10-22-ai-native-journal-modernization.md",
+        "docs/superpowers/plans/2026-10-23-ai-native-journal-phases.md",
+        "docs/decisions/0006-transactional-trade-events-and-identity.md",
+        "docs/decisions/0007-durable-sqlite-worker-and-migrations.md",
+        "docs/decisions/0008-scoped-intelligence-and-provider-compatibility.md",
+        "docs/architecture-discovery/CODE_NAVIGATION.md",
+        "docs/architecture-discovery/EVIDENCE_REGISTER.md"
+      ],
+      "contextPaths": [
+        {
+          "path": "apps/web/src/server/sync.ts",
+          "status": "existing"
+        },
+        {
+          "path": "apps/web/src/server/ninjatrader-import.ts",
+          "status": "existing"
+        },
+        {
+          "path": "apps/web/src/server/xtb-import.ts",
+          "status": "existing"
+        },
+        {
+          "path": "apps/web/src/server/ibkr-flex-xml-import.ts",
+          "status": "existing"
+        },
+        {
+          "path": "apps/web/src/server/demo.ts",
+          "status": "existing"
+        },
+        {
+          "path": "apps/web/src/server/ctrader-mcp/",
+          "status": "existing"
+        },
+        {
+          "path": "docs/decisions/0001-broker-connectivity-via-broker-sdk.md",
+          "status": "existing"
+        },
+        {
+          "path": "docs/decisions/0002-ctrader-mcp-via-direct-mcp-client.md",
+          "status": "existing"
+        }
+      ],
+      "ownership": {
+        "areas": [
+          "apps/web/src/server/sync.ts",
+          "apps/web/src/server/ninjatrader-import.ts",
+          "apps/web/src/server/xtb-import.ts",
+          "apps/web/src/server/ibkr-flex-xml-import.ts",
+          "apps/web/src/server/demo.ts",
+          "apps/web/src/server/ctrader-mcp/",
+          "docs/decisions/0001-broker-connectivity-via-broker-sdk.md",
+          "docs/decisions/0002-ctrader-mcp-via-direct-mcp-client.md"
+        ],
+        "exclusive": true,
+        "sharedFilesPolicy": "Single phase owner; see integration-plan.md. No edits outside task subset without coordinator allocation."
+      },
+      "contracts": "Use committed ingestion/reconciliation ports; snapshot, aliases, corrections and events in same transaction",
+      "schema": "None",
+      "acceptance": "Existing broker/import tests plus atomic snapshot/batch/event failures",
+      "tests": [
+        "apps/web/tests/sync-resilience.test.ts",
+        "apps/web/tests/ninjatrader-import.test.ts",
+        "apps/web/tests/xtb-import.test.ts",
+        "apps/web/tests/ibkr-flex-xml-import.test.ts"
+      ],
+      "verification": [
+        "pnpm exec vitest run apps/web/tests/sync-resilience.test.ts apps/web/tests/ninjatrader-import.test.ts apps/web/tests/xtb-import.test.ts apps/web/tests/ibkr-flex-xml-import.test.ts",
+        "pnpm typecheck",
+        "Phase and merged-feature full pnpm test; see integration-plan.md for extra gates"
+      ],
+      "phasePlan": "docs/superpowers/plans/ai-native-journal/phase-06.md",
+      "planning": "Plan each adapter as a distinct task against the merged reconciliation interfaces; preserve source-specific validation and counts.",
+      "parallelCandidate": "SDK/IBKR, cTrader, and NinjaTrader adapters can use independent worktrees with exclusive files; one controller owns shared import route edits.",
+      "worktree": {
+        "relationship": "child",
+        "parent": "feature worktree full Orca ID",
+        "branch": "codex/ai-native-journal-p06",
+        "startRef": "verified feature HEAD after T-005 integration",
+        "integrationDestination": "codex/ai-native-journal",
+        "crossRepositoryAccess": false
+      },
+      "report": "docs/superpowers/reports/ai-native-journal-phase-06.md",
+      "integrationReport": "docs/superpowers/reports/ai-native-journal-integration-06.md",
+      "status": "planned",
+      "testPaths": [
+        {
+          "path": "apps/web/tests/sync-resilience.test.ts",
+          "status": "existing"
+        },
+        {
+          "path": "apps/web/tests/ninjatrader-import.test.ts",
+          "status": "existing"
+        },
+        {
+          "path": "apps/web/tests/xtb-import.test.ts",
+          "status": "existing"
+        },
+        {
+          "path": "apps/web/tests/ibkr-flex-xml-import.test.ts",
+          "status": "existing"
+        }
+      ]
+    },
+    {
+      "id": "T-007",
+      "title": "Remaining mutation commands and settings-driven rebuilds",
+      "phase": "07",
+      "milestone": "M2",
+      "objective": "Remaining mutation commands and settings-driven rebuilds",
+      "planSubset": "5 remaining mutations",
+      "specSections": [6, 7, 16],
+      "repository": "trade-journal",
+      "packet": "docs/orchestration/ai-native-journal/tasks/T-007.md",
+      "dependsOn": ["T-006"],
+      "wave": 7,
+      "docs": [
+        "AGENTS.md",
+        "CONTRIBUTING.md",
+        "docs/superpowers/specs/2026-10-22-ai-native-journal-architecture-design.md",
+        "docs/superpowers/specs/2026-10-22-ai-native-journal-architecture-contract-review.md",
+        "docs/superpowers/plans/2026-10-22-ai-native-journal-modernization.md",
+        "docs/superpowers/plans/2026-10-23-ai-native-journal-phases.md",
+        "docs/decisions/0006-transactional-trade-events-and-identity.md",
+        "docs/decisions/0007-durable-sqlite-worker-and-migrations.md",
+        "docs/decisions/0008-scoped-intelligence-and-provider-compatibility.md",
+        "docs/architecture-discovery/CODE_NAVIGATION.md",
+        "docs/architecture-discovery/EVIDENCE_REGISTER.md"
+      ],
+      "contextPaths": [
+        {
+          "path": "apps/web/src/app/api/trades/[key]/route.ts",
+          "status": "existing"
+        },
+        {
+          "path": "apps/web/src/app/api/trades/bulk/route.ts",
+          "status": "existing"
+        },
+        {
+          "path": "apps/web/src/app/api/accounts/[id]/route.ts",
+          "status": "existing"
+        },
+        {
+          "path": "apps/web/src/app/api/accounts/[id]/actions/route.ts",
+          "status": "existing"
+        },
+        {
+          "path": "apps/web/src/app/api/settings/route.ts",
+          "status": "existing"
+        },
+        {
+          "path": "apps/web/src/server/trading/commands.ts",
+          "status": "planned"
+        }
+      ],
+      "ownership": {
+        "areas": [
+          "apps/web/src/app/api/trades/[key]/route.ts",
+          "apps/web/src/app/api/trades/bulk/route.ts",
+          "apps/web/src/app/api/accounts/[id]/route.ts",
+          "apps/web/src/app/api/accounts/[id]/actions/route.ts",
+          "apps/web/src/app/api/settings/route.ts",
+          "apps/web/src/server/trading/commands.ts"
+        ],
+        "exclusive": true,
+        "sharedFilesPolicy": "Single phase owner; see integration-plan.md. No edits outside task subset without coordinator allocation."
+      },
+      "contracts": "Command-owned immediate transactions; purge fencing, explicit transfer, settings plus all affected accounts atomic",
+      "schema": "None",
+      "acceptance": "Exhaustive mutation matrix; ambiguous transfer rejected atomically",
+      "tests": [
+        "apps/web/tests/trade-reconciliation.test.ts",
+        "apps/web/tests/trade-mutation-events.test.ts",
+        "apps/web/tests/execution-storage.test.ts"
+      ],
+      "verification": [
+        "pnpm exec vitest run apps/web/tests/trade-reconciliation.test.ts apps/web/tests/trade-mutation-events.test.ts apps/web/tests/execution-storage.test.ts",
+        "pnpm typecheck",
+        "Phase and merged-feature full pnpm test; see integration-plan.md for extra gates"
+      ],
+      "phasePlan": "docs/superpowers/plans/ai-native-journal/phase-07.md",
+      "planning": "Plan separate single/bulk deletion, account clear/delete/transfer and settings rebuild tasks; map all mutation paths.",
+      "parallelCandidate": "Route families can split after command interfaces land; one owner for shared commands and purge implementation.",
+      "worktree": {
+        "relationship": "child",
+        "parent": "feature worktree full Orca ID",
+        "branch": "codex/ai-native-journal-p07",
+        "startRef": "verified feature HEAD after T-006 integration",
+        "integrationDestination": "codex/ai-native-journal",
+        "crossRepositoryAccess": false
+      },
+      "report": "docs/superpowers/reports/ai-native-journal-phase-07.md",
+      "integrationReport": "docs/superpowers/reports/ai-native-journal-integration-07.md",
+      "status": "planned",
+      "testPaths": [
+        {
+          "path": "apps/web/tests/trade-reconciliation.test.ts",
+          "status": "planned"
+        },
+        {
+          "path": "apps/web/tests/trade-mutation-events.test.ts",
+          "status": "planned"
+        },
+        {
+          "path": "apps/web/tests/execution-storage.test.ts",
+          "status": "existing"
+        }
+      ]
+    },
+    {
+      "id": "T-008",
+      "title": "Factual observations and explicit cTrader evidence quality",
+      "phase": "08",
+      "milestone": "M3",
+      "objective": "Factual observations and explicit cTrader evidence quality",
+      "planSubset": "6 + 2 observations",
+      "specSections": [7, 9],
+      "repository": "trade-journal",
+      "packet": "docs/orchestration/ai-native-journal/tasks/T-008.md",
+      "dependsOn": ["T-007"],
+      "wave": 8,
+      "docs": [
+        "AGENTS.md",
+        "CONTRIBUTING.md",
+        "docs/superpowers/specs/2026-10-22-ai-native-journal-architecture-design.md",
+        "docs/superpowers/specs/2026-10-22-ai-native-journal-architecture-contract-review.md",
+        "docs/superpowers/plans/2026-10-22-ai-native-journal-modernization.md",
+        "docs/superpowers/plans/2026-10-23-ai-native-journal-phases.md",
+        "docs/decisions/0006-transactional-trade-events-and-identity.md",
+        "docs/decisions/0007-durable-sqlite-worker-and-migrations.md",
+        "docs/decisions/0008-scoped-intelligence-and-provider-compatibility.md",
+        "docs/architecture-discovery/CODE_NAVIGATION.md",
+        "docs/architecture-discovery/EVIDENCE_REGISTER.md"
+      ],
+      "contextPaths": [
+        {
+          "path": "apps/web/src/server/intelligence/contracts",
+          "status": "planned"
+        },
+        {
+          "path": "apps/web/src/server/intelligence/composition.ts",
+          "status": "planned"
+        },
+        {
+          "path": "apps/web/src/server/ctrader-mcp/deals.ts",
+          "status": "existing"
+        },
+        {
+          "path": "apps/web/src/server/ctrader-mcp/sync.ts",
+          "status": "existing"
+        },
+        {
+          "path": "apps/web/src/server/trading/projection.ts",
+          "status": "planned"
+        }
+      ],
+      "ownership": {
+        "areas": [
+          "apps/web/src/server/intelligence/contracts",
+          "apps/web/src/server/intelligence/composition.ts",
+          "apps/web/src/server/ctrader-mcp/deals.ts",
+          "apps/web/src/server/ctrader-mcp/sync.ts",
+          "apps/web/src/server/trading/projection.ts"
+        ],
+        "exclusive": true,
+        "sharedFilesPolicy": "Single phase owner; see integration-plan.md. No edits outside task subset without coordinator allocation."
+      },
+      "contracts": "evaluateTradeProjection, persistObservationInTx, classifyExecutionEvidence; current-revision fence",
+      "schema": "0004",
+      "acceptance": "Duplicate/reordered event, invalidation, unknown timing tests",
+      "tests": ["apps/web/tests/intelligence-observations.test.ts"],
+      "verification": [
+        "pnpm exec vitest run apps/web/tests/intelligence-observations.test.ts",
+        "pnpm typecheck",
+        "Phase and merged-feature full pnpm test; see integration-plan.md for extra gates"
+      ],
+      "phasePlan": "docs/superpowers/plans/ai-native-journal/phase-08.md",
+      "planning": "Plan pure evaluator, evidence quality enrichment, fenced persistence and invalidation separately; specify how quality reaches reconciliation before fingerprinting.",
+      "parallelCandidate": "Pure evaluator and cTrader quality adapter may split after shared evidence contracts are fixed; persistence owns schema.",
+      "worktree": {
+        "relationship": "child",
+        "parent": "feature worktree full Orca ID",
+        "branch": "codex/ai-native-journal-p08",
+        "startRef": "verified feature HEAD after T-007 integration",
+        "integrationDestination": "codex/ai-native-journal",
+        "crossRepositoryAccess": false
+      },
+      "report": "docs/superpowers/reports/ai-native-journal-phase-08.md",
+      "integrationReport": "docs/superpowers/reports/ai-native-journal-integration-08.md",
+      "status": "planned",
+      "testPaths": [
+        {
+          "path": "apps/web/tests/intelligence-observations.test.ts",
+          "status": "planned"
+        }
+      ]
+    },
+    {
+      "id": "T-009",
+      "title": "Historical seed/replay and no-provider recovery",
+      "phase": "09",
+      "milestone": "M3",
+      "objective": "Historical seed/replay and no-provider recovery",
+      "planSubset": "7",
+      "specSections": [6, 8, 9, 18],
+      "repository": "trade-journal",
+      "packet": "docs/orchestration/ai-native-journal/tasks/T-009.md",
+      "dependsOn": ["T-008"],
+      "wave": 9,
+      "docs": [
+        "AGENTS.md",
+        "CONTRIBUTING.md",
+        "docs/superpowers/specs/2026-10-22-ai-native-journal-architecture-design.md",
+        "docs/superpowers/specs/2026-10-22-ai-native-journal-architecture-contract-review.md",
+        "docs/superpowers/plans/2026-10-22-ai-native-journal-modernization.md",
+        "docs/superpowers/plans/2026-10-23-ai-native-journal-phases.md",
+        "docs/decisions/0006-transactional-trade-events-and-identity.md",
+        "docs/decisions/0007-durable-sqlite-worker-and-migrations.md",
+        "docs/decisions/0008-scoped-intelligence-and-provider-compatibility.md",
+        "docs/architecture-discovery/CODE_NAVIGATION.md",
+        "docs/architecture-discovery/EVIDENCE_REGISTER.md"
+      ],
+      "contextPaths": [
+        {
+          "path": "apps/web/src/server/intelligence/infrastructure/jobs.ts",
+          "status": "planned"
+        },
+        {
+          "path": "apps/web/src/server/intelligence/infrastructure/knowledge-store.ts",
+          "status": "planned"
+        },
+        {
+          "path": "apps/web/src/server/intelligence/infrastructure/backfill.ts",
+          "status": "planned"
+        },
+        {
+          "path": "apps/web/src/server/intelligence/composition.ts",
+          "status": "planned"
+        },
+        {
+          "path": "apps/web/tests/intelligence-observations.test.ts",
+          "status": "planned"
+        }
+      ],
+      "ownership": {
+        "areas": [
+          "apps/web/src/server/intelligence/infrastructure/jobs.ts",
+          "apps/web/src/server/intelligence/infrastructure/knowledge-store.ts",
+          "apps/web/src/server/intelligence/infrastructure/backfill.ts",
+          "apps/web/src/server/intelligence/composition.ts",
+          "apps/web/tests/intelligence-observations.test.ts"
+        ],
+        "exclusive": true,
+        "sharedFilesPolicy": "Single phase owner; see integration-plan.md. No edits outside task subset without coordinator allocation."
+      },
+      "contracts": "seedAccount, requestReplay; durable account checkpoint and business-effect deduplication",
+      "schema": "Uses seed checkpoint in 0004",
+      "acceptance": "Real DB reopen/kill recovery; baseline never a live closure",
+      "tests": [
+        "apps/web/tests/intelligence-slice-a.test.ts",
+        "apps/web/tests/intelligence-recovery.test.ts"
+      ],
+      "verification": [
+        "pnpm exec vitest run apps/web/tests/intelligence-slice-a.test.ts apps/web/tests/intelligence-recovery.test.ts",
+        "pnpm typecheck",
+        "Phase and merged-feature full pnpm test; see integration-plan.md for extra gates"
+      ],
+      "phasePlan": "docs/superpowers/plans/ai-native-journal/phase-09.md",
+      "planning": "Expand restartable baseline/replay tests and process-kill fixtures; distinguish explicit reset suppression from incomplete seed.",
+      "parallelCandidate": "Replay and seed tests can split after checkpoint/handler interfaces land.",
+      "worktree": {
+        "relationship": "child",
+        "parent": "feature worktree full Orca ID",
+        "branch": "codex/ai-native-journal-p09",
+        "startRef": "verified feature HEAD after T-008 integration",
+        "integrationDestination": "codex/ai-native-journal",
+        "crossRepositoryAccess": false
+      },
+      "report": "docs/superpowers/reports/ai-native-journal-phase-09.md",
+      "integrationReport": "docs/superpowers/reports/ai-native-journal-integration-09.md",
+      "status": "planned",
+      "testPaths": [
+        {
+          "path": "apps/web/tests/intelligence-slice-a.test.ts",
+          "status": "existing"
+        },
+        {
+          "path": "apps/web/tests/intelligence-recovery.test.ts",
+          "status": "existing"
+        }
+      ]
+    },
+    {
+      "id": "T-010",
+      "title": "Node supervisor, worker bundle and Docker startup",
+      "phase": "10",
+      "milestone": "M3",
+      "objective": "Node supervisor, worker bundle and Docker startup",
+      "planSubset": "8 Node/Docker",
+      "specSections": [8, 18],
+      "repository": "trade-journal",
+      "packet": "docs/orchestration/ai-native-journal/tasks/T-010.md",
+      "dependsOn": ["T-009"],
+      "wave": 10,
+      "docs": [
+        "AGENTS.md",
+        "CONTRIBUTING.md",
+        "docs/superpowers/specs/2026-10-22-ai-native-journal-architecture-design.md",
+        "docs/superpowers/specs/2026-10-22-ai-native-journal-architecture-contract-review.md",
+        "docs/superpowers/plans/2026-10-22-ai-native-journal-modernization.md",
+        "docs/superpowers/plans/2026-10-23-ai-native-journal-phases.md",
+        "docs/decisions/0006-transactional-trade-events-and-identity.md",
+        "docs/decisions/0007-durable-sqlite-worker-and-migrations.md",
+        "docs/decisions/0008-scoped-intelligence-and-provider-compatibility.md",
+        "docs/architecture-discovery/CODE_NAVIGATION.md",
+        "docs/architecture-discovery/EVIDENCE_REGISTER.md"
+      ],
+      "contextPaths": [
+        {
+          "path": "apps/web/package.json",
+          "status": "existing"
+        },
+        {
+          "path": "apps/web/scripts/copy-static-build.js",
+          "status": "existing"
+        },
+        {
+          "path": "apps/web/next.config.ts",
+          "status": "existing"
+        },
+        {
+          "path": "Dockerfile",
+          "status": "existing"
+        },
+        {
+          "path": "apps/web/src/server/intelligence/composition.ts",
+          "status": "planned"
+        },
+        {
+          "path": "apps/web/src/server/intelligence/worker-entry.ts",
+          "status": "planned"
+        }
+      ],
+      "ownership": {
+        "areas": [
+          "apps/web/package.json",
+          "apps/web/scripts/copy-static-build.js",
+          "apps/web/next.config.ts",
+          "Dockerfile",
+          "apps/web/src/server/intelligence/composition.ts",
+          "apps/web/src/server/intelligence/worker-entry.ts"
+        ],
+        "exclusive": true,
+        "sharedFilesPolicy": "Single phase owner; see integration-plan.md. No edits outside task subset without coordinator allocation."
+      },
+      "contracts": "WorkerService main entry; supervisor ready/health/shutdown/stopped IPC, explicit host/port/data directory",
+      "schema": "None",
+      "acceptance": "Packaged clean-directory smoke, shutdown, parent disconnect, Docker scratch volume",
+      "tests": [
+        "apps/web/tests/intelligence-supervisor.test.ts",
+        "apps/web/tests/intelligence-packaging.test.ts"
+      ],
+      "verification": [
+        "pnpm exec vitest run apps/web/tests/intelligence-supervisor.test.ts apps/web/tests/intelligence-packaging.test.ts",
+        "pnpm typecheck",
+        "Phase and merged-feature full pnpm test; see integration-plan.md for extra gates"
+      ],
+      "phasePlan": "docs/superpowers/plans/ai-native-journal/phase-10.md",
+      "planning": "Detailed lifecycle/build plan required: IPC parent death, HTTP readiness, worker restart caps, shutdown and independent bundle assets.",
+      "parallelCandidate": "Supervisor lifecycle and bundling/Docker work can split with an agreed artifact/IPC contract; shared package scripts have one owner.",
+      "worktree": {
+        "relationship": "child",
+        "parent": "feature worktree full Orca ID",
+        "branch": "codex/ai-native-journal-p10",
+        "startRef": "verified feature HEAD after T-009 integration",
+        "integrationDestination": "codex/ai-native-journal",
+        "crossRepositoryAccess": false
+      },
+      "report": "docs/superpowers/reports/ai-native-journal-phase-10.md",
+      "integrationReport": "docs/superpowers/reports/ai-native-journal-integration-10.md",
+      "status": "planned",
+      "testPaths": [
+        {
+          "path": "apps/web/tests/intelligence-supervisor.test.ts",
+          "status": "existing"
+        },
+        {
+          "path": "apps/web/tests/intelligence-packaging.test.ts",
+          "status": "existing"
+        }
+      ]
+    },
+    {
+      "id": "T-011",
+      "title": "Slice A integrated gate and financial regression",
+      "phase": "11",
+      "milestone": "M3",
+      "objective": "Slice A integrated gate and financial regression",
+      "planSubset": "8 Slice A gate",
+      "specSections": [8, 18],
+      "repository": "trade-journal",
+      "packet": "docs/orchestration/ai-native-journal/tasks/T-011.md",
+      "dependsOn": ["T-010"],
+      "wave": 11,
+      "docs": [
+        "AGENTS.md",
+        "CONTRIBUTING.md",
+        "docs/superpowers/specs/2026-10-22-ai-native-journal-architecture-design.md",
+        "docs/superpowers/specs/2026-10-22-ai-native-journal-architecture-contract-review.md",
+        "docs/superpowers/plans/2026-10-22-ai-native-journal-modernization.md",
+        "docs/superpowers/plans/2026-10-23-ai-native-journal-phases.md",
+        "docs/decisions/0006-transactional-trade-events-and-identity.md",
+        "docs/decisions/0007-durable-sqlite-worker-and-migrations.md",
+        "docs/decisions/0008-scoped-intelligence-and-provider-compatibility.md",
+        "docs/architecture-discovery/CODE_NAVIGATION.md",
+        "docs/architecture-discovery/EVIDENCE_REGISTER.md"
+      ],
+      "contextPaths": [
+        {
+          "path": "apps/web/tests/intelligence-slice-a.test.ts",
+          "status": "existing"
+        },
+        {
+          "path": "apps/web/tests/intelligence-recovery.test.ts",
+          "status": "existing"
+        },
+        {
+          "path": "apps/web/tests/intelligence-supervisor.test.ts",
+          "status": "existing"
+        },
+        {
+          "path": "apps/web/tests/intelligence-packaging.test.ts",
+          "status": "existing"
+        }
+      ],
+      "ownership": {
+        "areas": [
+          "apps/web/tests/intelligence-slice-a.test.ts",
+          "apps/web/tests/intelligence-recovery.test.ts",
+          "apps/web/tests/intelligence-supervisor.test.ts",
+          "apps/web/tests/intelligence-packaging.test.ts"
+        ],
+        "exclusive": true,
+        "sharedFilesPolicy": "Single phase owner; see integration-plan.md. No edits outside task subset without coordinator allocation."
+      },
+      "contracts": "Trade change to event to worker to observation to evidence contracts unchanged; unchanged financial calculations; packaged Node/Docker deployment; no AI provider",
+      "schema": "None",
+      "acceptance": "Recorded ten Section 18 Slice A scenarios green as one no-provider slice, targeted financial regression and full pnpm test passed, packaged Node/Docker smoke recorded with measured results",
+      "tests": [
+        "apps/web/tests/intelligence-supervisor.test.ts",
+        "apps/web/tests/intelligence-packaging.test.ts",
+        "apps/web/tests/intelligence-slice-a.test.ts",
+        "apps/web/tests/intelligence-recovery.test.ts"
+      ],
+      "verification": [
+        "pnpm exec vitest run apps/web/tests/intelligence-supervisor.test.ts apps/web/tests/intelligence-packaging.test.ts apps/web/tests/intelligence-slice-a.test.ts apps/web/tests/intelligence-recovery.test.ts",
+        "pnpm typecheck",
+        "Phase and merged-feature full pnpm test; see integration-plan.md for extra gates"
+      ],
+      "phasePlan": "docs/superpowers/plans/ai-native-journal/phase-11.md",
+      "planning": "Plan the integrated no-provider Slice A gate, targeted financial regression, packaged Node/Docker smoke and recorded results. Tauri lifecycle and desktop packaging are out of scope for this phase.",
+      "parallelCandidate": "One serial gate run on one host; no concurrent builds, Docker or native packaging and no shared database fixtures.",
+      "worktree": {
+        "relationship": "child",
+        "parent": "feature worktree full Orca ID",
+        "branch": "codex/ai-native-journal-p11",
+        "startRef": "verified feature HEAD after T-010 integration",
+        "integrationDestination": "codex/ai-native-journal",
+        "crossRepositoryAccess": false
+      },
+      "report": "docs/superpowers/reports/ai-native-journal-phase-11.md",
+      "integrationReport": "docs/superpowers/reports/ai-native-journal-integration-11.md",
+      "status": "planned",
+      "testPaths": [
+        {
+          "path": "apps/web/tests/intelligence-supervisor.test.ts",
+          "status": "existing"
+        },
+        {
+          "path": "apps/web/tests/intelligence-packaging.test.ts",
+          "status": "existing"
+        },
+        {
+          "path": "apps/web/tests/intelligence-slice-a.test.ts",
+          "status": "existing"
+        },
+        {
+          "path": "apps/web/tests/intelligence-recovery.test.ts",
+          "status": "existing"
+        }
+      ]
+    },
+    {
+      "id": "T-012",
+      "title": "Execution contexts, deterministic capability registry and tool gateway",
+      "phase": "12",
+      "milestone": "M4",
+      "objective": "Execution contexts, deterministic capability registry and tool gateway",
+      "planSubset": "9 gateway",
+      "specSections": [5, 10, 11, 16],
+      "repository": "trade-journal",
+      "packet": "docs/orchestration/ai-native-journal/tasks/T-012.md",
+      "dependsOn": ["T-011"],
+      "wave": 12,
+      "docs": [
+        "AGENTS.md",
+        "CONTRIBUTING.md",
+        "docs/superpowers/specs/2026-10-22-ai-native-journal-architecture-design.md",
+        "docs/superpowers/specs/2026-10-22-ai-native-journal-architecture-contract-review.md",
+        "docs/superpowers/plans/2026-10-22-ai-native-journal-modernization.md",
+        "docs/superpowers/plans/2026-10-23-ai-native-journal-phases.md",
+        "docs/decisions/0006-transactional-trade-events-and-identity.md",
+        "docs/decisions/0007-durable-sqlite-worker-and-migrations.md",
+        "docs/decisions/0008-scoped-intelligence-and-provider-compatibility.md",
+        "docs/architecture-discovery/CODE_NAVIGATION.md",
+        "docs/architecture-discovery/EVIDENCE_REGISTER.md"
+      ],
+      "contextPaths": [
+        {
+          "path": "apps/web/src/server/ai.ts",
+          "status": "existing"
+        },
+        {
+          "path": "apps/web/src/server/ai-scope.ts",
+          "status": "existing"
+        },
+        {
+          "path": "apps/web/src/server/ai-capabilities.ts",
+          "status": "existing"
+        },
+        {
+          "path": "apps/web/src/server/ai-report-context.ts",
+          "status": "existing"
+        },
+        {
+          "path": "apps/web/src/server/ai-contracts.ts",
+          "status": "existing"
+        },
+        {
+          "path": "apps/web/src/server/intelligence/contracts/",
+          "status": "planned"
+        },
+        {
+          "path": "docs/decisions/0008-scoped-intelligence-and-provider-compatibility.md",
+          "status": "existing"
+        }
+      ],
+      "ownership": {
+        "areas": [
+          "apps/web/src/server/ai.ts",
+          "apps/web/src/server/ai-scope.ts",
+          "apps/web/src/server/ai-capabilities.ts",
+          "apps/web/src/server/ai-report-context.ts",
+          "apps/web/src/server/ai-contracts.ts",
+          "apps/web/src/server/intelligence/contracts/",
+          "apps/web/src/server/intelligence/runtime/",
+          "docs/decisions/0008-scoped-intelligence-and-provider-compatibility.md"
+        ],
+        "exclusive": true,
+        "sharedFilesPolicy": "Single phase owner; see integration-plan.md. No edits outside task subset without coordinator allocation."
+      },
+      "contracts": "ExecutionContext, Capability, Eligibility, Outcome, ToolDefinition; pure runtime gets query ports, no DB",
+      "schema": "None",
+      "acceptance": "Scope/allowlist/budget/output tests; legacy AI parity",
+      "tests": [
+        "apps/web/tests/intelligence-runtime.test.ts",
+        "apps/web/tests/intelligence-scope.test.ts",
+        "apps/web/tests/ai-scope.test.ts",
+        "apps/web/tests/ai-runtime.test.ts"
+      ],
+      "verification": [
+        "pnpm exec vitest run apps/web/tests/intelligence-runtime.test.ts apps/web/tests/intelligence-scope.test.ts apps/web/tests/ai-scope.test.ts",
+        "pnpm typecheck",
+        "Phase and merged-feature full pnpm test; see integration-plan.md for extra gates"
+      ],
+      "phasePlan": "docs/superpowers/plans/ai-native-journal/phase-12.md",
+      "planning": "Plan pure contracts and adapter interfaces first, then registry, scope checks and SDK exposure; no background provider policy yet.",
+      "parallelCandidate": "Registry and tool gateway can split after shared context/types land; no duplicated edits to ai.ts.",
+      "worktree": {
+        "relationship": "child",
+        "parent": "feature worktree full Orca ID",
+        "branch": "codex/ai-native-journal-p12",
+        "startRef": "verified feature HEAD after T-011 integration",
+        "integrationDestination": "codex/ai-native-journal",
+        "crossRepositoryAccess": false
+      },
+      "report": "docs/superpowers/reports/ai-native-journal-phase-12.md",
+      "integrationReport": "docs/superpowers/reports/ai-native-journal-integration-12.md",
+      "status": "planned",
+      "testPaths": [
+        {
+          "path": "apps/web/tests/intelligence-runtime.test.ts",
+          "status": "existing"
+        },
+        {
+          "path": "apps/web/tests/intelligence-scope.test.ts",
+          "status": "existing"
+        },
+        {
+          "path": "apps/web/tests/ai-scope.test.ts",
+          "status": "existing"
+        },
+        {
+          "path": "apps/web/tests/ai-runtime.test.ts",
+          "status": "existing"
+        }
+      ]
+    },
+    {
+      "id": "T-013",
+      "title": "Background AI policies, reservations and provider adapter integration",
+      "phase": "13",
+      "milestone": "M4",
+      "objective": "Background AI policies, reservations and provider adapter integration",
+      "planSubset": "9 policy/adapters",
+      "specSections": [10, 11, 12, 16],
+      "repository": "trade-journal",
+      "packet": "docs/orchestration/ai-native-journal/tasks/T-013.md",
+      "dependsOn": ["T-012"],
+      "wave": 13,
+      "docs": [
+        "AGENTS.md",
+        "CONTRIBUTING.md",
+        "docs/superpowers/specs/2026-10-22-ai-native-journal-architecture-design.md",
+        "docs/superpowers/specs/2026-10-22-ai-native-journal-architecture-contract-review.md",
+        "docs/superpowers/plans/2026-10-22-ai-native-journal-modernization.md",
+        "docs/superpowers/plans/2026-10-23-ai-native-journal-phases.md",
+        "docs/decisions/0006-transactional-trade-events-and-identity.md",
+        "docs/decisions/0007-durable-sqlite-worker-and-migrations.md",
+        "docs/decisions/0008-scoped-intelligence-and-provider-compatibility.md",
+        "docs/architecture-discovery/CODE_NAVIGATION.md",
+        "docs/architecture-discovery/EVIDENCE_REGISTER.md"
+      ],
+      "contextPaths": [
+        {
+          "path": "apps/web/src/server/ai-runtime.ts",
+          "status": "existing"
+        },
+        {
+          "path": "apps/web/src/server/ai-contracts.ts",
+          "status": "existing"
+        },
+        {
+          "path": "apps/web/src/server/settings.ts",
+          "status": "existing"
+        },
+        {
+          "path": "apps/web/src/server/ai-import.ts",
+          "status": "existing"
+        },
+        {
+          "path": "apps/web/src/app/api/settings/route.ts",
+          "status": "existing"
+        },
+        {
+          "path": "apps/web/src/components/ai-settings.tsx",
+          "status": "existing"
+        },
+        {
+          "path": "apps/web/src/server/intelligence/runtime/",
+          "status": "planned"
+        }
+      ],
+      "ownership": {
+        "areas": [
+          "apps/web/src/server/ai-runtime.ts",
+          "apps/web/src/server/ai-contracts.ts",
+          "apps/web/src/server/settings.ts",
+          "apps/web/src/server/ai-import.ts",
+          "apps/web/src/app/api/settings/route.ts",
+          "apps/web/src/components/ai-settings.tsx",
+          "apps/web/src/server/intelligence/composition.ts",
+          "apps/web/src/server/intelligence/contracts/policy.ts",
+          "apps/web/src/server/intelligence/infrastructure/policy-store.ts",
+          "apps/web/src/server/intelligence/runtime/",
+          "apps/web/src/db/schema.ts",
+          "apps/web/src/db/migrations.ts",
+          "apps/web/src/db/bootstrap.ts",
+          "apps/web/src/db/migration-checksums.json",
+          "apps/web/src/db/migrations/0005-intelligence-runtime.ts"
+        ],
+        "exclusive": true,
+        "sharedFilesPolicy": "Single phase owner; see integration-plan.md. No edits outside task subset without coordinator allocation."
+      },
+      "contracts": "authorizeBackgroundRun, reserveBackgroundAttempt, pinned endpoint/model/policy; preserve buildModel providers",
+      "schema": "0005",
+      "acceptance": "URL/model change, no fallback, cancellation, daily reservation and provider parity tests",
+      "tests": [
+        "apps/web/tests/intelligence-runtime.test.ts",
+        "apps/web/tests/intelligence-scope.test.ts",
+        "apps/web/tests/intelligence-provider-policy.test.ts",
+        "apps/web/tests/ai-runtime.test.ts",
+        "apps/web/tests/ai-settings.test.ts",
+        "apps/web/tests/ai-scope.test.ts",
+        "apps/web/tests/ai-feedback.test.ts"
+      ],
+      "verification": [
+        "pnpm exec vitest run apps/web/tests/intelligence-runtime.test.ts apps/web/tests/intelligence-scope.test.ts apps/web/tests/intelligence-provider-policy.test.ts apps/web/tests/ai-runtime.test.ts apps/web/tests/ai-settings.test.ts apps/web/tests/ai-scope.test.ts apps/web/tests/ai-feedback.test.ts",
+        "pnpm typecheck",
+        "Phase and merged-feature full pnpm test; see integration-plan.md for extra gates"
+      ],
+      "phasePlan": "docs/superpowers/plans/ai-native-journal/phase-13.md",
+      "planning": "Detailed reservation, provider pinning, configuration change and cancellable adapter plan required; preserve existing interactive policies.",
+      "parallelCandidate": "Policy storage and runtime cancellation adapter may split after interfaces land; settings route/UI remain under one task owner.",
+      "worktree": {
+        "relationship": "child",
+        "parent": "feature worktree full Orca ID",
+        "branch": "codex/ai-native-journal-p13",
+        "startRef": "verified feature HEAD after T-012 integration",
+        "integrationDestination": "codex/ai-native-journal",
+        "crossRepositoryAccess": false
+      },
+      "report": "docs/superpowers/reports/ai-native-journal-phase-13.md",
+      "integrationReport": "docs/superpowers/reports/ai-native-journal-integration-13.md",
+      "status": "planned",
+      "testPaths": [
+        {
+          "path": "apps/web/tests/intelligence-runtime.test.ts",
+          "status": "existing"
+        },
+        {
+          "path": "apps/web/tests/intelligence-scope.test.ts",
+          "status": "existing"
+        },
+        {
+          "path": "apps/web/tests/intelligence-provider-policy.test.ts",
+          "status": "planned"
+        },
+        {
+          "path": "apps/web/tests/ai-runtime.test.ts",
+          "status": "existing"
+        },
+        {
+          "path": "apps/web/tests/ai-settings.test.ts",
+          "status": "existing"
+        },
+        {
+          "path": "apps/web/tests/ai-scope.test.ts",
+          "status": "existing"
+        },
+        {
+          "path": "apps/web/tests/ai-feedback.test.ts",
+          "status": "existing"
+        }
+      ]
+    },
+    {
+      "id": "T-014",
+      "title": "Knowledge-source revisions and invalidation",
+      "phase": "14",
+      "milestone": "M4",
+      "objective": "Knowledge-source revisions and invalidation",
+      "planSubset": "10 knowledge",
+      "specSections": [9, 16],
+      "repository": "trade-journal",
+      "packet": "docs/orchestration/ai-native-journal/tasks/T-014.md",
+      "dependsOn": ["T-013"],
+      "wave": 14,
+      "docs": [
+        "AGENTS.md",
+        "CONTRIBUTING.md",
+        "docs/superpowers/specs/2026-10-22-ai-native-journal-architecture-design.md",
+        "docs/superpowers/specs/2026-10-22-ai-native-journal-architecture-contract-review.md",
+        "docs/superpowers/plans/2026-10-22-ai-native-journal-modernization.md",
+        "docs/superpowers/plans/2026-10-23-ai-native-journal-phases.md",
+        "docs/decisions/0006-transactional-trade-events-and-identity.md",
+        "docs/decisions/0007-durable-sqlite-worker-and-migrations.md",
+        "docs/decisions/0008-scoped-intelligence-and-provider-compatibility.md",
+        "docs/architecture-discovery/CODE_NAVIGATION.md",
+        "docs/architecture-discovery/EVIDENCE_REGISTER.md"
+      ],
+      "contextPaths": [
+        {
+          "path": "apps/web/src/app/api/journal/",
+          "status": "existing"
+        },
+        {
+          "path": "apps/web/src/app/api/playbooks/",
+          "status": "existing"
+        },
+        {
+          "path": "apps/web/src/app/api/notes/",
+          "status": "existing"
+        },
+        {
+          "path": "apps/web/src/app/api/folders/",
+          "status": "existing"
+        },
+        {
+          "path": "apps/web/src/app/api/trades/[key]/",
+          "status": "existing"
+        },
+        {
+          "path": "apps/web/src/app/api/trades/bulk/",
+          "status": "existing"
+        },
+        {
+          "path": "apps/web/src/server/domain-events.ts",
+          "status": "existing"
+        },
+        {
+          "path": "apps/web/src/server/intelligence/knowledge/",
+          "status": "planned"
+        }
+      ],
+      "ownership": {
+        "areas": [
+          "apps/web/src/app/api/journal/",
+          "apps/web/src/app/api/playbooks/",
+          "apps/web/src/app/api/notes/",
+          "apps/web/src/app/api/folders/",
+          "apps/web/src/app/api/trades/[key]/",
+          "apps/web/src/app/api/trades/bulk/",
+          "apps/web/src/server/domain-events.ts",
+          "apps/web/src/server/intelligence/knowledge/",
+          "apps/web/src/db/schema.ts",
+          "apps/web/src/db/migrations.ts",
+          "apps/web/src/db/bootstrap.ts",
+          "apps/web/src/db/migration-checksums.json",
+          "apps/web/src/db/migrations/",
+          "apps/web/src/server/intelligence/contracts/knowledge.ts",
+          "apps/web/src/server/intelligence/infrastructure/knowledge-revisions.ts"
+        ],
+        "exclusive": true,
+        "sharedFilesPolicy": "Single phase owner; see integration-plan.md. No edits outside task subset without coordinator allocation."
+      },
+      "contracts": "SourceChange and applySourceChange; versioned sources and knowledge lifecycle independent of financial revisions",
+      "schema": "0006",
+      "acceptance": "Note/rule/journal/playbook corrections and source deletion invalidate dependent knowledge",
+      "tests": ["apps/web/tests/intelligence-knowledge-revisions.test.ts"],
+      "verification": [
+        "pnpm exec vitest run apps/web/tests/intelligence-knowledge-revisions.test.ts",
+        "pnpm typecheck",
+        "Phase and merged-feature full pnpm test; see integration-plan.md for extra gates"
+      ],
+      "phasePlan": "docs/superpowers/plans/ai-native-journal/phase-14.md",
+      "planning": "Plan source revision contracts and exact write-path matrix, then knowledge invalidation; create schedule schema but not scheduler behavior.",
+      "parallelCandidate": "Source route families can split after union/store contracts land; one domain-event/schema owner.",
+      "worktree": {
+        "relationship": "child",
+        "parent": "feature worktree full Orca ID",
+        "branch": "codex/ai-native-journal-p14",
+        "startRef": "verified feature HEAD after T-013 integration",
+        "integrationDestination": "codex/ai-native-journal",
+        "crossRepositoryAccess": false
+      },
+      "report": "docs/superpowers/reports/ai-native-journal-phase-14.md",
+      "integrationReport": "docs/superpowers/reports/ai-native-journal-integration-14.md",
+      "status": "planned",
+      "testPaths": [
+        {
+          "path": "apps/web/tests/intelligence-knowledge-revisions.test.ts",
+          "status": "planned"
+        }
+      ]
+    },
+    {
+      "id": "T-015",
+      "title": "Durable time/condition scheduling",
+      "phase": "15",
+      "milestone": "M4",
+      "objective": "Durable time/condition scheduling",
+      "planSubset": "10 scheduler",
+      "specSections": [8, 9],
+      "repository": "trade-journal",
+      "packet": "docs/orchestration/ai-native-journal/tasks/T-015.md",
+      "dependsOn": ["T-014"],
+      "wave": 15,
+      "docs": [
+        "AGENTS.md",
+        "CONTRIBUTING.md",
+        "docs/superpowers/specs/2026-10-22-ai-native-journal-architecture-design.md",
+        "docs/superpowers/specs/2026-10-22-ai-native-journal-architecture-contract-review.md",
+        "docs/superpowers/plans/2026-10-22-ai-native-journal-modernization.md",
+        "docs/superpowers/plans/2026-10-23-ai-native-journal-phases.md",
+        "docs/decisions/0006-transactional-trade-events-and-identity.md",
+        "docs/decisions/0007-durable-sqlite-worker-and-migrations.md",
+        "docs/decisions/0008-scoped-intelligence-and-provider-compatibility.md",
+        "docs/architecture-discovery/CODE_NAVIGATION.md",
+        "docs/architecture-discovery/EVIDENCE_REGISTER.md"
+      ],
+      "contextPaths": [
+        {
+          "path": "apps/web/src/server/intelligence/infrastructure/scheduler.ts",
+          "status": "planned"
+        },
+        {
+          "path": "apps/web/src/server/intelligence/infrastructure/jobs.ts",
+          "status": "existing"
+        },
+        {
+          "path": "apps/web/src/server/intelligence/infrastructure/outbox.ts",
+          "status": "existing"
+        },
+        {
+          "path": "apps/web/src/server/intelligence/composition.ts",
+          "status": "existing"
+        },
+        {
+          "path": "packages/core/src/time.ts",
+          "status": "existing"
+        }
+      ],
+      "ownership": {
+        "areas": [
+          "apps/web/src/server/intelligence/infrastructure/scheduler.ts",
+          "apps/web/src/server/intelligence/infrastructure/jobs.ts",
+          "apps/web/src/server/intelligence/infrastructure/outbox.ts",
+          "apps/web/src/server/intelligence/composition.ts",
+          "packages/core/src/time.ts",
+          "apps/web/src/server/intelligence/contracts/jobs.ts",
+          "apps/web/src/server/intelligence/infrastructure/worker.ts"
+        ],
+        "exclusive": true,
+        "sharedFilesPolicy": "Single phase owner; see integration-plan.md. No edits outside task subset without coordinator allocation."
+      },
+      "contracts": "scheduleDue; schedule/due/version unique keys, condition checkpoints, no model selection",
+      "schema": "Uses schedules in 0006",
+      "acceptance": "Duplicate ticks, restart, DST and catch-up coalescing",
+      "tests": ["apps/web/tests/intelligence-scheduler.test.ts"],
+      "verification": [
+        "pnpm exec vitest run apps/web/tests/intelligence-scheduler.test.ts",
+        "pnpm typecheck",
+        "Phase and merged-feature full pnpm test; see integration-plan.md for extra gates"
+      ],
+      "phasePlan": "docs/superpowers/plans/ai-native-journal/phase-15.md",
+      "planning": "Extract concrete scheduler plan from merged schema: deterministic ticks, event checkpoints, DST and missed-interval coalescing.",
+      "parallelCandidate": "Time-trigger and condition-trigger fixtures may split against a fixed schedule API; one scheduler implementation owner.",
+      "worktree": {
+        "relationship": "child",
+        "parent": "feature worktree full Orca ID",
+        "branch": "codex/ai-native-journal-p15",
+        "startRef": "verified feature HEAD after T-014 integration",
+        "integrationDestination": "codex/ai-native-journal",
+        "crossRepositoryAccess": false
+      },
+      "report": "docs/superpowers/reports/ai-native-journal-phase-15.md",
+      "integrationReport": "docs/superpowers/reports/ai-native-journal-integration-15.md",
+      "status": "planned",
+      "testPaths": [
+        {
+          "path": "apps/web/tests/intelligence-scheduler.test.ts",
+          "status": "planned"
+        }
+      ]
+    },
+    {
+      "id": "T-016",
+      "title": "Persistent workflow command/transition engine",
+      "phase": "16",
+      "milestone": "M5",
+      "objective": "Persistent workflow command/transition engine",
+      "planSubset": "11 workflows",
+      "specSections": [13, 15],
+      "repository": "trade-journal",
+      "packet": "docs/orchestration/ai-native-journal/tasks/T-016.md",
+      "dependsOn": ["T-015"],
+      "wave": 16,
+      "docs": [
+        "AGENTS.md",
+        "CONTRIBUTING.md",
+        "docs/superpowers/specs/2026-10-22-ai-native-journal-architecture-design.md",
+        "docs/superpowers/specs/2026-10-22-ai-native-journal-architecture-contract-review.md",
+        "docs/superpowers/plans/2026-10-22-ai-native-journal-modernization.md",
+        "docs/superpowers/plans/2026-10-23-ai-native-journal-phases.md",
+        "docs/decisions/0006-transactional-trade-events-and-identity.md",
+        "docs/decisions/0007-durable-sqlite-worker-and-migrations.md",
+        "docs/decisions/0008-scoped-intelligence-and-provider-compatibility.md",
+        "docs/architecture-discovery/CODE_NAVIGATION.md",
+        "docs/architecture-discovery/EVIDENCE_REGISTER.md"
+      ],
+      "contextPaths": [
+        {
+          "path": "apps/web/src/server/intelligence/contracts/experience.ts",
+          "status": "planned"
+        },
+        {
+          "path": "apps/web/src/server/intelligence/experience/workflows.ts",
+          "status": "planned"
+        },
+        {
+          "path": "apps/web/src/server/intelligence/infrastructure/experience-store.ts",
+          "status": "planned"
+        },
+        {
+          "path": "apps/web/src/server/intelligence/infrastructure/jobs.ts",
+          "status": "existing"
+        }
+      ],
+      "ownership": {
+        "areas": [
+          "apps/web/src/server/intelligence/contracts/experience.ts",
+          "apps/web/src/server/intelligence/experience/workflows.ts",
+          "apps/web/src/server/intelligence/infrastructure/experience-store.ts",
+          "apps/web/src/server/intelligence/infrastructure/jobs.ts",
+          "apps/web/src/db/schema.ts",
+          "apps/web/src/db/migrations.ts",
+          "apps/web/src/db/bootstrap.ts",
+          "apps/web/src/db/migration-checksums.json",
+          "apps/web/src/db/migrations/",
+          "apps/web/tests/intelligence-knowledge-revisions.test.ts"
+        ],
+        "exclusive": true,
+        "sharedFilesPolicy": "Single phase owner; see integration-plan.md. No edits outside task subset without coordinator allocation."
+      },
+      "contracts": "WorkflowCommand, WorkflowResult, transitionWorkflow; CAS plus idempotent command digest and durable effects",
+      "schema": "0007",
+      "acceptance": "CAS, duplicate command, crash-before-effect, waiting releases job",
+      "tests": ["apps/web/tests/intelligence-workflows.test.ts"],
+      "verification": [
+        "pnpm exec vitest run apps/web/tests/intelligence-workflows.test.ts",
+        "pnpm typecheck",
+        "Phase and merged-feature full pnpm test; see integration-plan.md for extra gates"
+      ],
+      "phasePlan": "docs/superpowers/plans/ai-native-journal/phase-16.md",
+      "planning": "Detailed command digest/CAS, transition history and transactional effect scheduling plan required; no engagement implementation yet.",
+      "parallelCandidate": "Pure transition reducer and repository tests can split after workflow state contracts land; schema/command store has one owner.",
+      "worktree": {
+        "relationship": "child",
+        "parent": "feature worktree full Orca ID",
+        "branch": "codex/ai-native-journal-p16",
+        "startRef": "verified feature HEAD after T-015 integration",
+        "integrationDestination": "codex/ai-native-journal",
+        "crossRepositoryAccess": false
+      },
+      "report": "docs/superpowers/reports/ai-native-journal-phase-16.md",
+      "integrationReport": "docs/superpowers/reports/ai-native-journal-integration-16.md",
+      "status": "planned",
+      "testPaths": [
+        {
+          "path": "apps/web/tests/intelligence-workflows.test.ts",
+          "status": "planned"
+        }
+      ]
+    },
+    {
+      "id": "T-017",
+      "title": "Engagement and opportunity coordination",
+      "phase": "17",
+      "milestone": "M5",
+      "objective": "Engagement and opportunity coordination",
+      "planSubset": "11 engagement",
+      "specSections": [14, 15],
+      "repository": "trade-journal",
+      "packet": "docs/orchestration/ai-native-journal/tasks/T-017.md",
+      "dependsOn": ["T-016"],
+      "wave": 17,
+      "docs": [
+        "AGENTS.md",
+        "CONTRIBUTING.md",
+        "docs/superpowers/specs/2026-10-22-ai-native-journal-architecture-design.md",
+        "docs/superpowers/specs/2026-10-22-ai-native-journal-architecture-contract-review.md",
+        "docs/superpowers/plans/2026-10-22-ai-native-journal-modernization.md",
+        "docs/superpowers/plans/2026-10-23-ai-native-journal-phases.md",
+        "docs/decisions/0006-transactional-trade-events-and-identity.md",
+        "docs/decisions/0007-durable-sqlite-worker-and-migrations.md",
+        "docs/decisions/0008-scoped-intelligence-and-provider-compatibility.md",
+        "docs/architecture-discovery/CODE_NAVIGATION.md",
+        "docs/architecture-discovery/EVIDENCE_REGISTER.md"
+      ],
+      "contextPaths": [
+        {
+          "path": "apps/web/src/server/intelligence/experience/engagement.ts",
+          "status": "planned"
+        },
+        {
+          "path": "apps/web/src/server/intelligence/experience/interactions.ts",
+          "status": "planned"
+        },
+        {
+          "path": "apps/web/src/server/intelligence/experience/workflows.ts",
+          "status": "existing"
+        },
+        {
+          "path": "apps/web/src/server/intelligence/infrastructure/experience-store.ts",
+          "status": "existing"
+        },
+        {
+          "path": "apps/web/src/server/intelligence/contracts/experience.ts",
+          "status": "existing"
+        }
+      ],
+      "ownership": {
+        "areas": [
+          "apps/web/src/server/intelligence/experience/engagement.ts",
+          "apps/web/src/server/intelligence/experience/interactions.ts",
+          "apps/web/src/server/intelligence/experience/workflows.ts",
+          "apps/web/src/server/intelligence/infrastructure/experience-store.ts",
+          "apps/web/src/server/intelligence/contracts/experience.ts"
+        ],
+        "exclusive": true,
+        "sharedFilesPolicy": "Single phase owner; see integration-plan.md. No edits outside task subset without coordinator allocation."
+      },
+      "contracts": "decideEngagement pure policy; central persisted opportunity/delivery reservations",
+      "schema": "Uses opportunities in 0007",
+      "acceptance": "Cooldown, dismissal, expiry, dedup and unknown activity policy",
+      "tests": ["apps/web/tests/intelligence-engagement.test.ts"],
+      "verification": [
+        "pnpm exec vitest run apps/web/tests/intelligence-engagement.test.ts",
+        "pnpm typecheck",
+        "Phase and merged-feature full pnpm test; see integration-plan.md for extra gates"
+      ],
+      "phasePlan": "docs/superpowers/plans/ai-native-journal/phase-17.md",
+      "planning": "Extract policy and reservation tasks with exact cooldown, expiry, opt-in and dedup defaults from the review.",
+      "parallelCandidate": "Pure policy and persistence tests may split after inputs/decisions are fixed.",
+      "worktree": {
+        "relationship": "child",
+        "parent": "feature worktree full Orca ID",
+        "branch": "codex/ai-native-journal-p17",
+        "startRef": "verified feature HEAD after T-016 integration",
+        "integrationDestination": "codex/ai-native-journal",
+        "crossRepositoryAccess": false
+      },
+      "report": "docs/superpowers/reports/ai-native-journal-phase-17.md",
+      "integrationReport": "docs/superpowers/reports/ai-native-journal-integration-17.md",
+      "status": "planned",
+      "testPaths": [
+        {
+          "path": "apps/web/tests/intelligence-engagement.test.ts",
+          "status": "planned"
+        }
+      ]
+    },
+    {
+      "id": "T-018",
+      "title": "Authenticated interaction/control APIs",
+      "phase": "18",
+      "milestone": "M5",
+      "objective": "Authenticated interaction/control APIs",
+      "planSubset": "12 backend",
+      "specSections": [11, 15, 16],
+      "repository": "trade-journal",
+      "packet": "docs/orchestration/ai-native-journal/tasks/T-018.md",
+      "dependsOn": ["T-017"],
+      "wave": 18,
+      "docs": [
+        "AGENTS.md",
+        "CONTRIBUTING.md",
+        "docs/superpowers/specs/2026-10-22-ai-native-journal-architecture-design.md",
+        "docs/superpowers/specs/2026-10-22-ai-native-journal-architecture-contract-review.md",
+        "docs/superpowers/plans/2026-10-22-ai-native-journal-modernization.md",
+        "docs/superpowers/plans/2026-10-23-ai-native-journal-phases.md",
+        "docs/decisions/0006-transactional-trade-events-and-identity.md",
+        "docs/decisions/0007-durable-sqlite-worker-and-migrations.md",
+        "docs/decisions/0008-scoped-intelligence-and-provider-compatibility.md",
+        "docs/architecture-discovery/CODE_NAVIGATION.md",
+        "docs/architecture-discovery/EVIDENCE_REGISTER.md"
+      ],
+      "contextPaths": [
+        {
+          "path": "apps/web/src/server/api.ts",
+          "status": "existing"
+        },
+        {
+          "path": "apps/web/src/server/auth.ts",
+          "status": "existing"
+        },
+        {
+          "path": "apps/web/src/server/request-origin.ts",
+          "status": "planned"
+        },
+        {
+          "path": "apps/web/src/app/api/intelligence/",
+          "status": "planned"
+        },
+        {
+          "path": "apps/web/src/server/intelligence/composition.ts",
+          "status": "planned"
+        },
+        {
+          "path": "apps/web/src/server/intelligence/experience",
+          "status": "planned"
+        },
+        {
+          "path": "apps/web/src/server/intelligence/contracts",
+          "status": "planned"
+        },
+        {
+          "path": "apps/web/src/lib/intelligence-interactions.ts",
+          "status": "planned"
+        }
+      ],
+      "ownership": {
+        "areas": [
+          "apps/web/src/server/api.ts",
+          "apps/web/src/server/auth.ts",
+          "apps/web/src/server/request-origin.ts",
+          "apps/web/src/app/api/intelligence/",
+          "apps/web/src/server/intelligence/composition.ts",
+          "apps/web/src/server/intelligence/experience",
+          "apps/web/src/server/intelligence/contracts",
+          "apps/web/src/lib/intelligence-interactions.ts"
+        ],
+        "exclusive": true,
+        "sharedFilesPolicy": "Single phase owner; see integration-plan.md. No edits outside task subset without coordinator allocation."
+      },
+      "contracts": "InteractionIntent DTO; authenticated handlers; 409 stale, 400 invalid, 401 auth, 403 scope/origin",
+      "schema": "None",
+      "acceptance": "Auth, origin, scope, stale actions, corrections and account-purge races",
+      "tests": ["apps/web/tests/intelligence-routes.test.ts"],
+      "verification": [
+        "pnpm exec vitest run apps/web/tests/intelligence-routes.test.ts",
+        "pnpm typecheck",
+        "Phase and merged-feature full pnpm test; see integration-plan.md for extra gates"
+      ],
+      "phasePlan": "docs/superpowers/plans/ai-native-journal/phase-18.md",
+      "planning": "Plan route contracts, current authorization, origin policy, stale command and purge-race coverage; no UI tasks.",
+      "parallelCandidate": "Read endpoints and command endpoints may split after common DTO/auth helpers land; one owner for shared composition and origin policy.",
+      "worktree": {
+        "relationship": "child",
+        "parent": "feature worktree full Orca ID",
+        "branch": "codex/ai-native-journal-p18",
+        "startRef": "verified feature HEAD after T-017 integration",
+        "integrationDestination": "codex/ai-native-journal",
+        "crossRepositoryAccess": false
+      },
+      "report": "docs/superpowers/reports/ai-native-journal-phase-18.md",
+      "integrationReport": "docs/superpowers/reports/ai-native-journal-integration-18.md",
+      "status": "planned",
+      "testPaths": [
+        {
+          "path": "apps/web/tests/intelligence-routes.test.ts",
+          "status": "planned"
+        }
+      ]
+    },
+    {
+      "id": "T-019",
+      "title": "Native inbox/control UI and Slice B review",
+      "phase": "19",
+      "milestone": "M5",
+      "objective": "Native inbox/control UI and Slice B review",
+      "planSubset": "12 UI/Slice B",
+      "specSections": [14, 15, 18],
+      "repository": "trade-journal",
+      "packet": "docs/orchestration/ai-native-journal/tasks/T-019.md",
+      "dependsOn": ["T-018"],
+      "wave": 19,
+      "docs": [
+        "AGENTS.md",
+        "CONTRIBUTING.md",
+        "docs/superpowers/specs/2026-10-22-ai-native-journal-architecture-design.md",
+        "docs/superpowers/specs/2026-10-22-ai-native-journal-architecture-contract-review.md",
+        "docs/superpowers/plans/2026-10-22-ai-native-journal-modernization.md",
+        "docs/superpowers/plans/2026-10-23-ai-native-journal-phases.md",
+        "docs/decisions/0006-transactional-trade-events-and-identity.md",
+        "docs/decisions/0007-durable-sqlite-worker-and-migrations.md",
+        "docs/decisions/0008-scoped-intelligence-and-provider-compatibility.md",
+        "docs/architecture-discovery/CODE_NAVIGATION.md",
+        "docs/architecture-discovery/EVIDENCE_REGISTER.md"
+      ],
+      "contextPaths": [
+        {
+          "path": "apps/web/src/components/shell.tsx",
+          "status": "existing"
+        },
+        {
+          "path": "apps/web/src/components/ui",
+          "status": "existing"
+        },
+        {
+          "path": "apps/web/src/components/intelligence",
+          "status": "planned"
+        },
+        {
+          "path": "apps/web/src/app/settings/page.tsx",
+          "status": "existing"
+        },
+        {
+          "path": "apps/web/src/lib/intelligence-interactions.ts",
+          "status": "planned"
+        },
+        {
+          "path": "apps/web/src/lib/use-api.ts",
+          "status": "existing"
+        },
+        {
+          "path": "apps/web/src/lib/use-ai-request.ts",
+          "status": "existing"
+        },
+        {
+          "path": "docs/decisions/0003-adopt-shadcn-ui.md",
+          "status": "existing"
+        }
+      ],
+      "ownership": {
+        "areas": [
+          "apps/web/src/components/shell.tsx",
+          "apps/web/src/components/ui",
+          "apps/web/src/components/intelligence",
+          "apps/web/src/app/settings/page.tsx",
+          "apps/web/src/lib/intelligence-interactions.ts",
+          "apps/web/src/lib/use-api.ts",
+          "apps/web/src/lib/use-ai-request.ts",
+          "docs/decisions/0003-adopt-shadcn-ui.md",
+          "apps/web/src/server/intelligence/experience/",
+          "apps/web/src/server/intelligence/composition.ts",
+          "apps/web/src/app/api/intelligence/controls/route.ts",
+          "apps/web/src/server/settings.ts",
+          "apps/web/src/app/api/intelligence/observations/route.ts",
+          "apps/web/src/app/api/intelligence/queries.ts",
+          "apps/web/tests/intelligence-routes.test.ts"
+        ],
+        "exclusive": true,
+        "sharedFilesPolicy": "Single phase owner; see integration-plan.md. No edits outside task subset without coordinator allocation."
+      },
+      "contracts": "Native components consume authorized intents and validated commands; preserve legacy AI JSON",
+      "schema": "None",
+      "acceptance": "Keyboard/privacy tests; restart-to-continuation; optional/no-provider paths",
+      "tests": [
+        "apps/web/tests/intelligence-ui.test.ts",
+        "apps/web/tests/intelligence-slice-b.test.ts"
+      ],
+      "verification": [
+        "pnpm exec vitest run apps/web/tests/intelligence-ui.test.ts apps/web/tests/intelligence-slice-b.test.ts",
+        "pnpm typecheck",
+        "Phase and merged-feature full pnpm test; see integration-plan.md for extra gates"
+      ],
+      "phasePlan": "docs/superpowers/plans/ai-native-journal/phase-19.md",
+      "planning": "Write bounded component/data-flow plan using verified API contracts and current native primitives; preserve existing AI screens.",
+      "parallelCandidate": "Inbox and settings controls can split with distinct files; one integration owner for shell/settings page and end-to-end flow.",
+      "worktree": {
+        "relationship": "child",
+        "parent": "feature worktree full Orca ID",
+        "branch": "codex/ai-native-journal-p19",
+        "startRef": "verified feature HEAD after T-018 integration",
+        "integrationDestination": "codex/ai-native-journal",
+        "crossRepositoryAccess": false
+      },
+      "report": "docs/superpowers/reports/ai-native-journal-phase-19.md",
+      "integrationReport": "docs/superpowers/reports/ai-native-journal-integration-19.md",
+      "status": "planned",
+      "testPaths": [
+        {
+          "path": "apps/web/tests/intelligence-ui.test.ts",
+          "status": "planned"
+        },
+        {
+          "path": "apps/web/tests/intelligence-slice-b.test.ts",
+          "status": "planned"
+        }
+      ],
+      "note": " The coordinator granted the worker a scope extension during the phase: the opportunity producer module and its composition wiring, because the complete Slice B gate needs a running path and Phase 18 report names the producer as Phase 19 Slice B, plus one controls route that persists the proactive opt-in and the pause flag in the existing settings key/value table, because the plan requires the proactive opt-in to be exposed and a toggle nothing reads is a fake control. The deletion of PERSISTENT intelligence was refused: design section 16 wants it but the contract review assigns the deletion of persistent intelligence to the retention phase, Phase 20, so Phase 19 exposes the served dismissals and records the deletion as a Phase 20 input. The coordinator granted the worker two more Phase 18 files for exactly one fix: the observations GET paired the FIRST workflow per subject instead of the ACTIONABLE one, and the POST started a new review workflow even when one was already live, so the served intent vanished after an acknowledgement and every review cycle leaked a workflow row. It was verified in a real browser against the running app: three workflows for one observation with its intent never served. The fix pairs the actionable workflow, serves the observation review state, and refuses to start a second workflow while one is live. The coordinator granted the Phase 18 routes test to Phase 19 as well, because the granted observations-route fix refuses a duplicate review start and the Phase 18 authentication case posted a review for an observation that already carried one. The worker adapted the FIXTURE - it seeds a second observation that carries no review and posts to that - and the assertion count is unchanged at 89, so no assertion was removed or weakened."
+    },
+    {
+      "id": "T-020",
+      "title": "Retention, backup/restore, deletion and operations documentation",
+      "phase": "20",
+      "milestone": "M6",
+      "objective": "Retention, backup/restore, deletion and operations documentation",
+      "planSubset": "13 operations",
+      "specSections": [9, 16, 17],
+      "repository": "trade-journal",
+      "packet": "docs/orchestration/ai-native-journal/tasks/T-020.md",
+      "dependsOn": ["T-019"],
+      "wave": 20,
+      "docs": [
+        "AGENTS.md",
+        "CONTRIBUTING.md",
+        "docs/superpowers/specs/2026-10-22-ai-native-journal-architecture-design.md",
+        "docs/superpowers/specs/2026-10-22-ai-native-journal-architecture-contract-review.md",
+        "docs/superpowers/plans/2026-10-22-ai-native-journal-modernization.md",
+        "docs/superpowers/plans/2026-10-23-ai-native-journal-phases.md",
+        "docs/decisions/0006-transactional-trade-events-and-identity.md",
+        "docs/decisions/0007-durable-sqlite-worker-and-migrations.md",
+        "docs/decisions/0008-scoped-intelligence-and-provider-compatibility.md",
+        "docs/architecture-discovery/CODE_NAVIGATION.md",
+        "docs/architecture-discovery/EVIDENCE_REGISTER.md"
+      ],
+      "contextPaths": [
+        {
+          "path": "apps/web/src/server/intelligence/infrastructure/retention.ts",
+          "status": "planned"
+        },
+        {
+          "path": "apps/web/src/server/intelligence/infrastructure/knowledge-store.ts",
+          "status": "planned"
+        },
+        {
+          "path": "apps/web/src/server/intelligence/infrastructure/experience-store.ts",
+          "status": "planned"
+        },
+        {
+          "path": "apps/web/src/server/intelligence/infrastructure/jobs.ts",
+          "status": "planned"
+        },
+        {
+          "path": "apps/web/src/server/trading/commands.ts",
+          "status": "planned"
+        },
+        {
+          "path": "docs/database-migrations.md",
+          "status": "planned"
+        },
+        {
+          "path": "docs/intelligence-operations.md",
+          "status": "planned"
+        }
+      ],
+      "ownership": {
+        "areas": [
+          "apps/web/src/server/intelligence/infrastructure/retention.ts",
+          "apps/web/src/server/intelligence/infrastructure/knowledge-store.ts",
+          "apps/web/src/server/intelligence/infrastructure/experience-store.ts",
+          "apps/web/src/server/intelligence/infrastructure/jobs.ts",
+          "apps/web/src/server/trading/commands.ts",
+          "docs/database-migrations.md",
+          "docs/intelligence-operations.md",
+          "apps/web/src/server/intelligence/composition.ts",
+          "apps/web/src/server/intelligence/infrastructure/worker.ts",
+          "apps/web/src/app/api/intelligence/",
+          "apps/web/scripts/intelligence-operations.mjs",
+          "apps/web/package.json",
+          "apps/web/src/app/api/intelligence/retention/backup/route.ts",
+          "apps/web/src/app/api/intelligence/retention/restore/route.ts",
+          "apps/web/src/db/connection.ts",
+          "apps/web/src/db/journal-file.ts",
+          "apps/web/src/server/intelligence/contracts/experience.ts",
+          "apps/web/src/server/intelligence/experience/workflows.ts"
+        ],
+        "exclusive": true,
+        "sharedFilesPolicy": "Single phase owner; see integration-plan.md. No edits outside task subset without coordinator allocation."
+      },
+      "contracts": "pruneIntelligence and purgeAccountIntelligence; explicit source/destination quiescent backup",
+      "schema": "No new schema expected",
+      "acceptance": "Reference-safe prune, restore with synthetic credentials, no resurrection",
+      "tests": [
+        "apps/web/tests/intelligence-retention.test.ts",
+        "apps/web/tests/intelligence-backup.test.ts",
+        "apps/web/tests/intelligence-acceptance.test.ts"
+      ],
+      "verification": [
+        "pnpm exec vitest run apps/web/tests/intelligence-retention.test.ts apps/web/tests/intelligence-backup.test.ts apps/web/tests/intelligence-acceptance.test.ts",
+        "pnpm typecheck",
+        "Phase and merged-feature full pnpm test; see integration-plan.md for extra gates"
+      ],
+      "phasePlan": "docs/superpowers/plans/ai-native-journal/phase-20.md",
+      "planning": "Detailed retention/reference graph, cancellation fencing, quiescent backup/restore and reset-suppression plan required.",
+      "parallelCandidate": "Backup tooling/docs and retention logic may split after deletion/backup contracts land; never share a database fixture.",
+      "worktree": {
+        "relationship": "child",
+        "parent": "feature worktree full Orca ID",
+        "branch": "codex/ai-native-journal-p20",
+        "startRef": "verified feature HEAD after T-019 integration",
+        "integrationDestination": "codex/ai-native-journal",
+        "crossRepositoryAccess": false
+      },
+      "report": "docs/superpowers/reports/ai-native-journal-phase-20.md",
+      "integrationReport": "docs/superpowers/reports/ai-native-journal-integration-20.md",
+      "status": "planned",
+      "testPaths": [
+        {
+          "path": "apps/web/tests/intelligence-retention.test.ts",
+          "status": "planned"
+        },
+        {
+          "path": "apps/web/tests/intelligence-backup.test.ts",
+          "status": "planned"
+        },
+        {
+          "path": "apps/web/tests/intelligence-acceptance.test.ts",
+          "status": "planned"
+        }
+      ],
+      "note": "undefined The coordinator granted one more file, apps/web/src/server/intelligence/composition.ts, for exactly one registration. The Phase 19 report named the workflow_effect job handler a Phase 20 input, and the coordinator confirmed the defect: experience/workflows.ts already exports effectHandler() with the id workflow-effect, it is used only in a test, and it is NEVER registered with the worker. A deferred workflow therefore enqueues a workflow_effect wake-up job that the worker claims, cannot resolve a handler for, and fails TERMINALLY as unhandled_job, so the deferred workflow never resumes and every deferred workflow leaves a dead-lettered job behind. That would also make Phase 20 own operations runbook, which must document dead-letter retry, misleading. The coordinator granted three further paths after the candidate was reviewed: apps/web/src/server/intelligence/infrastructure/worker.ts, because the worker resolves a handler for seed_account, evaluate_trade and schedule_trigger only, so the retention job the phase delivered could never run; apps/web/src/server/intelligence/composition.ts, where the handlers are registered; and apps/web/src/app/api/intelligence/ as a directory, so the operator can reach the reset, the rebuild request and the retention run. The coordinator grants these because the phase acceptance cannot be demonstrated in production without them: a retention that never runs and an operator with no way to run it would leave the operations runbook describing something the operator cannot do. The implementation-diff review found that backupJournal and restoreJournal had NO caller but the two test files - no route, no script, no package script - while the operations runbook promised a backup, restore and rollback procedure and claimed in its header that every command in it is one an operator can run. An operator reading it would believe the journal was backed up when it was not. The coordinator granted the operator entry point: apps/web/scripts/intelligence-operations.mjs as the primary shape, with apps/web/package.json for a package script entry and the two retention backup and restore routes as the alternative shape if the script cannot load the module with the repo own toolchain. The shipped backupJournal and restoreJournal must be CALLED, not reimplemented, and the runbook and docs/database-migrations.md must name the same entry point with its exact invocation. The coordinator granted two database-layer files after the destination gate failed on the repository own boundary test: the retention module opened the concrete better-sqlite3 driver directly in four places, and only apps/web/src/db/ may wire that driver, so the primitives move behind the db layer while the retention module keeps its policy; and the infrastructure worker imported two handler constants from the sibling experience domain private file, and the shared vocabulary belongs in the contracts layer the worker already imports from. The boundary repair moved the two workflow-effect constants into the contracts layer and the raw-driver primitives into a new apps/web/src/db/journal-file.ts, so the repair also touches apps/web/src/server/intelligence/contracts/experience.ts and apps/web/src/server/intelligence/experience/workflows.ts, which are granted as exact paths."
+    },
+    {
+      "id": "T-021",
+      "title": "Tauri packaging, performance and CI release acceptance",
+      "phase": "21",
+      "milestone": "M6",
+      "objective": "Tauri packaging, performance and CI release acceptance",
+      "planSubset": "13 acceptance and 8 Tauri subset",
+      "specSections": [8, 18, 21],
+      "repository": "trade-journal",
+      "packet": "docs/orchestration/ai-native-journal/tasks/T-021.md",
+      "dependsOn": ["T-020"],
+      "wave": 21,
+      "docs": [
+        "AGENTS.md",
+        "CONTRIBUTING.md",
+        "docs/superpowers/specs/2026-10-22-ai-native-journal-architecture-design.md",
+        "docs/superpowers/specs/2026-10-22-ai-native-journal-architecture-contract-review.md",
+        "docs/superpowers/plans/2026-10-22-ai-native-journal-modernization.md",
+        "docs/superpowers/plans/2026-10-23-ai-native-journal-phases.md",
+        "docs/decisions/0006-transactional-trade-events-and-identity.md",
+        "docs/decisions/0007-durable-sqlite-worker-and-migrations.md",
+        "docs/decisions/0008-scoped-intelligence-and-provider-compatibility.md",
+        "docs/architecture-discovery/CODE_NAVIGATION.md",
+        "docs/architecture-discovery/EVIDENCE_REGISTER.md"
+      ],
+      "contextPaths": [
+        {
+          "path": ".github/workflows/ci.yml",
+          "status": "existing"
+        },
+        {
+          "path": ".github/workflows/release.yml",
+          "status": "existing"
+        },
+        {
+          "path": "scripts/benchmark-intelligence.mjs",
+          "status": "planned"
+        },
+        {
+          "path": "scripts/verify-features.py",
+          "status": "existing"
+        },
+        {
+          "path": "Dockerfile",
+          "status": "existing"
+        },
+        {
+          "path": "desktop/README.md",
+          "status": "existing"
+        },
+        {
+          "path": "docs/intelligence-operations.md",
+          "status": "existing"
+        },
+        {
+          "path": "desktop/src-tauri/src/server.rs",
+          "status": "existing"
+        },
+        {
+          "path": "desktop/src-tauri/src/lib.rs",
+          "status": "existing"
+        },
+        {
+          "path": "desktop/src-tauri/tauri.conf.json",
+          "status": "existing"
+        },
+        {
+          "path": "desktop/package.json",
+          "status": "existing"
+        },
+        {
+          "path": "desktop/scripts/run-sidecar-setup.js",
+          "status": "existing"
+        },
+        {
+          "path": "desktop/src-tauri/scripts/gen_icons/src/main.rs",
+          "status": "existing"
+        },
+        {
+          "path": "apps/web/scripts/run-journal.mjs",
+          "status": "existing"
+        },
+        {
+          "path": "apps/web/scripts/http-child.mjs",
+          "status": "existing"
+        }
+      ],
+      "ownership": {
+        "areas": [
+          ".github/workflows/ci.yml",
+          ".github/workflows/release.yml",
+          "scripts/benchmark-intelligence.mjs",
+          "scripts/verify-features.py",
+          "Dockerfile",
+          "desktop/README.md",
+          "docs/intelligence-operations.md",
+          "desktop/src-tauri/src/server.rs",
+          "desktop/src-tauri/src/lib.rs",
+          "desktop/src-tauri/tauri.conf.json",
+          "desktop/package.json",
+          "desktop/scripts/run-sidecar-setup.js",
+          "desktop/src-tauri/scripts/gen_icons/src/main.rs",
+          "apps/web/scripts/run-journal.mjs",
+          "apps/web/scripts/http-child.mjs",
+          "desktop/src-tauri/src/paths.rs",
+          "docs/orchestration/ai-native-journal/integration-plan.md",
+          "apps/web/scripts/build-worker.mjs",
+          "desktop/scripts/packaged-smoke.ps1"
+        ],
+        "exclusive": true,
+        "sharedFilesPolicy": "Single phase owner; see integration-plan.md. No edits outside task subset without coordinator allocation."
+      },
+      "contracts": "Existing SharedServerState ownership; packaged Node/native SQLite ABI, structured readiness; Tauri owns one supervised journal child across start, restart and quit",
+      "schema": "None",
+      "acceptance": "Actual sidecar ABI, collision, restart and quit tests without orphan processes; Windows desktop smoke recorded; recorded full CI, Docker/Windows smoke, benchmark and package-content results",
+      "tests": [
+        "apps/web/tests/intelligence-acceptance.test.ts",
+        "apps/web/tests/intelligence-packaging.test.ts",
+        "apps/web/tests/intelligence-supervisor.test.ts"
+      ],
+      "verification": [
+        "pnpm exec vitest run apps/web/tests/intelligence-acceptance.test.ts apps/web/tests/intelligence-packaging.test.ts apps/web/tests/intelligence-supervisor.test.ts",
+        "pnpm typecheck",
+        "Phase and merged-feature full pnpm test; see integration-plan.md for extra gates",
+        "cargo check and cargo test in desktop/src-tauri; desktop build and Windows packaged smoke with no leftover processes"
+      ],
+      "phasePlan": "docs/superpowers/plans/ai-native-journal/phase-21.md",
+      "planning": "Plan reproducible scratch workloads, artifact matrix, Tauri lifecycle and Windows smoke gates; this is verification and hardening, not deferred feature implementation.",
+      "parallelCandidate": "Rust lifecycle and packaging smoke fixtures can split once IPC/artifact contract is stable; read-only artifact audit and benchmarks may run separately with isolated builds, data and ports; do not duplicate native builds concurrently.",
+      "worktree": {
+        "relationship": "child",
+        "parent": "feature worktree full Orca ID",
+        "branch": "codex/ai-native-journal-p21",
+        "startRef": "verified feature HEAD after T-020 integration",
+        "integrationDestination": "codex/ai-native-journal",
+        "crossRepositoryAccess": false
+      },
+      "report": "docs/superpowers/reports/ai-native-journal-phase-21.md",
+      "integrationReport": "docs/superpowers/reports/ai-native-journal-integration-21.md",
+      "status": "planned",
+      "testPaths": [
+        {
+          "path": "apps/web/tests/intelligence-acceptance.test.ts",
+          "status": "planned"
+        },
+        {
+          "path": "apps/web/tests/intelligence-packaging.test.ts",
+          "status": "existing"
+        },
+        {
+          "path": "apps/web/tests/intelligence-supervisor.test.ts",
+          "status": "existing"
+        }
+      ],
+      "note": "undefined Two paths were granted after the candidate was reviewed: desktop/src-tauri/src/paths.rs, a new Rust module the phase created while fixing the ephemeral-port defect, and docs/orchestration/ai-native-journal/integration-plan.md, the merged-feature gate document the phase brief told it to complete and which its own plan review had flagged as coordinator-owned. Two further paths were granted after the repair: desktop/scripts/packaged-smoke.ps1, the Windows packaged smoke as a committed script so the CI desktop job runs exactly the check the release gate uses, and apps/web/scripts/build-worker.mjs, the script that produces the worker tree the packaged runtime-tree audit inspects."
+    }
+  ]
+}

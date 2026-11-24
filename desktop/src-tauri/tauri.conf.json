@@ -7,9 +7,10 @@
     "beforeDevCommand": "",
     "devUrl": "http://localhost:3000",
     "beforeBuildCommand": "",
-    "frontendDist": "../../apps/web/.next/tauri-dist"
+    "frontendDist": ["../../apps/web/.next/tauri-dist/apps/web/index.html"]
   },
   "app": {
+    "withGlobalTauri": true,
     "windows": [
       {
         "title": "Trade Journal",
@@ -41,9 +42,7 @@
       "icons/icon.icns",
       "icons/icon.ico"
     ],
-    "externalBin": [
-      "./binaries/node"
-    ],
+    "externalBin": ["./binaries/node"],
     "resources": {
       "../../apps/web/.next/tauri-dist/apps/web": "apps/web"
     },
